@@ -1,0 +1,65 @@
+services:
+  postgres-radar:
+    image: postgres:16-alpine
+    container_name: evolution_pg_radar
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: ${EVO_DB_PASS:-troque_a_senha_do_banco}
+      POSTGRES_DB: evolution
+    volumes:
+      - evo_pg_radar:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  evolution:
+    # Org atual: evoapicloud (atendai foi descontinuada). v2.3.7 estável pinada.
+    # Fonte: https://doc.evolution-api.com/v2/pt/install/docker
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: evolution_api_radar
+    ports:
+      # Nesta máquina a 8080 já é outra Evolution (projeto ecommerce) — usamos 8082 via EVO_HOST_PORT.
+      - "${EVO_HOST_PORT:-8080}:8080"
+    environment:
+      - SERVER_URL=${EVO_SERVER_URL:-http://localhost:8080}
+      - AUTHENTICATION_API_KEY=${EVO_KEY}
+      # v2.3.x exige Postgres (Prisma). Piloto: só instância+sessão, sem salvar mensagens.
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://radar:${EVO_DB_PASS:-troque_a_senha_do_banco}@postgres-radar:5432/evolution?schema=public
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
+      - DATABASE_SAVE_MESSAGE_UPDATE=false
+      - DATABASE_SAVE_DATA_CONTACTS=false
+      - DATABASE_SAVE_DATA_CHATS=false
+      - DATABASE_SAVE_DATA_LABELS=false
+      - DATABASE_SAVE_DATA_HISTORIC=false
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+    volumes:
+      - evo_instances:/evolution/instances
+    depends_on:
+      - postgres-radar
+    restart: unless-stopped
+
+  manager:
+    # Gerenciador web :8091 — reinicia sozinho se parar.
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    image: automensagemwhats-manager:latest
+    container_name: automensagem_manager
+    ports:
+      - "${MANAGER_PORT:-8091}:8091"
+    env_file:
+      - .env
+    environment:
+      - MANAGER_PORT=8091
+      - TZ=America/Sao_Paulo
+      # dentro do compose, a Evolution está no hostname "evolution" (não localhost)
+      - EVO_URL=http://evolution:8080
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+volumes:
+  evo_instances:
+  evo_pg_radar:

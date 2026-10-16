@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>v0.3 HUNTER — categorias ML + palavra-chave</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+body{background:#0b141a;color:#e9edef;display:flex;justify-content:center;padding:14px;min-height:100vh}
+.app{width:1060px;max-width:100%;display:grid;grid-template-columns:400px 1fr;gap:14px}
+@media(max-width:900px){.app{grid-template-columns:1fr}}
+.card{background:#111b21;border:1px solid #222d34;border-radius:16px;overflow:hidden}
+.card h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#8696a0;padding:14px 14px 0}
+.card h3 b{color:#00a884}
+.step{padding:14px}
+label{font-size:12px;color:#8696a0;display:block;margin:10px 0 6px}
+select,input{width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:11px;font-size:14px;outline:none}
+select:focus,input:focus{border-color:#00a884}
+.hint{font-size:11.5px;color:#8696a0;margin-top:6px;line-height:1.45}
+.hint b{color:#d1f4cc}
+.apicall{background:#000;border:1px solid #1f2c33;border-radius:10px;margin-top:10px;padding:10px;font-family:monospace;font-size:11px;color:#9ff0c8;word-break:break-all;line-height:1.5}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.f{background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:8px 10px;font-size:12px}
+.f b{display:block;font-size:15px;margin-top:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px}
+.switch{width:52px;height:28px;background:#2a3942;border-radius:20px;position:relative;cursor:pointer;flex-shrink:0}
+.switch.on{background:#00a884}
+.knob{width:22px;height:22px;background:#fff;border-radius:50%;position:absolute;top:3px;left:3px;transition:.2s}
+.switch.on .knob{left:27px}
+button{border:0;border-radius:10px;padding:11px 12px;font-weight:800;cursor:pointer}
+.primary{background:#00a884;color:#04241d;width:100%;margin-top:10px}
+.ghost{background:#202c33;color:#fff;width:100%;margin-top:8px}
+.log{background:#000;border-radius:10px;margin:10px 14px 14px;padding:10px;font-family:monospace;font-size:11.5px;line-height:1.55;color:#9ff0c8;max-height:160px;overflow:auto;white-space:pre-wrap}
+.opps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px}
+@media(max-width:600px){.opps{grid-template-columns:1fr}}
+.opp{background:#0b141a;border:1px solid #2a3942;border-radius:12px;overflow:hidden;cursor:pointer}
+.opp.sel{border-color:#00a884;box-shadow:0 0 0 1px #00a884}
+.pic{height:110px;display:flex;align-items:center;justify-content:center;font-size:48px}
+.p1{background:#ddd url('../../image/Screenshot_20261011_223512_WhatsApp.jpg') center 20%/cover}
+.p2{background:linear-gradient(135deg,#1f2937,#4b5563)}
+.p3{background:linear-gradient(135deg,#06281f,#00a884)}
+.oinfo{padding:10px;font-size:12.5px}
+.score{background:#00a884;color:#04241d;font-weight:800;border-radius:20px;padding:2px 8px;font-size:11px}
+.selo{font-size:10px;background:#fff8e1;color:#7a5b00;border-radius:20px;padding:2px 8px;font-weight:800}
+.phone{background:#efeae2;border-radius:20px;overflow:hidden;color:#111}
+.pstatus{background:#075e54;color:#fff;font-size:12px;padding:7px 12px;display:flex;justify-content:space-between}
+.phead{background:#075e54;color:#fff;padding:9px 12px;display:flex;gap:10px;align-items:center}
+.av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#ff9800,#2196f3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px}
+.chat{padding:12px;min-height:380px;background:#efeae2}
+.sender{font-size:11px;color:#e91e63;margin:0 6px 2px}
+.bub{background:#fff;border-radius:0 12px 12px 12px;margin:0 22px 8px 2px;overflow:hidden;box-shadow:0 1px 1px rgba(0,0,0,.2)}
+.bpic{height:180px;background:#ddd url('../../image/Screenshot_20261011_223512_WhatsApp.jpg') center 18%/cover}
+.bbody{padding:10px 12px 4px;font-size:14.5px;line-height:1.35}
+.bbody h2{font-size:18px}
+.de{text-decoration:line-through;color:#444}
+.pix{color:#067d62;font-weight:800}
+.cup{background:#fff8e1;border:1px dashed #f9a825;border-radius:8px;padding:7px;margin:8px 0}
+.link{color:#027eb5;word-break:break-all;text-decoration:none}
+.meta{text-align:right;font-size:11px;color:#667781;padding:0 10px 8px}
+.foot{background:#f0f2f5;color:#667781;text-align:center;font-size:12.5px;padding:10px}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 0;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;background:#202c33;border:1px solid #2a3942;border-radius:20px;padding:5px 10px}
+.pill b{color:#00a884}
+.raw{margin:0 12px 12px;background:#111b21;color:#d1f4cc;border-radius:10px;padding:10px;font-family:monospace;font-size:11px;white-space:pre-wrap}
+.src{font-size:11px;color:#8696a0;padding:0 14px 12px;line-height:1.5}
+.src a{color:#53bdeb}
+</style>
+</head>
+<body>
+<div class="app">
+  <div>
+    <div class="card">
+      <h3>Etapa 1 — <b>Categoria (lista suspensa ML)</b></h3>
+      <div class="step">
+        <label for="cat">Categoria — fonte: mercadolivre.com.br/categorias</label>
+        <select id="cat">
+          <option value="MLB5672| Acessórios para Veículos">Acessórios para Veículos</option>
+          <option value="MLB271599|Agro">Agro</option>
+          <option value="MLB1403|Alimentos e Bebidas">Alimentos e Bebidas</option>
+          <option value="MLB1071|Animais e Pets">Animais e Pets</option>
+          <option value="MLB1367|Antiguidades e Coleções">Antiguidades e Coleções</option>
+          <option value="MLB1368|Arte, Papelaria e Armarinho">Arte, Papelaria e Armarinho</option>
+          <option value="MLB1743|Carros, Motos e Outros">Carros, Motos e Outros</option>
+          <option value="MLB1384|Bebês">Bebês</option>
+          <option value="MLB1246|Beleza e Cuidado Pessoal">Beleza e Cuidado Pessoal</option>
+          <option value="MLB1132|Brinquedos e Hobbies">Brinquedos e Hobbies</option>
+          <option value="MLB4181|Calçados, Roupas e Bolsas">Calçados, Roupas e Bolsas</option>
+          <option value="MLB1039|Câmeras e Acessórios">Câmeras e Acessórios</option>
+          <option value="MLB1051|Celulares e Telefones">Celulares e Telefones</option>
+          <option value="MLB1648|Computação / Informática">Computação / Informática</option>
+          <option value="MLB1144|Consoles e Video Games">Consoles e Video Games</option>
+          <option value="MLB1500|Construção">Construção</option>
+          <option value="MLB1276|Esporte e Fitness">Esporte e Fitness</option>
+          <option value="MLB5726|Eletrodomésticos">Eletrodomésticos</option>
+          <option value="MLB1000|Eletrônicos, Áudio e Vídeo">Eletrônicos, Áudio e Vídeo</option>
+          <option value="MLB407134|Ferramentas">Ferramentas</option>
+          <option value="MLB1574|Casa, Móveis e Decoração">Casa, Móveis e Decoração</option>
+          <option value="MLB1499|Indústria e Comércio">Indústria e Comércio</option>
+          <option value="MLB1459|Imóveis">Imóveis</option>
+          <option value="MLB1182|Instrumentos Musicais">Instrumentos Musicais</option>
+          <option value="MLB3937|Joias e Relógios" selected>Joias e Relógios ⌚ (ex. Orient)</option>
+          <option value="MLB3025|Livros, Revistas e Comics">Livros, Revistas e Comics</option>
+          <option value="MLB1168|Música, Filmes e Séries">Música, Filmes e Séries</option>
+          <option value="MLB1430|Moda e Acessórios">Moda e Acessórios</option>
+          <option value="MLB409431|Saúde">Saúde</option>
+          <option value="MLB1540|Serviços">Serviços</option>
+          <option value="MLB1953|Outras Categorias">Outras Categorias</option>
+        </select>
+        <div class="hint">IDs resolvidos em runtime via <b>GET https://api.mercadolibre.com/sites/MLB/categories</b> (3 primeiros confirmados; demais seguem o mesmo contrato, com fallback por nome).</div>
+
+        <label for="kw">Palavra-chave — filtro opcional</label>
+        <input id="kw" placeholder="Ex.: Orient, JBL, Air Fryer… (vazio = toda a categoria)">
+        <div class="hint">◉ <b>Vazio</b> → busca em <b>toda a categoria</b> (<b>só category</b>).<br>◉ <b>Com texto</b> → busca <b>categoria + q</b> (ex.: Joias e Relógios + “Orient”).</div>
+
+        <div class="apicall" id="api">GET /sites/MLB/search?category=MLB3937<br>↳ categoria inteira (sem q)</div>
+
+        <div class="filters">
+          <div class="f">Desconto mín<b>30%</b></div>
+          <div class="f">Teto<b>R$ 500</b></div>
+          <div class="f">Só com cupom<b>ON</b></div>
+          <div class="f">Janela<b>8h–22h</b></div>
+        </div>
+        <div class="row">
+          <div><b id="modeLabel">Modo AUTO — ON</b><br><span style="font-size:12px;color:#8696a0">ON envia sozinho • OFF pede aprovação</span></div>
+          <div class="switch on" id="sw"><div class="knob"></div></div>
+        </div>
+        <button class="primary" onclick="rodar()">🔍 Buscar oportunidades</button>
+        <button class="ghost" onclick="log('salvo: categorias.json {category, q, filtros} + cron 2h')">💾 Salvar categoria + palavra-chave</button>
+      </div>
+      <div class="src">Fonte das categorias: <a href="https://www.mercadolivre.com.br/categorias">mercadolivre.com.br/categorias</a> ↔ API <b>/sites/MLB/categories</b> → busca <b>/sites/MLB/search?category=ID&amp;q=...</b>. Página /categorias exigiu verificação e a API direta retornou 403 neste ambiente, por isso o protótipo usa a lista oficial em cache (nomes oficiais PT-BR).</div>
+      <div class="log" id="log">10:00 scheduler ON • category=MLB3937 (Joias e Relógios) q=(vazio → toda categoria)
+10:00 hunter: Top50... OK (cache 2h)
+10:01 scorer: Top3 (92, 84, 78) • dedup 7d OK</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Etapa 2 — <b>Oportunidades da categoria</b></h3>
+      <div class="opps" id="opps"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="topbar"><span class="pill">RADAR DAS PROMOS... • <b id="catLabel">Joias e Relógios</b> <span id="kwLabel"></span></span><span class="pill">limite <b>3/10 hoje</b> • AUTO <b id="autoLabel">ON</b></span></div>
+    <h3>Etapa 3/4 — <b>Fila automática → grupo</b></h3>
+    <div class="phone" style="margin:12px">
+      <div class="pstatus"><span>22:35</span><span>📶 🔋87</span></div>
+      <div class="phead"><span>←</span><div class="av">RADAR</div><div><b style="font-size:14px">RADAR DAS PROMOS...</b><br><span style="font-size:11px">somente admins podem enviar m...</span></div></div>
+      <div class="chat">
+        <div class="sender">~ Radar Hunter 🤖 • automático • <span id="hora">18:34</span></div>
+        <div class="bub">
+          <div class="bpic"></div>
+          <div class="bbody">
+            <h2 id="t">RELÓGIO DE QUALIDADE ABSURDA</h2>
+            <i>caiu muito o preço</i> ‼️<br><br>
+            <span id="n">Relógio de pulso Orient MBSS1171</span><br><br>
+            <span class="de" id="d">De R$ 459,99</span><br>
+            Por R$ <span class="pix" id="p">233,53</span> no Pix<br>
+            Ou R$ <span class="pix">259,48</span> em até 6x
+            <div class="cup">⚠️ Cupom: <b>OFERTADEHOJE</b></div>
+            🛒 Link do Produto ⤵️<br>
+            <a class="link" href="#">https://meli.la/2aKpCmQ</a><br>
+            <span style="font-size:11px;color:#667781">🤖 <span id="c2">Joias e Relógios</span> • <span id="q2">toda categoria</span> • score 92 • QUEDA REAL</span>
+          </div>
+          <div class="meta">18:34 ✓✓</div>
+        </div>
+      </div>
+      <div class="foot">Somente <b style="color:#00a884">admins</b> podem enviar mensagens</div>
+    </div>
+    <div class="raw" id="raw">*RELÓGIO DE QUALIDADE ABSURDA*
+_caiu muito o preço_ ‼️
+
+Relógio de pulso Orient MBSS1171
+
+~De R$ 459,99~
+*Por R$ 233,53 no Pix*
+*Ou R$ 259,48 em até 6x*
+
+⚠️ Cupom: *OFERTADEHOJE*
+
+🛒 Link do Produto ⤵️
+https://meli.la/2aKpCmQ</div>
+  </div>
+</div>
+<script>
+const MOCK={
+'Joias e Relógios':[
+ {e:'',img:1,t:'RELÓGIO DE QUALIDADE ABSURDA',n:'Relógio de pulso Orient MBSS1171',d:'De R$ 459,99',p:'233,53',s:92,m:'-49% + cupom + 1000 vendidos',selo:'QUEDA REAL'},
+ {e:'🕰️',img:0,t:'CASIO VINTAGE COM CUPOM',n:'Casio A158WA-1DF Prata',d:'De R$ 399',p:'249,00',s:84,m:'-37% + CASIO10 + 4.8★',selo:'QUEDA REAL'},
+ {e:'⌚',img:0,t:'CITIZEN ECO-DRIVE',n:'Citizen BM8180-03E',d:'De R$ 899',p:'599,00',s:78,m:'-33% sem histórico',selo:'OFERTA BOA'}],
+'Celulares e Telefones':[
+ {e:'📱',img:0,t:'GALAXY A15 COM QUEDA',n:'Samsung Galaxy A15 128GB',d:'De R$ 1299',p:'849,00',s:90,m:'-34% + cupom SAMSUNG50',selo:'QUEDA REAL'},
+ {e:'📱',img:0,t:'REDMI NOTE 13 BARATO',n:'Xiaomi Redmi Note 13 256GB',d:'De R$ 1499',p:'999,00',s:86,m:'-33% + 5k vendidos',selo:'QUEDA REAL'},
+ {e:'📱',img:0,t:'MOTO G85 CUSTO-BEN',n:'Motorola Moto G85 256GB',d:'De R$ 1699',p:'1199,00',s:76,m:'-29% sem cupom',selo:'OFERTA BOA'}],
+'Eletrodomésticos':[
+ {e:'🍟',img:0,t:'AIR FRYER MONDIAL 5L',n:'Air Fryer Mondial 5L 1900W',d:'De R$ 699',p:'429,00',s:89,m:'-38% + cupom FRY15',selo:'QUEDA REAL'},
+ {e:'☕',img:0,t:'CAFETEIRA NESPRESSO',n:'Nespresso Essenza Mini',d:'De R$ 599',p:'379,00',s:83,m:'-36% + 3k vendidos',selo:'QUEDA REAL'},
+ {e:'🧹',img:0,t:'ROBÔ ASPIRADOR',n:'Robô Aspirador Wap',d:'De R$ 999',p:'649,00',s:75,m:'-35% sem cupom',selo:'OFERTA BOA'}]
+};
+const GENERIC=[
+ {e:'🏷️',img:0,t:'OFERTA DESTAQUE DA CATEGORIA',n:'Produto Top 1 da varredura',d:'De R$ 499',p:'299,00',s:87,m:'-40% + cupom TOP20',selo:'QUEDA REAL'},
+ {e:'🏷️',img:0,t:'SEGUNDO ACHADO',n:'Produto Top 2 da varredura',d:'De R$ 399',p:'249,00',s:82,m:'-37% + vendidos',selo:'QUEDA REAL'},
+ {e:'🏷️',img:0,t:'TERCEIRO ACHADO',n:'Produto Top 3 da varredura',d:'De R$ 299',p:'199,00',s:77,m:'-33%',selo:'OFERTA BOA'}];
+let auto=true;
+const $=id=>document.getElementById(id);
+function catName(){return $('cat').selectedOptions[0].text.replace(/ ⌚.*$/,'');}
+function catId(){return $('cat').value.split('|')[0];}
+function kw(){return $('kw').value.trim();}
+function apiStr(){
+ const q=kw();
+ return `GET /sites/MLB/search?category=${catId()}${q?`&q=${encodeURIComponent(q)}`:''}<br>↳ ${q?`categoria + palavra-chave “${q}”`:'categoria inteira (sem q)'}`;
+}
+function currentList(){
+ const c=catName();
+ if(MOCK[c]) return MOCK[c];
+ const q=kw();
+ if(q) return MOCK[c]||GENERIC.map((g,i)=>({...g,n:`${q} — Top ${i+1} em ${c}`,t:`${q.toUpperCase()} EM OFERTA #${i+1}`}));
+ return GENERIC;
+}
+function render(){
+ const list=currentList();
+ $('opps').innerHTML=list.map((o,i)=>`
+  <div class="opp ${i===0?'sel':''}" onclick="pick(${i})">
+   <div class="pic ${o.img?'p1':(i%2?'p2':'p3')}">${o.img?'':o.e}</div>
+   <div class="oinfo"><span class="score">score ${o.s}</span> <span class="selo">${o.selo}</span>
+   <br><b>${o.t}</b><br>${o.n}<br><span style="text-decoration:line-through">${o.d}</span> → <b style="color:#00a884">R$ ${o.p}</b>
+   <br><span style="color:#8696a0">${o.m}</span></div>
+  </div>`).join('');
+ $('catLabel').textContent=catName();
+ $('kwLabel').textContent=kw()?`• “${kw()}”`:'• toda categoria';
+ $('c2').textContent=catName();
+ $('q2').textContent=kw()?`q=“${kw()}”`:'toda categoria';
+ $('api').innerHTML=apiStr();
+}
+function pick(i){
+ const o=currentList()[i];
+ $('t').textContent=o.t; $('n').textContent=o.n;
+ $('d').textContent=o.d; $('p').textContent=o.p;
+ document.querySelectorAll('.opp').forEach((el,j)=>el.classList.toggle('sel',j===i));
+ log(`prévia #${i+1}: ${o.n} score=${o.s}`);
+}
+function log(m){
+ const el=$('log');
+ el.textContent+=`\n${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} ${m}`;
+ el.scrollTop=el.scrollHeight;
+}
+function rodar(){
+ const q=kw();
+ log(`hunter: category=${catId()} q=${q||'(vazio → toda categoria)'} Top50... OK`);
+ const l=currentList();
+ log(`scorer: Top3 (${l.map(o=>o.s).join(', ')})`);
+ if(auto){log(`dispatch AUTO → #1 ${l[0].n} ✓✓`);$('hora').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});pick(0);}
+ else log('fila: aguardando Aprovar (REVISÃO)');
+}
+$('cat').addEventListener('change',()=>{render();pick(0);log(`categoria → ${catName()} (${catId()})`);});
+$('kw').addEventListener('input',()=>{render();});
+$('sw').addEventListener('click',function(){
+ auto=!auto;this.classList.toggle('on',auto);
+ $('modeLabel').textContent='Modo AUTO — '+(auto?'ON':'OFF');
+ $('autoLabel').textContent=auto?'ON':'OFF';
+ log('AUTO '+(auto?'ON — envia sozinho':'OFF — exige Aprovar'));
+});
+render();
+</script>
+</body>
+</html>
