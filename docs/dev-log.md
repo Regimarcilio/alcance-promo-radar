@@ -46,3 +46,27 @@ AUTOMÁTICO. Ambos na mesma interface e compartilhando o contador diário por n�
 
 **Próximo**: configurar webhook na Evolution (`messages.upsert` → `http://<host>:8091/api/webhook/evolution`
 com `X-Webhook-Key`); cadastrar as origens/destinos reais; validar ponta a ponta em ambiente.
+
+---
+
+## 2026-10-17 | E6-MONITOR-02 | planmaster | Setup, docs e validação de deploy
+
+**Decisões/achados**
+- Fork estava sem infra do core → trazidos `Dockerfile.manager`, `docker-compose.go.yml`,
+  `README.md`, `.github/workflows/ci.yml`, `scripts/migrar-*.sh`, `.gitignore`, `tsconfig.json`.
+- `develop` criada; 4 commits; `.env` do fork gerado a partir do original (chmod 600) + vars do monitor.
+- Imagem `promo-radar-manager:latest` construída (não mexe no container antigo `automensagem_manager`).
+
+**Evidências**
+- Correção de 2 bugs de sintaxe no JS inline da página (aspas aninhadas no `onclick` →
+  trocado por `dataset`; `\n` em template literal → `\\n`). Página validada (JS 13.947 chars OK).
+- `node dist/manager/server.js` com `.env` real: boot ok, `/` 200, `/api/monitor/*` ok,
+  webhook sem chave → 401 (WEBHOOK_KEY aplicada).
+
+**Bloqueio**
+- Instância Evolution `radar-piloto` em estado `connecting` (não pareada) → `inviteInfo` não
+  resolve o convite e `fetchAllGroups` retorna "Connection Closed". QR salvo em
+  `qr-radar-piloto.png`. Ação humana: escanear o QR (WhatsApp → Aparelhos conectados).
+
+**Próximo**: parear a sessão; resolver o JID do grupo de teste via `group/inviteInfo`; definir
+deploy (substituir container antigo ou porta separada); configurar o webhook `messages.upsert`.
