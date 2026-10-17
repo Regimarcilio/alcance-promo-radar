@@ -46,6 +46,7 @@ export interface ResultadoMonitor {
   acao: "IGNORADO" | "DUPLICADO" | "REVISAO" | "ENCAMINHADO" | "ERRO";
   programa?: string;
   motivo?: string;
+  mensagem?: string;
   destinos?: { jid: string; messageId: string }[];
 }
 
@@ -98,18 +99,20 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: tr.motivo };
   }
 
-  // 6) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
+  // 6) Monta a mensagem repassada (título/contexto + link do usuário)
+  const corpo = montarRepasse(msg.texto, oferta, tr.url);
+
+  // 7) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
   if (!carregarMonitor().autoEnviar) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "envio direto desligado — aguardando revisão",
     });
-    return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "autoEnviar=false" };
+    return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "autoEnviar=false", mensagem: corpo };
   }
 
-  // 7) Montar mensagem e rotear destinos (RF-033/034 / RN-010 anti-loop)
-  const corpo = montarRepasse(msg.texto, oferta, tr.url);
+  // 8) Rotear destinos (RF-033/034 / RN-010 anti-loop)
   const destinos = destinosPara(msg.origem);
   if (destinos.length === 0) {
     registrarEvento({
@@ -117,7 +120,7 @@ export async function processar(
       idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "nenhum grupo de destino configurado",
     });
-    return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "sem destinos" };
+    return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "sem destinos", mensagem: corpo };
   }
 
   const enviados: { jid: string; messageId: string }[] = [];
@@ -145,6 +148,7 @@ export async function processar(
   return {
     acao: enviados.length > 0 ? "ENCAMINHADO" : "ERRO",
     programa: rotulo(oferta.principal.programa),
+    mensagem: corpo,
     destinos: enviados,
   };
 }

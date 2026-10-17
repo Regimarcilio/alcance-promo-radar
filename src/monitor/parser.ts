@@ -92,7 +92,17 @@ export function detectar(texto: string): OfertaDetectada {
   });
   const principal = links.find((l) => l.programa !== "desconhecido") ?? null;
   let textoLimpo = texto;
-  if (principal) textoLimpo = texto.replace(principal.url, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (principal) {
+    // Remove a URL e descarta as linhas que ficaram "decorativas" (só emoji,
+    // seta, pontuação) — evita deixar um "👉" órfão no lugar do link antigo.
+    textoLimpo = texto
+      .replace(principal.url, "")
+      .split("\n")
+      .filter((l) => l.trim() === "" || /[\p{L}\p{N}]/u.test(l))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
   return { links, principal, textoLimpo };
 }
 

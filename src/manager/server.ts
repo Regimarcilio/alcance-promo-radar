@@ -479,6 +479,7 @@ const server = createServer(async (req, res) => {
       json(200, {
         ok: true, resultado: r,
         principal: oferta.principal ? { programa: rotuloPrograma(oferta.principal.programa), id: oferta.principal.idProduto, url: oferta.principal.url } : null,
+        mensagem: r.mensagem ?? null,
       });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
@@ -928,7 +929,7 @@ async function testarMonitor(){
   if(!texto.trim())return alert('Cole uma mensagem de teste.');
   const r=await (await fetch('/api/monitor/testar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto,origem:$('mtesteorigem').value})})).json();
   if(r.erro){$('mtesteout').textContent='erro: '+r.erro;return;}
-  $('mtesteout').textContent='programa: '+((r.principal&&r.principal.programa)||'—')+'\\nid: '+((r.principal&&r.principal.id)||'—')+'\\nação: '+r.resultado.acao+(r.resultado.motivo?' ('+r.resultado.motivo+')':'');
+  $('mtesteout').textContent='programa: '+((r.principal&&r.principal.programa)||'—')+'\\nid: '+((r.principal&&r.principal.id)||'—')+'\\nação: '+r.resultado.acao+(r.resultado.motivo?' ('+r.resultado.motivo+')':'')+(r.mensagem?'\\n\\n--- mensagem que seria enviada ---\\n'+r.mensagem:'');
   carregarMonitorStatus();
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
