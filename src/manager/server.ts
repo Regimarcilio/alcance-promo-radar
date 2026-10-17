@@ -18,6 +18,13 @@ import { gerarHeadline } from "../ai/gateway.js";
 import { formatar } from "../wa/formatter.js";
 import { registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
+import {
+  carregarMonitor, adicionarOrigem, adicionarDestino, remover as removerGrupoMonitor,
+  definirAutoEnviar,
+} from "../monitor/grupos.js";
+import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
+import { eventos as eventosMonitor, resumo as resumoMonitor } from "../monitor/state.js";
+import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dataDir = join(root, "data");
@@ -46,8 +53,11 @@ const server = createServer(async (req, res) => {
   };
   // Trava opcional: se MANAGER_KEY definida no .env, POSTs exigem o header.
   // GETs (leitura) seguem abertos na rede local.
+  // Exceção: /api/webhook/evolution usa WEBHOOK_KEY (validado na própria rota),
+  // pois o Evolution não envia X-Manager-Key.
   const MKEY = process.env.MANAGER_KEY?.trim() || "";
-  if (req.method === "POST" && MKEY && req.headers["x-manager-key"] !== MKEY) {
+  const ehWebhook = url.pathname === "/api/webhook/evolution";
+  if (req.method === "POST" && MKEY && !ehWebhook && req.headers["x-manager-key"] !== MKEY) {
     json(401, { erro: "MANAGER_KEY inválida." });
     return;
   }
@@ -372,6 +382,78 @@ const server = createServer(async (req, res) => {
     }
     return;
   }
+  // ---------- E6 MONITOR ----------
+  if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
+    const s = carregarMonitor();
+    json(200, { origens: s.origens, destinos: s.destinos, autoEnviar: s.autoEnviar });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/grupos") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      if (b.acao === "remover") {
+        removerGrupoMonitor(b.tipo === "destino" ? "destino" : "origem", b.jid ?? "");
+      } else if (b.tipo === "destino") {
+        adicionarDestino(b.jid ?? "", b.nome ?? "");
+      } else {
+        adicionarOrigem(b.jid ?? "", b.nome ?? "");
+      }
+      const s = carregarMonitor();
+      json(200, { ok: true, origens: s.origens, destinos: s.destinos, autoEnviar: s.autoEnviar });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/auto") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirAutoEnviar(b.autoEnviar === true);
+      json(200, { ok: true, autoEnviar: carregarMonitor().autoEnviar });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/monitor/status") {
+    const s = carregarMonitor();
+    json(200, { ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.origens.length, destinos: s.destinos.length, eventos: eventosMonitor(50) });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/testar") {
+    // Simula o pipeline com um texto (sem depender do webhook real).
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const oferta = detectarOferta(String(b.texto ?? ""));
+      const msg = { origem: b.origem ?? "", deMim: false, texto: String(b.texto ?? ""), messageId: "teste" };
+      const r = await processarMonitor(msg, { dryRun: true, conta: b.conta ?? undefined });
+      json(200, {
+        ok: true, resultado: r,
+        principal: oferta.principal ? { programa: rotuloPrograma(oferta.principal.programa), id: oferta.principal.idProduto, url: oferta.principal.url } : null,
+      });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/webhook/evolution") {
+    // RF-030: entrada de mensagens do Evolution API (v2/GO).
+    const wkey = process.env.WEBHOOK_KEY?.trim() || "";
+    if (wkey && req.headers["x-webhook-key"] !== wkey) {
+      json(401, { erro: "WEBHOOK_KEY inválida." });
+      return;
+    }
+    try {
+      const p = JSON.parse(await lerCorpo(req));
+      const msg = extrairMensagem(p);
+      if (!msg) return json(200, { ok: true, ignorado: "sem texto" });
+      const r = await processarMonitor(msg, { dryRun: false });
+      json(200, { ok: true, ...r });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
   json(404, { erro: "rota?" });
 });
 
@@ -454,6 +536,24 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div class="hint">Folhas descobertas no perfil de afiliado. Amarre cada folha a uma categoria 1 vez → o piloto usa sozinho.</div>
 <div id="vitrineout" style="font-size:13px">carregando vitrine…</div></div>
 </div>
+<div class="panel" style="border-color:#53bdeb">
+<label>📡 Monitor de grupos de afiliados — recebe, troca o link e reencaminha</label>
+<div class="hint">Cadastre os grupos que você <b>monitora</b> (origem) e os seus grupos (destino). Mensagem com link de afiliado (ML, Shopee, KaBuM, Amazon) é reconhecida, o link vira o <b>seu</b> e ela é reenviada no seu padrão.</div>
+<div class="grid2">
+<div><label>Grupos de ORIGEM (monitorados — máx 10)</label><div id="morigens" style="font-size:13px;margin-bottom:6px"></div>
+<div style="display:flex;gap:8px"><input id="mjidor" style="flex:2" placeholder="JID ou dígitos: 120363...@g.us"><input id="mnomeor" style="flex:1" placeholder="apelido (opcional)"><button class="buscar" style="margin-top:0;width:auto" onclick="addMonitor('origem')">➕</button></div></div>
+<div><label>Grupos de DESTINO (seus — máx 10)</label><div id="mdestinos" style="font-size:13px;margin-bottom:6px"></div>
+<div style="display:flex;gap:8px"><input id="mjiddest" style="flex:2" placeholder="JID ou dígitos: 120363...@g.us"><input id="mnomedest" style="flex:1" placeholder="apelido (opcional)"><button class="buscar" style="margin-top:0;width:auto" onclick="addMonitor('destino')">➕</button></div></div></div>
+<div class="row" style="margin-top:10px;background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center">
+<div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span style="font-size:12px;color:#8696a0">ON encaminha sozinho • OFF espera revisão</span></div>
+<button class="ghost" id="mautobtn" style="margin-top:0;width:auto" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
+<div id="mstatus" style="margin-top:8px;font-size:13px"></div>
+<div class="grid2" style="margin-top:8px">
+<div><label>Testar reconhecimento (cole a mensagem recebida)</label><textarea id="mteste" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Cole aqui uma mensagem com link de afiliado..."></textarea>
+<div style="display:flex;gap:8px;margin-top:6px"><input id="mtesteorigem" style="flex:1" placeholder="origem monitorada (JID)"><button class="buscar" style="margin-top:0;width:auto" onclick="testarMonitor()">🧪 Testar</button></div>
+<pre id="mtesteout"></pre></div>
+<div><label>Últimos eventos do monitor</label><pre id="meventos" style="max-height:220px"></pre></div></div>
+</div>
 <script>
 const $=id=>document.getElementById(id);
 // Chave do gerenciador: se o servidor exigir (MANAGER_KEY), pede 1 vez e reusa.
@@ -482,6 +582,8 @@ fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   carregarContas();
   carregarVitrine();
   carregarCupons();
+  carregarMonitorUI();
+  setInterval(function(){try{carregarMonitorStatus();}catch(e){}},15000);
 });
 let CS=[];
 async function carregarVitrine(){
@@ -638,6 +740,57 @@ async function salvarMapa(){
   await fetch('/api/mapa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:$('mapcat').value,conta:$('mapconta').value,grupo:$('mapgrupo').value,sub:$('mapsub')?$('mapsub').value:''})});
   alert('Mapa salvo: categoria → conta + grupo.');
 }
+// ---------- E6 MONITOR ----------
+async function carregarMonitorUI(){
+  try{
+    const d=await (await fetch('/api/monitor/grupos')).json();
+    $('morigens').innerHTML=(d.origens||[]).map(g=>linhaGrupo('origem',g)).join('')||'<span style="color:#8696a0">nenhum</span>';
+    $('mdestinos').innerHTML=(d.destinos||[]).map(g=>linhaGrupo('destino',g)).join('')||'<span style="color:#8696a0">nenhum</span>';
+    const on=d.autoEnviar===true;
+    $('mautolabel').textContent='Envio direto — '+(on?'ON':'OFF (vai p/ revisão)');
+    $('mautobtn').textContent=on?'Desligar envio direto':'Ligar envio direto';
+    carregarMonitorStatus();
+  }catch(e){}
+}
+function linhaGrupo(tipo,g){
+  return '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span>• <b>'+esc(g.nome)+'</b> <span style="color:#8696a0">'+esc(g.jid)+'</span></span>'
+    +'<button class="ghost" style="margin:0;width:auto;padding:2px 8px" data-tipo="'+tipo+'" data-jid="'+esc(g.jid)+'" onclick="delMonitor(this.dataset.tipo,this.dataset.jid)">✕</button></div>';
+}
+async function carregarMonitorStatus(){
+  try{
+    const d=await (await fetch('/api/monitor/status')).json();
+    $('mstatus').innerHTML='📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
+    $('meventos').textContent=(d.eventos||[]).map(e=>horaLocal(e.em)+' ['+e.status+'] '+e.programa+' '+(e.idProduto||'')+' ← '+e.origem+(e.destino?' → '+e.destino:'')+(e.detalhe?' ('+e.detalhe+')':'')).join('\\n')||'(sem eventos)';
+  }catch(e){}
+}
+async function addMonitor(tipo){
+  const jid=tipo==='destino'?$('mjiddest').value:$('mjidor').value;
+  const nome=tipo==='destino'?$('mnomedest').value:$('mnomeor').value;
+  if(!jid.trim())return alert('Informe o JID (ou os dígitos) do grupo.');
+  const r=await (await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,jid,nome})})).json();
+  if(r.erro)return alert(r.erro);
+  if(tipo==='destino'){$('mjiddest').value='';$('mnomedest').value='';}else{$('mjidor').value='';$('mnomeor').value='';}
+  carregarMonitorUI();
+}
+async function delMonitor(tipo,jid){
+  if(!confirm('Remover '+jid+'?'))return;
+  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'remover',tipo,jid})});
+  carregarMonitorUI();
+}
+async function toggleAutoMonitor(){
+  const on=($('mautolabel').textContent||'').indexOf('ON')>=0 && ($('mautolabel').textContent||'').indexOf('OFF')<0;
+  await fetch('/api/monitor/auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoEnviar:!on})});
+  carregarMonitorUI();
+}
+async function testarMonitor(){
+  const texto=$('mteste').value;
+  if(!texto.trim())return alert('Cole uma mensagem de teste.');
+  const r=await (await fetch('/api/monitor/testar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto,origem:$('mtesteorigem').value})})).json();
+  if(r.erro){$('mtesteout').textContent='erro: '+r.erro;return;}
+  $('mtesteout').textContent='programa: '+((r.principal&&r.principal.programa)||'—')+'\\nid: '+((r.principal&&r.principal.id)||'—')+'\\nação: '+r.resultado.acao+(r.resultado.motivo?' ('+r.resultado.motivo+')':'');
+  carregarMonitorStatus();
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 </script></body></html>`;
 
 server.listen(PORT, "0.0.0.0", () => {
