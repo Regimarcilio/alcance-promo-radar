@@ -12,3 +12,4 @@ cookie.txt
 *.key
 migracao-*.tar.gz*
 links_categorias.txt
+logs/

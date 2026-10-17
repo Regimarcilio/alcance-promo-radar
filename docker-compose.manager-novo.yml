@@ -1,0 +1,27 @@
+# Manager do promo-radar-novo em porta separada (8099), compartilhando a rede
+# da Evolution do projeto antigo (automensagemwhats_default) para o webhook funcionar.
+# Suba com:  docker compose -f docker-compose.manager-novo.yml up -d --build
+services:
+  manager-novo:
+    image: promo-radar-manager:latest
+    container_name: promo_radar_manager
+    ports:
+      - "${MANAGER_PORT_NOVO:-8099}:8091"
+    env_file:
+      - .env
+    environment:
+      - MANAGER_PORT=8091
+      - TZ=America/Sao_Paulo
+      # mesma rede => a Evolution atende pelo hostname "evolution"
+      - EVO_URL=http://evolution:8080
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - automensagem_default
+    restart: unless-stopped
+
+networks:
+  automensagem_default:
+    external: true
+    name: automensagemwhats_default
