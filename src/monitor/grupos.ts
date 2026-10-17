@@ -189,6 +189,30 @@ export function removerRegra(origemRaw: string): void {
   salvar(s);
 }
 
+/** Liga/desliga a regra inteira (a origem). Devolve o novo estado. */
+export function alternarOrigem(origemRaw: string): boolean {
+  const oj = normalizarJid(origemRaw);
+  const s = carregarMonitor();
+  const r = s.regras.find((x) => x.origem.jid === oj);
+  if (!r) throw new Error("Origem não encontrada.");
+  r.origem.ativo = !r.origem.ativo;
+  salvar(s);
+  return r.origem.ativo;
+}
+
+/** Liga/desliga um destino específico de uma origem. Devolve o novo estado. */
+export function alternarDestino(origemRaw: string, destinoRaw: string): boolean {
+  const oj = normalizarJid(origemRaw);
+  const dj = normalizarJid(destinoRaw);
+  const s = carregarMonitor();
+  const r = s.regras.find((x) => x.origem.jid === oj);
+  const d = r?.destinos.find((x) => x.jid === dj);
+  if (!d) throw new Error("Destino não encontrado.");
+  d.ativo = !d.ativo;
+  salvar(s);
+  return d.ativo;
+}
+
 export function definirAutoEnviar(v: boolean): void {
   const s = carregarMonitor();
   s.autoEnviar = !!v;

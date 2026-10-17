@@ -20,6 +20,7 @@ import { registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import {
   carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar,
+  alternarOrigem, alternarDestino,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor } from "../monitor/state.js";
@@ -397,6 +398,10 @@ const server = createServer(async (req, res) => {
         removerRegra(b.origemJid ?? "");
       } else if (b.acao === "removerDestino") {
         removerDestino(b.origemJid ?? "", b.destinoJid ?? "");
+      } else if (b.acao === "alternarOrigem") {
+        alternarOrigem(b.origemJid ?? "");
+      } else if (b.acao === "alternarDestino") {
+        alternarDestino(b.origemJid ?? "", b.destinoJid ?? "");
       } else {
         // ação padrão: adicionar "um de cada vez" (origem + destino)
         adicionarRegra(b.origemJid ?? "", b.origemNome ?? "", b.destinoJid ?? "", b.destinoNome ?? "");
@@ -543,6 +548,11 @@ button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:poin
 .regra{background:#0b141a;border:1px solid #2a3942;border-left:3px solid #53bdeb;border-radius:10px;padding:10px 12px;margin-top:8px}
 .regra .orig{font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .regra .dest{font-size:13px;margin:6px 0 0 14px;padding:4px 0 0 10px;border-left:1px solid #2a3942;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.ctrls{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.tgl{background:#202c33;color:#8696a0;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:800;cursor:pointer;border:1px solid #2a3942}
+.tgl.on{background:#00a884;color:#04241d;border-color:#00a884}
+.regra.off{opacity:.55}.regra.off .orig b{text-decoration:line-through}
+.dest.off{opacity:.6}.dest.off b{text-decoration:line-through}
 .jidtag{color:#8696a0;font-size:11px}
 pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space:pre-wrap;margin-top:8px;color:#d1f4cc;max-height:220px;overflow:auto}</style></head>
 <body>
@@ -826,11 +836,17 @@ function renderRegras(regras){
   if(!regras.length){$('mregras').innerHTML='<div class="mini" style="padding:6px 0">nenhuma regra ainda — monte a primeira acima.</div>';return;}
   $('mregras').innerHTML=regras.map(function(r){
     const dests=r.destinos.length?r.destinos.map(function(d){
-      return '<div class="dest"><span>→ <b>'+esc(d.nome)+'</b> <span class="jidtag">'+esc(d.jid)+'</span></span>'
-        +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" data-d="'+esc(d.jid)+'" onclick="removerDestinoUI(this)">✕</button></div>';
+      return '<div class="dest'+(d.ativo?'':' off')+'"><span>→ <b>'+esc(d.nome)+'</b> <span class="jidtag">'+esc(d.jid)+'</span></span>'
+        +'<span class="ctrls">'
+        +'<button class="tgl'+(d.ativo?' on':'')+'" title="ligar/desligar este destino" data-o="'+esc(r.origem.jid)+'" data-d="'+esc(d.jid)+'" onclick="toggleDestinoUI(this)">'+(d.ativo?'ON':'OFF')+'</button>'
+        +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" data-d="'+esc(d.jid)+'" onclick="removerDestinoUI(this)">✕</button>'
+        +'</span></div>';
     }).join(''):'<div class="dest mini">⚠️ sem destino — esta origem não encaminha nada</div>';
-    return '<div class="regra"><div class="orig"><span>🔎 <b>'+esc(r.origem.nome)+'</b> <span class="jidtag">'+esc(r.origem.jid)+'</span></span>'
-      +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" onclick="removerRegraUI(this)">✕ origem</button></div>'+dests+'</div>';
+    return '<div class="regra'+(r.origem.ativo?'':' off')+'"><div class="orig"><span>🔎 <b>'+esc(r.origem.nome)+'</b> <span class="jidtag">'+esc(r.origem.jid)+'</span></span>'
+      +'<span class="ctrls">'
+      +'<button class="tgl'+(r.origem.ativo?' on':'')+'" title="ligar/desligar esta origem" data-o="'+esc(r.origem.jid)+'" onclick="toggleOrigemUI(this)">'+(r.origem.ativo?'ON':'OFF')+'</button>'
+      +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" onclick="removerRegraUI(this)">✕ origem</button>'
+      +'</span></div>'+dests+'</div>';
   }).join('');
 }
 async function carregarContaMonitor(){
@@ -868,6 +884,14 @@ async function removerRegraUI(el){
 }
 async function removerDestinoUI(el){
   await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'removerDestino',origemJid:el.dataset.o,destinoJid:el.dataset.d})});
+  carregarMonitorUI();
+}
+async function toggleOrigemUI(el){
+  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'alternarOrigem',origemJid:el.dataset.o})});
+  carregarMonitorUI();
+}
+async function toggleDestinoUI(el){
+  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'alternarDestino',origemJid:el.dataset.o,destinoJid:el.dataset.d})});
   carregarMonitorUI();
 }
 async function reiniciarEvo(){
