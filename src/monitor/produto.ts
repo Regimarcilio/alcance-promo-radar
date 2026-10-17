@@ -14,22 +14,31 @@ const UA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
 export interface DadosProduto {
-  id: string | null; // MLB-<dígitos>
+  id: string | null; // MLB-<dígitos> (candidato principal)
+  ids: string[]; // candidatos em ordem de prioridade (validar com o createLink)
   titulo: string | null;
   imagem: string | null;
   urlFinal: string;
 }
 
 /**
- * Id do ANÚNCIO (não do catálogo). A página traz vários MLB-<id>: o de catálogo
- * (`/p/MLB…`, 11–12 dígitos) é rejeitado pelo createLink; o do anúncio está em
- * `"item_id":"MLB…"` / `"id":"MLB…"`. Preferir sempre este.
+ * Ids candidatos, em ordem de prioridade (a página traz vários `MLB-<id>`).
+ * `item_id` é o anúncio (mais confiável); `wid=` costuma ser relacionado;
+ * `/p/` é catálogo (o createLink rejeita). Quem decide, no fim, é a validação
+ * por título feita no transformer.
  */
-function extrairItemId(html: string): string | null {
-  const m =
-    html.match(/"item_id"\s*:\s*"(MLB\d{6,})"/) ??
-    html.match(/"id"\s*:\s*"(MLB\d{9,})"/);
-  return m ? `MLB-${m[1].replace(/^MLB/, "")}` : null;
+function idsCandidatos(html: string): string[] {
+  const out: string[] = [];
+  const push = (id: string | undefined) => {
+    if (!id) return;
+    const norm = `MLB-${id}`;
+    if (!out.includes(norm)) out.push(norm);
+  };
+  for (const m of html.matchAll(/"item_id"\s*:\s*"MLB(\d{6,})"/gi)) push(m[1]);
+  for (const m of html.matchAll(/wid=MLB(\d{6,})/gi)) push(m[1]);
+  for (const m of html.matchAll(/\/p\/(MLB\d{6,})/gi)) push(m[1].replace(/^MLB/i, ""));
+  for (const m of html.matchAll(/MLB-?(\d{6,})/gi)) push(m[1]);
+  return out;
 }
 
 function meta(html: string, prop: string): string | null {
@@ -64,12 +73,14 @@ export async function resolverProdutoML(
     });
     if (!res.ok) return null;
     const html = await res.text();
-    const id = extrairItemId(html) ?? extrairMlbId(res.url) ?? extrairMlbId(html);
+    const ids = idsCandidatos(html);
+    if (url) { const d = extrairMlbId(url); if (d && !ids.includes(d)) ids.unshift(d); }
     const titulo = meta(html, "og:title");
     const imagem = imagemCompativel(meta(html, "og:image"));
-    if (!id && !titulo && !imagem) return null;
+    if (!ids.length && !titulo && !imagem) return null;
     return {
-      id,
+      id: ids[0] ?? null,
+      ids,
       titulo: titulo ? titulo.replace(/\s+/g, " ").trim() : null,
       imagem,
       urlFinal: res.url,

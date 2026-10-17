@@ -27,29 +27,82 @@ function comParam(url: string, chave: string, valor: string): string {
   }
 }
 
+/** Normaliza título p/ comparação (sem acento, caixa baixa, espaços). */
+function normalizarTitulo(s: string | null | undefined): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Mesmo produto? (igualdade ou um contendo o outro, com tamanho útil). */
+function mesmoTitulo(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const menor = a.length <= b.length ? a : b;
+  const maior = a.length <= b.length ? b : a;
+  return menor.length >= 20 && maior.includes(menor);
+}
+
 /** Mercado Livre: geração direta com tag+cookie (fonte única de verdade já testada). */
 async function transformarML(link: LinkDetectado, conta?: string): Promise<ResultadoTransformacao> {
-  // Link curto (meli.la/XXXX) não traz o MLB id → resolve o redirect p/ achar
-  // o id (createLink) e a foto do produto (template anterior). Falha → segue
-  // com a URL original (o converterLink tenta mesmo assim).
+  // Link curto (meli.la/XXXX) não traz o MLB id → resolve o redirect p/ achar os
+  // candidatos de id (createLink) e a foto do produto (template anterior).
   const produto = await resolverProdutoML(link.url);
-  const id = link.idProduto ?? produto?.id ?? null;
-  const alvo = produto?.id
-    ? `https://produto.mercadolivre.com.br/${produto.id}`
-    : link.idProduto
-      ? `https://produto.mercadolivre.com.br/MLB-${String(link.idProduto).replace(/^MLB-?/i, "")}`
-      : link.url;
+  const alvoTitulo = normalizarTitulo(produto?.titulo);
 
-  const r = await converterLink(alvo, { conta });
-  if (r.fonte === "conversor" && /^https?:\/\//.test(r.linkAfiliado) && r.linkAfiliado !== alvo) {
-    return { url: r.linkAfiliado, ok: true, produto: produto ?? undefined };
-  }
-  return {
-    url: link.url,
-    ok: false,
-    motivo: r.aviso ?? "COOKIE_OU_CONVERSOR_FALHOU — link ML não transformado",
-    produto: produto ?? undefined,
+  // A página traz vários MLB-<id> (catálogo/relacionados). Nem `wid=` nem
+  // `item_id` são confiáveis sozinhos: só vale o id cujo link, resolvido de
+  // volta, tem o MESMO título. Senão postaríamos foto de um produto e link de outro.
+  const candidatos: string[] = [];
+  const push = (v?: string | null) => {
+    if (!v) return;
+    const norm = `MLB-${String(v).replace(/^MLB-?/i, "")}`;
+    if (!candidatos.includes(norm)) candidatos.push(norm);
   };
+  push(link.idProduto);
+  for (const id of produto?.ids ?? []) push(id);
+
+  let ultimoAviso = "COOKIE_OU_CONVERSOR_FALHOU — link ML não transformado";
+  let reserva: ResultadoTransformacao | null = null;
+  for (const id of candidatos.slice(0, 6)) {
+    const alvo = `https://produto.mercadolivre.com.br/${id}`;
+    const r = await converterLink(alvo, { conta });
+    if (!(r.fonte === "conversor" && /^https?:\/\//.test(r.linkAfiliado) && r.linkAfiliado !== alvo)) {
+      if (r.aviso) ultimoAviso = r.aviso;
+      continue;
+    }
+    // Título autoritativo = o do deal (página do link curto).
+    const monta = (volta: typeof produto): DadosProduto => ({
+      id,
+      ids: produto?.ids ?? [id],
+      titulo: produto?.titulo ?? volta?.titulo ?? null,
+      imagem: volta?.imagem ?? produto?.imagem ?? null,
+      urlFinal: alvo,
+    });
+    // Sem título de referência não há como validar → aceita o 1º que converteu.
+    if (!alvoTitulo) return { url: r.linkAfiliado, ok: true, produto: monta(produto) };
+
+    const volta = await resolverProdutoML(r.linkAfiliado);
+    if (mesmoTitulo(alvoTitulo, normalizarTitulo(volta?.titulo))) {
+      return { url: r.linkAfiliado, ok: true, produto: monta(volta) };
+    }
+    // guarda o 1º que converteu, mas segue tentando achar o produto certo
+    if (!reserva) reserva = { url: r.linkAfiliado, ok: true, produto: monta(volta) };
+  }
+  if (reserva) return reserva;
+  // Último recurso: a própria URL (quando já é um link de produto completo).
+  if (!candidatos.length) {
+    const r = await converterLink(link.url, { conta });
+    if (r.fonte === "conversor" && /^https?:\/\//.test(r.linkAfiliado) && r.linkAfiliado !== link.url) {
+      return { url: r.linkAfiliado, ok: true, produto: produto ?? undefined };
+    }
+    if (r.aviso) ultimoAviso = r.aviso;
+  }
+  return { url: link.url, ok: false, motivo: ultimoAviso, produto: produto ?? undefined };
 }
 
 export async function transformar(

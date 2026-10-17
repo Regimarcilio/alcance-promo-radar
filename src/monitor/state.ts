@@ -53,7 +53,10 @@ function salvar(s: Estado): void {
 }
 
 export function hashMonitor(programa: string, idProduto: string | null, link: string): string {
-  return createHash("sha1").update(`${programa}|${idProduto ?? ""}|${link}`).digest("hex").slice(0, 16);
+  // Com id do produto, o link gerado é descartado (createLink devolve um link
+  // NOVO a cada chamada — sem isso, o mesmo produto postado 2x duplicaria).
+  const chave = idProduto ? `${programa}|${idProduto}` : `${programa}|#link|${link}`;
+  return createHash("sha1").update(chave).digest("hex").slice(0, 16);
 }
 
 /** Já encaminhado nos últimos 7 dias? (RF-035) */

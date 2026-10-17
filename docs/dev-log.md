@@ -199,3 +199,39 @@ Brother, Vasculha, Herói do Perfume) — todas ainda apontando p/ "Mano dos Ach
 
 **Estado**: `autoEnviar` ainda **OFF**; 2 regras ligadas pelo usuário (RADAR DAS PROMOS #24 e
 PROMOS DE BROTHER 470 → Mano dos Achadinhos).
+
+---
+
+## 2026-10-17 | E6-MONITOR-07 | master | Id do anúncio validado por título + dedup por produto
+
+**Continuidade do feedback**: com 2 regras ligadas ainda não enviava.
+
+**Causa C (bug real, o mais sério)**: a página do link curto traz **vários** `MLB-<id>` — o
+`item_id` é o anúncio, o `wid=` costuma ser **relacionado** e o `/p/` é **catálogo** (o createLink
+rejeita). Pegar "o primeiro" ora dava certo, ora apontava para **outro produto** (foto de um, link
+de outro). Provas medidas:
+- `2iX9hWQ`: `item_id MLB-4210056475` → título **confere**; `wid MLB-4811253949` → "Relógio Wokai"
+  (**produto diferente**).
+- `22VssKG`: `item_id MLB-3608500451` → confere; `wid MLB-4484499507` → "Kit 5 Camisetas"
+  (diferente).
+- Super Groom: o `item_id` é **catálogo** (`/p/MLB44784310`, 8 dígitos) → createLink rejeita.
+
+**Feito**
+- `produto.ts`: `idsCandidatos()` devolve candidatos em ordem (`item_id` → `wid` → `/p/` → genérico);
+  `.webp→.jpg`.
+- `transformer.ts`: para cada candidato, gera o link e **valida resolvendo o próprio link de volta**
+  e comparando o `og:title` com o do deal. Só aceita o produto igual; senão guarda o 1º que
+  converteu como reserva. Fonte do título = o do deal; imagem = a do produto **validado**.
+- `state.ts`: dedup passa a chavear por **programa+idProduto** quando há id (o createLink devolve um
+  link NOVO a cada chamada — antes o mesmo produto postado 2x duplicava no grupo).
+- `webhook.ts`: `idEfetivo` (id resolvido) usado no dedup/eventos.
+
+**Provas**: 8/8 links convertidos **e** 8/8 apontando para o **mesmo produto** do anúncio original
+(comparando o título do link devolvido com o do link original).
+
+**Envio direto LIGADO** a pedido do usuário. Reenvios reais confirmados: 2 msgs de PROMOS DE BROTHER
+470 → Mano dos Achadinhos (msg `3EB0ED913579809D56C6CC`, `3EB0A2B5646DD423C50537`), com **foto**
+(`imageMessage` no log da Evolution, legenda "🔥 Kit 4 Camiseta Dry Fit Parvori…").
+
+**Ressalva**: os 2 reenvios feitos na janela anterior à validação por título podem ter apontado para
+um produto relacionado — vale conferir no grupo.

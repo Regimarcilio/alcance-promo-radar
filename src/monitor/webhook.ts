@@ -81,11 +81,17 @@ export async function processar(
   // 3) Transformar para o link do usuário (RF-032 / RN-012)
   const tr = await transformar(oferta.principal, { conta: opts.conta });
 
+  // Id efetivo p/ dedup: o do link, ou o resolvido do anúncio (links curtos
+  // não trazem id na URL). Sem isso o mesmo produto duplicaria no grupo.
+  const idEfetivo =
+    oferta.principal.idProduto ??
+    (tr.produto?.id ? tr.produto.id.replace(/^MLB-?/i, "MLB") : null);
+
   // 4) Dedup 7d (RF-035)
-  if (jaMonitorado(oferta.principal.programa, oferta.principal.idProduto, tr.url)) {
+  if (jaMonitorado(oferta.principal.programa, idEfetivo, tr.url)) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-      idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "DUPLICADO",
     });
     return { acao: "DUPLICADO", programa: rotulo(oferta.principal.programa) };
@@ -95,7 +101,7 @@ export async function processar(
   if (!tr.ok) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-      idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: tr.motivo,
     });
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: tr.motivo };
@@ -108,7 +114,7 @@ export async function processar(
   if (!carregarMonitor().autoEnviar) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-      idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "envio direto desligado — aguardando revisão",
     });
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "autoEnviar=false", mensagem: corpo };
@@ -119,7 +125,7 @@ export async function processar(
   if (destinos.length === 0) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-      idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "nenhum grupo de destino configurado",
     });
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "sem destinos", mensagem: corpo };
@@ -138,16 +144,16 @@ export async function processar(
     } catch (e: any) {
       registrarEvento({
         em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-        idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: destino.jid,
+        idProduto: idEfetivo, linkTransformado: tr.url, destino: destino.jid,
         status: "ERRO", detalhe: String(e?.message ?? e).slice(0, 120),
       });
     }
   }
 
-  if (enviados.length > 0) marcarMonitorado(oferta.principal.programa, oferta.principal.idProduto, tr.url);
+  if (enviados.length > 0) marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url);
   registrarEvento({
     em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-    idProduto: oferta.principal.idProduto, linkTransformado: tr.url,
+    idProduto: idEfetivo, linkTransformado: tr.url,
     destino: enviados.map((e) => e.jid).join(",") || null,
     status: enviados.length > 0 ? "ENCAMINHADA" : "ERRO",
     messageId: enviados[0]?.messageId,
