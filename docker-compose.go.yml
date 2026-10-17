@@ -1,0 +1,32 @@
+# Evolution GO (engine alternativo) — exige PostgreSQL.
+# Fonte: https://docs.evolutionfoundation.com.br/evolution-go/installation
+# Sobe em 8081 para conviver com a v2 (8080). Nunca suba os dois na mesma porta.
+services:
+  postgres-go:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${EVO_GO_DB_PASS:-troque_a_senha_do_banco}
+    volumes:
+      - evo_go_pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  evolution-go:
+    image: evoapicloud/evolution-go:latest
+    ports:
+      - "8081:8080"
+    environment:
+      SERVER_PORT: 8080
+      CLIENT_NAME: evolution
+      GLOBAL_API_KEY: ${EVO_GO_KEY:-troque_aqui}
+      POSTGRES_AUTH_DB: postgres://postgres:${EVO_GO_DB_PASS:-troque_a_senha_do_banco}@postgres-go:5432/evogo_auth?sslmode=disable
+      POSTGRES_USERS_DB: postgres://postgres:${EVO_GO_DB_PASS:-troque_a_senha_do_banco}@postgres-go:5432/evogo_users?sslmode=disable
+      DATABASE_SAVE_MESSAGES: "false"
+      WADEBUG: INFO
+      LOGTYPE: console
+    depends_on:
+      - postgres-go
+    restart: unless-stopped
+
+volumes:
+  evo_go_pg:
