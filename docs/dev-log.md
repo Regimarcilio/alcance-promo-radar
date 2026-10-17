@@ -103,3 +103,33 @@ revisão"). Agora, com `autoEnviar=false`, registra `REVISAO`; só envia quando 
 
 **Próximo**: definir `AMAZON_TAG`/`SHOPEE_SUBID`/`KABUM_REF`; validar com oferta real postada no
 grupo de origem; decidir substituição futura do manager antigo (8091).
+
+---
+
+## 2026-10-17 | E6-MONITOR-04 | planmaster | Regras origem→destino + celular correto
+
+**Feedback do usuário**: separar origem/destino ficou "vago" — como cada grupo publica uma
+categoria, todas as origens caíam no mesmo destino. Precisava de **associação 1:origem → N
+destinos** e card menos embolado.
+
+**Feito**
+- `grupos.ts` reescrito: `regras[]` (cada origem com os seus destinos). `adicionarRegra` liga
+  **1 origem a 1 destino por vez**; `removerDestino` / `removerRegra`. **Migra** o formato antigo
+  (origens[]+destinos[]) sem perder config.
+- `webhook.ts`: `destinosPara(origem)` devolve **só** os destinos daquela origem.
+- UI reorganizada em blocos: Conexão (conta/trocar celular), Envio direto, **Nova regra** (2
+  selects origem/destino) e **Regras ativas** em cartões `origem → destinos`, com ✕ por destino.
+- Endpoints novos/refeitos: `/api/monitor/grupos` (regras), `?forcar=1` em whats-grupos (cache 10min),
+  reiniciar/desconectar.
+
+**Celular trocado**: conta atual deslogada; usuário pareou o celular certo — agora
+**"Reginaldo" (`5500000000001`)**, estado `open`.
+
+**Testes (dry-run, sem enviar)**: origem A→2 destinos = ENCAMINHADO [X,Y]; origem B→1 destino =
+ENCAMINHADO [X]; origem não cadastrada = IGNORADO; repetida = DUPLICADO.
+
+**Estado**: 6 origens reais do usuário (Epipe Tech, Royal Masculine, RADAR DAS PROMOS #24, Promos de
+Brother, Vasculha, Herói do Perfume) — todas ainda apontando p/ "Mano dos Achadinhos"; `autoEnviar`
+**OFF**. Falta o usuário dar destino próprio a cada origem.
+
+**Próximo**: usuário monta as regras reais pela UI; definir tags Amazon/Shopee/KaBuM.
