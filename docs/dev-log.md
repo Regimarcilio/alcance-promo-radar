@@ -171,3 +171,31 @@ Brother, Vasculha, Herói do Perfume) — todas ainda apontando p/ "Mano dos Ach
 **Estado**: `autoEnviar` **OFF** (restaurado); 6 regras → Mano dos Achadinhos intactas.
 **Nota**: modo automático e monitor **sem limite diário** (removido a pedido).
 **Próximo**: decidir se liga `autoEnviar` (passa a reenviar as 6 origens de verdade).
+
+---
+
+## 2026-10-17 | E6-MONITOR-06 | master | Id de anúncio (não catálogo) + alerta de envio
+
+**Feedback**: "adicionei os botões on/off em cada regra, mas mesmo com dois ligados não está enviando".
+
+**Diagnóstico (2 causas)**
+- **Causa A (bug real)**: a página do anúncio traz **vários** `MLB-<id>`. O `extrairMlbId` pegava o
+  **primeiro** — que é o de **catálogo** (`/p/`, 11–12 dígitos) — e o `createLink` devolve
+  `CREATELINK_SEM_URL`. Prova: `MLB-114676227034` (catálogo) **falha**; `MLB3608500451`
+  (`"item_id"`) **passa**.
+- **Causa B (UX)**: o envio depende de **dois** interruptores — o toggle de cada regra (origem/destino)
+  **e** o mestre "Envio direto". Com `autoEnviar=false`, tudo cai em REVISAO mesmo com regra ligada
+  (motivo registrado: "envio direto desligado — aguardando revisão").
+
+**Feito**
+- `produto.ts`: `extrairItemId()` prioriza `"item_id":"MLB…"` / `"id":"MLB…"` (id do ANÚNCIO) antes
+  do `MLB-<id>` genérico.
+- UI: alerta `#malerta` — vermelho quando há regra ligada com envio direto OFF ("nada será enviado");
+  âmbar quando o envio está ON mas nenhuma regra ativa; verde quando reenviando.
+
+**Provas**: os 7 links que falhavam agora resolvem+convertem (**7/7**) —
+`22VssKG→2sqTcXw`, `2iX9hWQ→2pvyf8d`, `1Gp8Rch→1AXkMvi`, `2MrCkJB→1zmez5e`, `2wpFZSo→2gnDK9i`,
+`2pMqCy2→2owyi5z`, `1ZhqeWM→2tXDpvE`. Alerta renderizado nos 2 estados (OFF→vermelho, ON→verde).
+
+**Estado**: `autoEnviar` ainda **OFF**; 2 regras ligadas pelo usuário (RADAR DAS PROMOS #24 e
+PROMOS DE BROTHER 470 → Mano dos Achadinhos).

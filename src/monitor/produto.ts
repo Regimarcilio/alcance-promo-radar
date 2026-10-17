@@ -20,6 +20,18 @@ export interface DadosProduto {
   urlFinal: string;
 }
 
+/**
+ * Id do ANÚNCIO (não do catálogo). A página traz vários MLB-<id>: o de catálogo
+ * (`/p/MLB…`, 11–12 dígitos) é rejeitado pelo createLink; o do anúncio está em
+ * `"item_id":"MLB…"` / `"id":"MLB…"`. Preferir sempre este.
+ */
+function extrairItemId(html: string): string | null {
+  const m =
+    html.match(/"item_id"\s*:\s*"(MLB\d{6,})"/) ??
+    html.match(/"id"\s*:\s*"(MLB\d{9,})"/);
+  return m ? `MLB-${m[1].replace(/^MLB/, "")}` : null;
+}
+
 function meta(html: string, prop: string): string | null {
   const m = html.match(
     new RegExp(`<meta[^>]+property="${prop}"[^>]+content="([^"]+)"`, "i")
@@ -52,7 +64,7 @@ export async function resolverProdutoML(
     });
     if (!res.ok) return null;
     const html = await res.text();
-    const id = extrairMlbId(res.url) ?? extrairMlbId(html);
+    const id = extrairItemId(html) ?? extrairMlbId(res.url) ?? extrairMlbId(html);
     const titulo = meta(html, "og:title");
     const imagem = imagemCompativel(meta(html, "og:image"));
     if (!id && !titulo && !imagem) return null;

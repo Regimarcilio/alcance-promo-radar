@@ -561,6 +561,10 @@ button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:poin
 .regra.off{opacity:.55}.regra.off .orig b{text-decoration:line-through}
 .dest.off{opacity:.6}.dest.off b{text-decoration:line-through}
 .jidtag{color:#8696a0;font-size:11px}
+.malerta{border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px;border:1px solid}
+.malerta.pare{background:#3a1d1d;border-color:#c0392b;color:#ffd0cb}
+.malerta.warn{background:#3a3316;border-color:#b99a16;color:#ffeeb8}
+.malerta.ok{background:#0f2f26;border-color:#00a884;color:#a8f0d8}
 pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space:pre-wrap;margin-top:8px;color:#d1f4cc;max-height:220px;overflow:auto}</style></head>
 <body>
 <h1>🤖 Gerenciador <span>autoMensagemWhats</span></h1>
@@ -617,6 +621,7 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div class="mrow">
 <div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
 <button class="mbtn" id="mautobtn" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
+<div id="malerta"></div>
 
 <div class="mbox">
 <label>➕ Nova regra — escolha <b>uma</b> origem e <b>um</b> destino</label>
@@ -834,6 +839,7 @@ async function carregarMonitorUI(){
     const on=d.autoEnviar===true;
     $('mautolabel').textContent='Envio direto — '+(on?'ON (encaminha sozinho)':'OFF (vai p/ revisão)');
     $('mautobtn').textContent=on?'Desligar envio direto':'Ligar envio direto';
+    renderMalerta(d.regras||[], on);
     carregarContaMonitor();
     carregarMonitorStatus();
   }catch(e){}
@@ -855,6 +861,18 @@ function renderRegras(regras){
       +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" onclick="removerRegraUI(this)">✕ origem</button>'
       +'</span></div>'+dests+'</div>';
   }).join('');
+}
+// Alerta: deixa explícito que regra ligada NÃO envia se o "envio direto" estiver OFF.
+function renderMalerta(regras,auto){
+  const el=$('malerta'); if(!el) return;
+  const ativas=regras.filter(function(r){return r.origem.ativo && r.destinos.some(function(d){return d.ativo;});});
+  if(!auto && ativas.length){
+    el.innerHTML='<div class="malerta pare">⛔ <b>Envio direto DESLIGADO</b> — você tem <b>'+ativas.length+' regra(s) ligada(s)</b>, mas <b>nada será enviado</b> (tudo cai em revisão). Clique em <b>“Ligar envio direto”</b> acima para começar a reenviar.</div>';
+  } else if(auto && !ativas.length){
+    el.innerHTML='<div class="malerta warn">⚠️ <b>Envio direto LIGADO</b>, mas nenhuma regra está ativa — ligue a <b>origem</b> E o <b>destino</b> (toggle ON) para reenviar.</div>';
+  } else if(auto){
+    el.innerHTML='<div class="malerta ok">✅ Reenviando automaticamente — <b>'+ativas.length+'</b> regra(s) ativa(s).</div>';
+  } else { el.innerHTML=''; }
 }
 async function carregarContaMonitor(){
   try{
