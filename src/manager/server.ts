@@ -25,6 +25,9 @@ import {
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor } from "../monitor/state.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
+import {
+  listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
+} from "../monitor/evolution.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dataDir = join(root, "data");
@@ -420,6 +423,46 @@ const server = createServer(async (req, res) => {
     json(200, { ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.origens.length, destinos: s.destinos.length, eventos: eventosMonitor(50) });
     return;
   }
+  // Conta pareada + estado (para trocar o celular)
+  if (req.method === "GET" && url.pathname === "/api/monitor/conta") {
+    const [estado, conta] = await Promise.all([estadoConexao(), contaPareada()]);
+    json(200, { estado, ...conta, instancia: process.env.EVO_INSTANCE ?? "radar-piloto" });
+    return;
+  }
+  // Lista os grupos da conta pareada (origem/destino escolhidos daqui)
+  if (req.method === "GET" && url.pathname === "/api/monitor/whats-grupos") {
+    try {
+      const forcar = url.searchParams.get("forcar") === "1";
+      const grupos = await listarGrupos(forcar);
+      json(200, { ok: true, total: grupos.length, grupos });
+    } catch (e: any) {
+      json(200, { ok: false, erro: String(e?.message ?? e), grupos: [] });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/reiniciar") {
+    try {
+      await reiniciar();
+      json(200, { ok: true, estado: await estadoConexao() });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/desconectar") {
+    // Troca de celular: desloga a conta atual e devolve um QR novo.
+    try {
+      await desconectar();
+      const r = await fetch(`${(process.env.EVO_URL ?? "").replace(/\/$/, "")}/instance/connect/${process.env.EVO_INSTANCE ?? "radar-piloto"}`, {
+        headers: { apikey: process.env.EVO_KEY ?? "" },
+      });
+      const j: any = await r.json().catch(() => ({}));
+      json(200, { ok: true, qr: j?.base64 ?? null, estado: await estadoConexao() });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/monitor/testar") {
     // Simula o pipeline com um texto (sem depender do webhook real).
     try {
@@ -538,8 +581,19 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 </div>
 <div class="panel" style="border-color:#53bdeb">
 <label>📡 Monitor de grupos de afiliados — recebe, troca o link e reencaminha</label>
-<div class="hint">Cadastre os grupos que você <b>monitora</b> (origem) e os seus grupos (destino). Mensagem com link de afiliado (ML, Shopee, KaBuM, Amazon) é reconhecida, o link vira o <b>seu</b> e ela é reenviada no seu padrão.</div>
-<div class="grid2">
+<div class="hint">Escolha abaixo <b>quais grupos são origem</b> (monitorar) e <b>quais são destino</b> (enviar). Mensagem com link (ML, Shopee, KaBuM, Amazon) é reconhecida, o link vira o <b>seu</b> e ela é reenviada.</div>
+<div class="row" style="background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+<div><b id="mcontalabel">Conta WhatsApp: …</b><br><span id="mcontaestado" style="font-size:12px;color:#8696a0"></span></div>
+<div style="display:flex;gap:8px;flex-shrink:0">
+<button class="ghost" style="margin-top:0;width:auto" onclick="reiniciarEvo()">↻ Reconectar</button>
+<button class="ghost" style="margin-top:0;width:auto" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
+<div style="margin-top:10px;border-top:1px solid #222d34;padding-top:10px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+<label style="margin:0">📥 Grupos da conta pareada (puxar da Evolution)</label>
+<button class="buscar" style="margin-top:0;width:auto" onclick="buscarGruposWhats()">🔄 Buscar grupos</button></div>
+<div class="hint">Clique <b>→ Origem</b> para monitorar um grupo de achadinhos; <b>→ Destino</b> para os seus grupos de envio.</div>
+<div id="mwhatsgrupos" style="font-size:13px;max-height:260px;overflow:auto;margin-top:6px"><span style="color:#8696a0">clique em “Buscar grupos”.</span></div></div>
+<div class="grid2" style="margin-top:12px">
 <div><label>Grupos de ORIGEM (monitorados — máx 10)</label><div id="morigens" style="font-size:13px;margin-bottom:6px"></div>
 <div style="display:flex;gap:8px"><input id="mjidor" style="flex:2" placeholder="JID ou dígitos: 120363...@g.us"><input id="mnomeor" style="flex:1" placeholder="apelido (opcional)"><button class="buscar" style="margin-top:0;width:auto" onclick="addMonitor('origem')">➕</button></div></div>
 <div><label>Grupos de DESTINO (seus — máx 10)</label><div id="mdestinos" style="font-size:13px;margin-bottom:6px"></div>
@@ -749,8 +803,57 @@ async function carregarMonitorUI(){
     const on=d.autoEnviar===true;
     $('mautolabel').textContent='Envio direto — '+(on?'ON':'OFF (vai p/ revisão)');
     $('mautobtn').textContent=on?'Desligar envio direto':'Ligar envio direto';
+    carregarContaMonitor();
     carregarMonitorStatus();
   }catch(e){}
+}
+async function carregarContaMonitor(){
+  try{
+    const d=await (await fetch('/api/monitor/conta')).json();
+    const ok=d.estado==='open';
+    $('mcontalabel').textContent='Conta WhatsApp: '+(d.nome||d.jid||'—')+(d.jid?' ('+d.jid.replace(/@.*/,'')+')':'');
+    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+(d.estado||'?'))+' • instância '+d.instancia;
+  }catch(e){}
+}
+async function buscarGruposWhats(){
+  $('mwhatsgrupos').innerHTML='<span style="color:#8696a0">buscando…</span>';
+  try{
+    const d=await (await fetch('/api/monitor/whats-grupos?forcar=1')).json();
+    if(!d.ok){$('mwhatsgrupos').innerHTML='<span style="color:#f8806a">'+(d.erro||'erro')+'</span>';return;}
+    window.__wgrupos=d.grupos||[];
+    if(!window.__wgrupos.length){$('mwhatsgrupos').innerHTML='<span style="color:#8696a0">nenhum grupo encontrado.</span>';return;}
+    $('mwhatsgrupos').innerHTML=window.__wgrupos.map(function(g,i){
+      return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #1b252c">'
+        +'<span>'+esc(g.nome)+' <span style="color:#8696a0">'+(g.tamanho!=null?'('+g.tamanho+')':'')+'</span></span>'
+        +'<span style="display:flex;gap:6px;flex-shrink:0">'
+        +'<button class="buscar" style="margin:0;width:auto;padding:4px 8px;font-size:11px" data-i="'+i+'" data-tipo="origem" onclick="escolherGrupoBtn(this)">→ Origem</button>'
+        +'<button class="ghost" style="margin:0;width:auto;padding:4px 8px;font-size:11px" data-i="'+i+'" data-tipo="destino" onclick="escolherGrupoBtn(this)">→ Destino</button>'
+        +'</span></div>';
+    }).join('');
+  }catch(e){$('mwhatsgrupos').innerHTML='<span style="color:#f8806a">erro: '+e.message+'</span>';}
+}
+function escolherGrupoBtn(el){return escolherGrupo(Number(el.dataset.i),el.dataset.tipo);}
+async function escolherGrupo(i,tipo){
+  const g=(window.__wgrupos||[])[i];
+  if(!g)return;
+  const r=await (await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,jid:g.jid,nome:g.nome})})).json();
+  if(r.erro)return alert(r.erro);
+  carregarMonitorUI();
+  alert('Adicionado como '+tipo+': '+g.nome);
+}
+async function reiniciarEvo(){
+  if(!confirm('Reconectar o socket da instância (destrava estado preso)?'))return;
+  const r=await (await fetch('/api/monitor/reiniciar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  alert('Estado: '+r.estado);
+  carregarContaMonitor();
+}
+async function trocarCelular(){
+  if(!confirm('DESLOGAR a conta atual para parear outro celular?\\n\\nDepois escaneie o QR com o celular que tem os grupos de afiliados.'))return;
+  const r=await (await fetch('/api/monitor/desconectar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  alert('Conta deslogada. Abra http://'+location.hostname+':8097 para escanear o QR com o celular correto.');
+  carregarContaMonitor();
 }
 function linhaGrupo(tipo,g){
   return '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span>• <b>'+esc(g.nome)+'</b> <span style="color:#8696a0">'+esc(g.jid)+'</span></span>'
