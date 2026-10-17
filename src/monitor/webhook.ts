@@ -6,6 +6,7 @@
 import { detectar, rotulo, type OfertaDetectada } from "./parser.js";
 import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
+import { salvarMidia } from "./midia.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { jaMonitorado, marcarMonitorado, registrarEvento } from "./state.js";
 import { enfileirar, tamanhoFila, intervaloFila } from "./fila.js";
@@ -20,7 +21,13 @@ export interface WebhookPayload {
     key?: { remoteJid?: string; fromMe?: boolean; id?: string };
     remoteJid?: string;
     fromMe?: boolean;
-    message?: { conversation?: string; extendedTextMessage?: { text?: string }; imageMessage?: { caption?: string } };
+    message?: {
+      conversation?: string;
+      extendedTextMessage?: { text?: string };
+      imageMessage?: { caption?: string; mimetype?: string };
+      /** presente quando a instância tem webhookBase64: true */
+      base64?: string;
+    };
     pushName?: string;
   };
 }
@@ -30,6 +37,8 @@ export interface MensagemExtraida {
   deMim: boolean;
   texto: string;
   messageId: string;
+  /** Foto que a ORIGEM publicou (base64 do webhook), quando houver. */
+  midia?: { base64: string; mimetype: string };
 }
 
 /** Extrai o essencial do payload do webhook, tolerante a variações. */
@@ -42,7 +51,16 @@ export function extrairMensagem(p: WebhookPayload): MensagemExtraida | null {
     msg.conversation ?? msg.extendedTextMessage?.text ?? msg.imageMessage?.caption ?? "";
   const messageId = d.key?.id ?? "";
   if (!origem || !texto.trim()) return null;
-  return { origem, deMim, texto, messageId };
+  const b64 = typeof msg.base64 === "string" ? msg.base64 : "";
+  const midia = b64
+    ? { base64: b64, mimetype: msg.imageMessage?.mimetype ?? "image/jpeg" }
+    : undefined;
+  return { origem, deMim, texto, messageId, midia };
+}
+
+/** Foto da origem tem prioridade? (MONITOR_FOTO=produto inverte p/ a og:image) */
+function fotoDaOrigemPrimeiro(): boolean {
+  return (process.env.MONITOR_FOTO ?? "origem").toLowerCase() !== "produto";
 }
 
 export interface ResultadoMonitor {
@@ -61,7 +79,9 @@ export async function processar(
   msg: MensagemExtraida,
   opts: { dryRun?: boolean; conta?: string } = {}
 ): Promise<ResultadoMonitor> {
-  const dryRun = opts.dryRun ?? false;
+  // MONITOR_DRY=1 força modo teste em TUDO (nenhum envio real sai) — rede de
+  // segurança para mexer no sistema sem atingir o grupo de verdade.
+  const dryRun = process.env.MONITOR_DRY === "1" ? true : opts.dryRun ?? false;
 
   // 1) Origem monitorada? (RF-030)
   if (msg.deMim || !ehMonitorado(msg.origem)) {
@@ -111,6 +131,15 @@ export async function processar(
   // 6) Monta a mensagem repassada (formato anterior + link do usuário)
   const corpo = montarRepasse(msg.texto, oferta, tr.url, tr.produto ?? null);
 
+  // 6.1) Qual foto usar: por padrão a que a ORIGEM publicou (a mesma do post);
+  //      se não vier, cai para a og:image do anúncio. MONITOR_FOTO=produto inverte.
+  const arquivoOrigem = msg.midia?.base64 ? salvarMidia(msg.midia.base64, msg.midia.mimetype) : null;
+  const fotoProduto = tr.produto?.imagem ?? "";
+  const foto = fotoDaOrigemPrimeiro()
+    ? arquivoOrigem ?? fotoProduto
+    : fotoProduto || arquivoOrigem || "";
+  const fonteFoto = !foto ? "sem foto" : foto === arquivoOrigem ? "foto da origem" : "foto do anúncio";
+
   // 7) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
   if (!carregarMonitor().autoEnviar) {
     registrarEvento({
@@ -138,7 +167,7 @@ export async function processar(
     for (const destino of destinos) {
       const r = await enviarParaGrupo({
         grupo: destino.jid,
-        imagem: tr.produto?.imagem ?? "",
+        imagem: foto,
         legenda: corpo,
         dryRun: true,
       });
@@ -148,7 +177,8 @@ export async function processar(
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url,
       destino: simulados.map((e) => e.jid).join(","),
-      status: "ENCAMINHADA", messageId: simulados[0]?.messageId, detalhe: "teste (dryRun)",
+      status: "ENCAMINHADA", messageId: simulados[0]?.messageId,
+      detalhe: `teste (dryRun) · ${fonteFoto}`,
     });
     return {
       acao: "ENCAMINHADO",
@@ -164,7 +194,8 @@ export async function processar(
     idProduto: idEfetivo,
     link: tr.url,
     mensagem: corpo,
-    imagem: tr.produto?.imagem ?? "",
+    imagem: foto,
+    fonte: fonteFoto,
     destinos: destinos.map((d) => d.jid),
   });
   marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url); // reserva (evita re-enfileirar)
@@ -173,7 +204,7 @@ export async function processar(
     idProduto: idEfetivo, linkTransformado: tr.url,
     destino: destinos.map((d) => d.jid).join(","),
     status: "ENFILEIRADA",
-    detalhe: `fila: ${tamanhoFila()} item(ns), 1 a cada ${intervaloFila()}s`,
+    detalhe: `fila: ${tamanhoFila()} item(ns), 1 a cada ${intervaloFila()}s · ${fonteFoto}`,
   });
   return {
     acao: "ENFILEIRADO",

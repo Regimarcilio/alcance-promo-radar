@@ -270,3 +270,42 @@ em pouco tempo, segurar em espera e liberar 1 a cada 45s (teste inicial).
 
 **Observação**: `disparo real` hoje só sai por `Royal Masculine | 1` (o usuário trocou as regras
 pela UI); as demais origens estão off.
+
+---
+
+## 2026-10-17 | E6-MONITOR-09 | master | Foto da origem (mesma imagem do post)
+
+**Pedido**: usar a MESMA foto que a origem publica, em vez da `og:image` do anúncio.
+
+**Descoberta**: a foto da origem vem no próprio webhook — basta ligar `webhookBase64` na
+instância (`POST /webhook/set/{inst}` com `{webhook:{...,base64:true}}`; o campo no SET é
+`base64`, a resposta traz `webhookBase64`). Com isso, todo `imageMessage` chega com
+`data.message.base64` (irmão de `imageMessage`), ex.: `string(267348)` + `mimetype: image/jpeg`.
+- A rota `POST /chat/getBase64FromMediaMessage/{inst}` existe, mas **não serve** aqui: a tabela
+  `Message` do Evolution está vazia (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`) → "Message not found".
+- Confirmado também que `sendMedia` aceita **base64** (teste real, 200 + messageId).
+
+**Feito**
+- `src/monitor/midia.ts` (novo): `salvarMidia(base64,mime)`, `ehArquivoMidia`, `lerMidia`,
+  `limparMidiaAntiga(dias)`. Salva em `data/midia/<uuid>.<ext>` — **não** embute o base64 na
+  fila/estado (seriam dezenas de MB de JSON).
+- `webhook.ts`: `MensagemExtraida.midia` (base64+mimetype); a foto escolhida é
+  **origem → fallback og:image**; `MONITOR_FOTO=produto` inverte a prioridade. A fonte escolhida
+  vai no `detalhe` do evento ("foto da origem" / "foto do anúncio") e no item da fila.
+- `dispatch.ts`: `enviarParaGrupo` reconhece caminho de arquivo local como foto; `enviarMidia`
+  lê o arquivo e manda em base64 (mimetype pela extensão).
+- `fila.ts`: item carrega `fonte`; worker limpa `data/midia` com +3 dias (1x/hora).
+- **Segurança**: `MONITOR_DRY=1` força dryRun em TUDO (processar + worker) — nenhum envio real sai.
+
+**Provas**
+- Sintético com `base64`: evento `ENCAMINHADA … · foto da origem` e arquivo em `data/midia/`.
+- Sintético com `MONITOR_FOTO=produto`: evento `… · foto do anúncio` (og:image).
+- Envio real a partir de ARQUIVO em disco → base64 → `sendMedia` 200 (`3EB0532758736CE56B1055`).
+- Tráfego real: origens do Royal Masculine postam **texto** → cai no fallback "foto do anúncio".
+- `MONITOR_DRY=1` → `messageId: dryrun-…` (nada real enviado).
+
+**Incidente (erro meu, registrar)**: ao testar, chamei `processar()` sem `dryRun` → o item entrou
+na fila e **foi enviado ao grupo real** (Mano dos Achadinhos, msg `3EB092BAE0A58883D968B9`,
+produto MLB3573257631) com uma imagem de teste 1x1. Tentei apagar via
+`DELETE /chat/deleteMessageForEveryone/radar-pelo` → 428 "Connection Closed" (Baileys não apaga
+sem store de mensagens). Mensagem permanece no grupo — remover manualmente. Por isso `MONITOR_DRY`.

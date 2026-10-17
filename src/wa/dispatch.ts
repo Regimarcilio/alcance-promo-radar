@@ -1,7 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
 
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
+
+/** Caminho de arquivo local (foto baixada/guardada em disco)? */
+function arquivoLocal(p: string): boolean {
+  if (!p || /^https?:\/\//.test(p) || p.startsWith("data:")) return false;
+  try {
+    return existsSync(p);
+  } catch {
+    return false;
+  }
+}
 
 export async function enviarParaGrupo(args: {
   grupo: string;
@@ -19,7 +30,10 @@ export async function enviarParaGrupo(args: {
     );
     return { messageId: `dryrun-${Date.now()}`, dryRun: true };
   }
-  const temFoto = /^https?:\/\//.test(args.imagem);
+  const temFoto =
+    /^https?:\/\//.test(args.imagem) ||
+    args.imagem.startsWith("data:") ||
+    arquivoLocal(args.imagem);
   if (temFoto) return enviarMidia({ ...args, mediatype: "image" });
   const res = await fetch(`${evoUrl}/message/sendText/${instance}`, {
     method: "POST",
@@ -53,7 +67,15 @@ export async function enviarMidia(args: {
   }
   let media = args.imagem;
   let mimetype = args.mimetype;
-  if (!/^https?:\/\//.test(args.imagem) && !args.imagem.startsWith("data:")) {
+  if (arquivoLocal(args.imagem)) {
+    // foto guardada em disco (ex.: a imagem que a ORIGEM publicou) → manda em base64
+    const ext = (args.imagem.split(".").pop() ?? "jpg").toLowerCase();
+    mimetype =
+      mimetype ??
+      ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" } as Record<string, string>)[ext] ??
+      "image/jpeg";
+    media = readFileSync(args.imagem).toString("base64");
+  } else if (!/^https?:\/\//.test(args.imagem) && !args.imagem.startsWith("data:")) {
     mimetype = mimetype ?? "image/jpeg";
   }
   const res = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {

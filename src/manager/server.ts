@@ -526,7 +526,21 @@ const server = createServer(async (req, res) => {
       if (process.env.MONITOR_DEBUG === "1") {
         try {
           const { appendFileSync } = await import("node:fs");
-          appendFileSync("/app/data/debug-webhook.log", new Date().toISOString() + " " + JSON.stringify(p).slice(0, 1500) + "\n");
+          const d: any = (p as any)?.data ?? {};
+          const m: any = d?.message ?? {};
+          const img = m.imageMessage;
+          const resumo = {
+            ev: (p as any)?.event, jid: d?.key?.remoteJid, fromMe: d?.key?.fromMe,
+            tipos: Object.keys(m),
+            img: img ? {
+              mimetype: img.mimetype, fileLength: img.fileLength,
+              temUrl: !!img.url, temThumb: !!img.jpegThumbnail,
+              caption: String(img.caption ?? "").slice(0, 40),
+            } : null,
+            base64: m.base64 === undefined ? "ausente" : typeof m.base64 === "string" ? `string(${m.base64.length})` : typeof m.base64,
+            mediaUrl: m.mediaUrl ? String(m.mediaUrl).slice(0, 60) : null,
+          };
+          appendFileSync("/app/data/debug-webhook.log", new Date().toISOString() + " " + JSON.stringify(resumo) + "\n");
         } catch { /* ignore */ }
       }
       const msg = extrairMensagem(p);

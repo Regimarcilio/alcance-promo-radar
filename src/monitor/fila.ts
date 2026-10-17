@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { carregarMonitor } from "./grupos.js";
+import { limparMidiaAntiga } from "./midia.js";
 import { registrarEvento } from "./state.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -27,6 +28,8 @@ export interface ItemFila {
   link: string;
   mensagem: string;
   imagem: string;
+  /** de onde veio a foto (ex.: "foto da origem" / "foto do anúncio") */
+  fonte?: string;
   destinos: string[];
   criadoEm: string;
 }
@@ -114,18 +117,20 @@ export async function liberarProximo(): Promise<ItemFila | null> {
   s.ultimoEnvio = new Date().toISOString();
   salvar(s); // já sai da fila (não reenvia em loop se o envio falhar)
 
+  const dry = process.env.MONITOR_DRY === "1"; // rede de segurança: não envia de verdade
   for (const jid of item.destinos) {
     try {
       const r = await enviarParaGrupo({
         grupo: jid,
         imagem: item.imagem,
         legenda: item.mensagem,
-        dryRun: false,
+        dryRun: dry,
       });
       registrarEvento({
         em: new Date().toISOString(), origem: item.origem, programa: item.programa,
         idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
         status: "ENCAMINHADA", messageId: r.messageId,
+        detalhe: dry ? `${item.fonte ?? ""} (dry)`.trim() : item.fonte,
       });
     } catch (e: any) {
       registrarEvento({
@@ -143,8 +148,11 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Worker: verifica a cada 5s e libera 1 item por intervalo (45s). */
 export function iniciarFilaWorker(tickMs = 5000): void {
   if (timer) return;
+  let ticks = 0;
   timer = setInterval(() => {
     void liberarProximo();
+    // faxina das fotos da origem 1x por hora
+    if (++ticks % 720 === 0) limparMidiaAntiga(3);
   }, tickMs);
   if (typeof (timer as any).unref === "function") (timer as any).unref();
 }
