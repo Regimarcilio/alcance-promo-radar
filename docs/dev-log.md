@@ -309,3 +309,37 @@ na fila e **foi enviado ao grupo real** (Mano dos Achadinhos, msg `3EB092BAE0A58
 produto MLB3573257631) com uma imagem de teste 1x1. Tentei apagar via
 `DELETE /chat/deleteMessageForEveryone/radar-pelo` → 428 "Connection Closed" (Baileys não apaga
 sem store de mensagens). Mensagem permanece no grupo — remover manualmente. Por isso `MONITOR_DRY`.
+
+---
+
+## 2026-10-17 | E6-MONITOR-10 | master | Seletor de foto na UI + pausa do piloto explícita
+
+**Pedido 1**: trocar a flag de ambiente (`MONITOR_FOTO`) por um **seletor na UI**.
+
+**Feito**: a fonte da foto agora é config persistida em `data/monitor.json`:
+- `MonitorStore.foto: "origem" | "produto"` (novo; `carregarMonitor()` lê, default `origem`).
+- `definirFoto(v)` em `src/monitor/grupos.ts`.
+- `src/monitor/webhook.ts`: `fotoDaOrigemPrimeiro()` lê `carregarMonitor().foto` (env `MONITOR_FOTO` **aposentada**).
+- API: `GET /api/monitor/grupos` devolve `foto`; novo `POST /api/monitor/foto {foto}`.
+- UI (painel 📡 Monitor): linha "Foto do repasse: a da ORIGEM (mesma do post) / a do ANÚNCIO (og:image)"
+  com dois botões ("Da origem" / "Do anúncio"); o ativo fica `.ok`.
+
+**Provas**: `foto:origem → POST produto → monitor.json.foto=produto`; repasse dry-run passou a
+`imagem=https://http2.mlstatic.com/...jpg` com detalhe `· foto do anúncio`; voltando para `origem`
+tudo igual antes. Valor inválido cai no padrão `origem` (sem quebrar).
+
+**Pedido 2**: `#1-principal` parou de gerar mensagens (11:08 locais).
+
+**Causa**: `store()` em `src/ml/piloto.ts` forçava `rodando:false` em memória no boot (pausa por
+segurança) **mas não chamava `salvar()`** — o arquivo continuava `rodando:true`, então a grade
+parecia ligada sem estar. Qualquer `--force-recreate` pausava os loops silenciosamente.
+
+**Feito**: a pausa agora é **persistida** e **anunciada** no log do piloto:
+`⏸ N loop(s) pausado(s) após reinício — clique em ▶ START (ou ▶ LIGA TUDO) para religar.`
+
+**Nota operacional**: `▶ LIGA TUDO` (`POST /api/auto/ligar`) depende do **mapa** categoria→conta+grupo
+(`data/mapa*.json`) e ele está **vazio** — por isso o LIGA TUDO responde "Nenhuma categoria amarrada".
+Religar um perfil = `POST /api/piloto/start` com `{conta, category, grupo, sub, qtd, intervaloS}`.
+
+**Provas**: logs com o ⏸ e `loops[].rodando=false` no arquivo; após religar,
+`id 1 · enviadas 1 · ultimaMsg 15:38:14Z` e `✅ [caça LIVE|principal] ... id=3EB0D540F8486D5006DA92`.

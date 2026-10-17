@@ -141,17 +141,18 @@ let mem: Store | null = null;
 function store(): Store {
   if (mem) return mem;
   let s: Store = { loops: [], logs: [] };
+  let pausados = 0;
   try {
     if (existsSync(pilotoFile)) {
       const raw = JSON.parse(readFileSync(pilotoFile, "utf8"));
       if (Array.isArray(raw.loops)) {
+        // reinício pausa tudo por segurança — e PERSISTE a pausa (antes o arquivo
+        // continuava com rodando:true e a grade parecia ligada sem estar).
+        pausados = (raw.loops as LoopState[]).filter((l) => l.rodando).length;
         s = {
           loops: (raw.loops as LoopState[]).map((l) => ({ ...blankLoop(), ...l, rodando: false })),
           logs: Array.isArray(raw.logs) ? raw.logs : [],
         };
-        if ((raw.loops as LoopState[]).some((l) => l.rodando)) {
-          console.log("[piloto] loops pausados por segurança após reinício.");
-        }
       } else if (raw && typeof raw === "object" && ("category" in raw || "conta" in raw)) {
         s = { loops: [], logs: Array.isArray(raw.logs) ? raw.logs : [] };
       }
@@ -160,6 +161,10 @@ function store(): Store {
     /* padrão */
   }
   mem = s;
+  if (pausados > 0) {
+    log(`⏸ ${pausados} loop(s) pausado(s) após reinício — clique em ▶ START (ou ▶ LIGA TUDO) para religar.`);
+    salvar();
+  }
   return mem;
 }
 

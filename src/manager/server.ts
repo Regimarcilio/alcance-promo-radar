@@ -19,7 +19,7 @@ import { formatar } from "../wa/formatter.js";
 import { registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import {
-  carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar,
+  carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar, definirFoto,
   alternarOrigem, alternarDestino,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
@@ -389,7 +389,7 @@ const server = createServer(async (req, res) => {
   // ---------- E6 MONITOR ----------
   if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
     const s = carregarMonitor();
-    json(200, { regras: s.regras, autoEnviar: s.autoEnviar });
+    json(200, { regras: s.regras, autoEnviar: s.autoEnviar, foto: s.foto });
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/monitor/grupos") {
@@ -419,6 +419,16 @@ const server = createServer(async (req, res) => {
       const b = JSON.parse(await lerCorpo(req));
       definirAutoEnviar(b.autoEnviar === true);
       json(200, { ok: true, autoEnviar: carregarMonitor().autoEnviar });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/foto") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirFoto(b.foto === "produto" ? "produto" : "origem");
+      json(200, { ok: true, foto: carregarMonitor().foto });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -665,6 +675,12 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <button class="mbtn" id="mautobtn" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
 <div id="malerta"></div>
 
+<div class="mrow">
+<div><b id="mfotolabel">Foto do repasse: …</b><br><span class="mini">"Da origem" usa a MESMA foto que o post monitorado publicou; se o post for só texto, cai para a foto do anúncio.</span></div>
+<div style="display:flex;gap:6px">
+<button class="mbtn" id="mfotoorigem" onclick="definirFotoUI('origem')">Da origem</button>
+<button class="mbtn" id="mfotoproduto" onclick="definirFotoUI('produto')">Do anúncio</button></div></div>
+
 <div class="mbox">
 <label>➕ Nova regra — escolha <b>uma</b> origem e <b>um</b> destino</label>
 <div class="grid2">
@@ -887,10 +903,22 @@ async function carregarMonitorUI(){
     const on=d.autoEnviar===true;
     $('mautolabel').textContent='Envio direto — '+(on?'ON (encaminha sozinho)':'OFF (vai p/ revisão)');
     $('mautobtn').textContent=on?'Desligar envio direto':'Ligar envio direto';
+    renderFoto(d.foto||'origem');
     renderMalerta(d.regras||[], on);
     carregarContaMonitor();
     carregarMonitorStatus();
   }catch(e){}
+}
+function renderFoto(fonte){
+  const origem=fonte!=='produto';
+  $('mfotolabel').textContent='Foto do repasse: '+(origem?'a da ORIGEM (mesma do post)':'a do ANÚNCIO (og:image)');
+  $('mfotoorigem').className='mbtn'+(origem?' ok':'');
+  $('mfotoproduto').className='mbtn'+(!origem?' ok':'');
+}
+async function definirFotoUI(fonte){
+  const r=await (await fetch('/api/monitor/foto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({foto:fonte})})).json();
+  if(r.erro)return alert(r.erro);
+  renderFoto(r.foto);
 }
 function renderRegras(regras){
   $('mregrasn').textContent=regras.length?('· '+regras.length):'';

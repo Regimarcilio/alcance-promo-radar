@@ -26,9 +26,15 @@ export interface Regra {
   criadoEm: string;
 }
 
+/** De onde vem a foto do repasse. */
+export type FonteFoto = "origem" | "produto";
+
 export interface MonitorStore {
   regras: Regra[];
   autoEnviar: boolean; // false = vai para fila de revisão
+  /** "origem" = mesma foto que a origem publicou (fallback: anúncio);
+   *  "produto" = sempre a og:image do anúncio. */
+  foto: FonteFoto;
   criadoEm: string;
 }
 
@@ -37,7 +43,7 @@ const dataDir = join(root, "data");
 const file = join(dataDir, "monitor.json");
 
 function blank(): MonitorStore {
-  return { regras: [], autoEnviar: false, criadoEm: new Date().toISOString() };
+  return { regras: [], autoEnviar: false, foto: "origem", criadoEm: new Date().toISOString() };
 }
 
 /** Normaliza JID: aceita "123@g.us" ou só os dígitos. */
@@ -119,6 +125,7 @@ export function carregarMonitor(): MonitorStore {
           }))
           .filter((r: Regra) => r.origem.jid),
         autoEnviar: !!raw.autoEnviar,
+        foto: raw.foto === "produto" ? "produto" : "origem",
         criadoEm: raw.criadoEm ?? new Date().toISOString(),
       };
       return s;
@@ -216,6 +223,13 @@ export function alternarDestino(origemRaw: string, destinoRaw: string): boolean 
 export function definirAutoEnviar(v: boolean): void {
   const s = carregarMonitor();
   s.autoEnviar = !!v;
+  salvar(s);
+}
+
+/** Escolhe a fonte da foto usada no repasse (origem | produto). */
+export function definirFoto(v: FonteFoto): void {
+  const s = carregarMonitor();
+  s.foto = v === "produto" ? "produto" : "origem";
   salvar(s);
 }
 

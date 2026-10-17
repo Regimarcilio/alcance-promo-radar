@@ -58,9 +58,9 @@ export function extrairMensagem(p: WebhookPayload): MensagemExtraida | null {
   return { origem, deMim, texto, messageId, midia };
 }
 
-/** Foto da origem tem prioridade? (MONITOR_FOTO=produto inverte p/ a og:image) */
+/** Foto da origem tem prioridade? Agora é escolha persistida na UI (monitor.json). */
 function fotoDaOrigemPrimeiro(): boolean {
-  return (process.env.MONITOR_FOTO ?? "origem").toLowerCase() !== "produto";
+  return carregarMonitor().foto !== "produto";
 }
 
 export interface ResultadoMonitor {
