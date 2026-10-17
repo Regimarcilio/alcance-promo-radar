@@ -4,7 +4,7 @@
  * - Contador de mensagens monitoradas/transformadas/encaminhadas.
  * Persistência em data/monitor-estado.json.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -22,7 +22,7 @@ export interface EventoMonitor {
   idProduto: string | null;
   linkTransformado: string | null;
   destino: string | null;
-  status: "ENCAMINHADA" | "DUPLICADO" | "REVISAO" | "ERRO";
+  status: "ENCAMINHADA" | "DUPLICADO" | "REVISAO" | "ERRO" | "ENFILEIRADA";
   messageId?: string;
   detalhe?: string;
 }
@@ -36,20 +36,29 @@ function blank(): Estado {
   return { hashes: {}, eventos: [] };
 }
 
+// Última leitura boa: evita que um erro transitório de I/O (arquivo em escrita)
+// devolva estado vazio e a próxima gravação persista o vazio (perda de eventos/dedup).
+let cache: Estado | null = null;
+
 function carregar(): Estado {
   try {
-    if (!existsSync(file)) return blank();
+    if (!existsSync(file)) return cache ?? blank();
     const s = JSON.parse(readFileSync(file, "utf8")) as Estado;
-    return { hashes: s.hashes ?? {}, eventos: Array.isArray(s.eventos) ? s.eventos : [] };
+    cache = { hashes: s.hashes ?? {}, eventos: Array.isArray(s.eventos) ? s.eventos : [] };
+    return cache;
   } catch {
-    return blank();
+    return cache ?? blank();
   }
 }
 
 function salvar(s: Estado): void {
   mkdirSync(dataDir, { recursive: true });
   s.eventos = s.eventos.slice(-500); // mantém os 500 últimos eventos
-  writeFileSync(file, JSON.stringify(s, null, 2));
+  cache = s;
+  // Escrita atômica (tmp + rename): nunca deixa o arquivo meio-escrito.
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, JSON.stringify(s, null, 2));
+  renameSync(tmp, file);
 }
 
 export function hashMonitor(programa: string, idProduto: string | null, link: string): string {
@@ -81,6 +90,24 @@ export function registrarEvento(ev: EventoMonitor): void {
   salvar(s);
 }
 
+/** Zera os contadores (limpa o histórico de eventos). Mantém regras e dedup. */
+export function zerarContadores(): number {
+  const s = carregar();
+  const n = s.eventos.length;
+  s.eventos = [];
+  salvar(s);
+  return n;
+}
+
+/** Limpa o histórico de dedup (permite reenviar produtos já enviados). */
+export function limparDedup(): number {
+  const s = carregar();
+  const n = Object.keys(s.hashes).length;
+  s.hashes = {};
+  salvar(s);
+  return n;
+}
+
 export function eventos(limite = 100): EventoMonitor[] {
   return carregar().eventos.slice(-limite).reverse();
 }
@@ -92,6 +119,7 @@ export function resumo(): {
   duplicadas: number;
   revisao: number;
   erros: number;
+  enfileiradas: number;
 } {
   const evs = carregar().eventos;
   return {
@@ -100,5 +128,6 @@ export function resumo(): {
     duplicadas: evs.filter((e) => e.status === "DUPLICADO").length,
     revisao: evs.filter((e) => e.status === "REVISAO").length,
     erros: evs.filter((e) => e.status === "ERRO").length,
+    enfileiradas: evs.filter((e) => e.status === "ENFILEIRADA").length,
   };
 }

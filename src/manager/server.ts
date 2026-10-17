@@ -23,7 +23,8 @@ import {
   alternarOrigem, alternarDestino,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
-import { eventos as eventosMonitor, resumo as resumoMonitor } from "../monitor/state.js";
+import { eventos as eventosMonitor, resumo as resumoMonitor, zerarContadores, limparDedup } from "../monitor/state.js";
+import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker } from "../monitor/fila.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
@@ -426,7 +427,34 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/monitor/status") {
     const s = carregarMonitor();
     const destinos = s.regras.reduce((n, r) => n + r.destinos.length, 0);
-    json(200, { ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.regras.length, destinos, eventos: eventosMonitor(50) });
+    json(200, {
+      ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.regras.length, destinos,
+      fila: tamanhoFila(), intervaloFila: intervaloFila(),
+      eventos: eventosMonitor(50),
+    });
+    return;
+  }
+  // Reset: contadores (eventos) ou dedup — botões da UI
+  if (req.method === "POST" && url.pathname === "/api/monitor/zerar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const alvo = String(b.alvo ?? "contadores");
+      if (!["contadores", "dedup", "fila", "tudo"].includes(alvo)) {
+        json(400, { erro: `alvo inválido: ${alvo} (use contadores|dedup|fila|tudo)` });
+        return;
+      }
+      let removidos = 0;
+      if (alvo === "dedup") removidos = limparDedup();
+      else if (alvo === "fila") removidos = limparFila();
+      else if (alvo === "tudo") {
+        removidos = zerarContadores();
+        limparDedup();
+        limparFila();
+      } else removidos = zerarContadores();
+      json(200, { ok: true, alvo, removidos, ...resumoMonitor(), fila: tamanhoFila() });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
     return;
   }
   // Conta pareada + estado (para trocar o celular)
@@ -638,6 +666,12 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div id="mregras"></div></div>
 
 <div id="mstatus" style="margin-top:10px;font-size:13px"></div>
+<div id="mfila" style="margin-top:6px;font-size:13px"></div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+<button class="mbtn" onclick="zerarContadoresUI()">🧹 Zerar contadores</button>
+<button class="mbtn" onclick="limparDedupUI()">♻️ Limpar dedup</button>
+<button class="mbtn" onclick="limparFilaUI()">🗑 Esvaziar fila</button>
+<span class="mini" id="mresetout" style="align-self:center"></span></div>
 <div class="grid2" style="margin-top:8px">
 <div><label>Testar reconhecimento (cole a mensagem recebida)</label><textarea id="mteste" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Cole aqui uma mensagem com link de afiliado..."></textarea>
 <div style="display:flex;gap:8px;margin-top:6px"><select id="mtesteorigem" style="flex:1"><option value="">primeira origem das regras</option></select><button class="mbtn ok" onclick="testarMonitor()">🧪 Testar</button></div>
@@ -940,8 +974,26 @@ async function carregarMonitorStatus(){
   try{
     const d=await (await fetch('/api/monitor/status')).json();
     $('mstatus').innerHTML='🔗 origens: <b>'+(d.origens||0)+'</b> · destinos: <b>'+(d.destinos||0)+'</b> · 📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
+    $('mfila').innerHTML='🚦 fila anti-rajada: <b>'+(d.fila||0)+'</b> em espera · liberando 1 a cada <b>'+(d.intervaloFila||45)+'s</b>'+(d.fila>0?' <span class="mini">(≈ '+Math.ceil((d.fila*(d.intervaloFila||45))/60)+' min p/ esvaziar)</span>':'');
     $('meventos').textContent=(d.eventos||[]).map(e=>horaLocal(e.em)+' ['+e.status+'] '+e.programa+' '+(e.idProduto||'')+' ← '+e.origem+(e.destino?' → '+e.destino:'')+(e.detalhe?' ('+e.detalhe+')':'')).join('\\n')||'(sem eventos)';
   }catch(e){}
+}
+async function zerarContadoresUI(){
+  if(!confirm('Zerar os contadores do monitor (limpa o histórico de eventos)?\\nAs regras e o dedup continuam.'))return;
+  const r=await (await fetch('/api/monitor/zerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alvo:'contadores'})})).json();
+  $('mresetout').textContent=r.erro?('erro: '+r.erro):('contadores zerados ('+(r.removidos||0)+' eventos)');
+  carregarMonitorStatus();
+}
+async function limparDedupUI(){
+  if(!confirm('Limpar o dedup?\\nProdutos já enviados PODEM ser reenviados se aparecerem de novo.'))return;
+  const r=await (await fetch('/api/monitor/zerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alvo:'dedup'})})).json();
+  $('mresetout').textContent=r.erro?('erro: '+r.erro):('dedup limpo ('+(r.removidos||0)+' registros)');
+}
+async function limparFilaUI(){
+  if(!confirm('Esvaziar a fila?\\nAs mensagens em espera NÃO serão enviadas.'))return;
+  const r=await (await fetch('/api/monitor/zerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alvo:'fila'})})).json();
+  $('mresetout').textContent=r.erro?('erro: '+r.erro):('fila esvaziada ('+(r.removidos||0)+' itens)');
+  carregarMonitorStatus();
 }
 async function toggleAutoMonitor(){
   const on=($('mautolabel').textContent||'').indexOf('ON')>=0;
@@ -961,4 +1013,6 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`gerenciador em http://localhost:${PORT} (rede: substitua localhost pelo IP)`);
+  iniciarFilaWorker();
+  console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);
 });

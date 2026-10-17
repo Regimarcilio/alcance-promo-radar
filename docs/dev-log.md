@@ -235,3 +235,38 @@ de outro). Provas medidas:
 
 **Ressalva**: os 2 reenvios feitos na janela anterior à validação por título podem ter apontado para
 um produto relacionado — vale conferir no grupo.
+
+---
+
+## 2026-10-17 | E6-MONITOR-08 | master | Fila anti-rajada (45s) + botões de reset
+
+**Pedido**: (1) botão para resetar contadores; (2) se uma origem postar várias mensagens
+em pouco tempo, segurar em espera e liberar 1 a cada 45s (teste inicial).
+
+**Feito**
+- `src/monitor/fila.ts` (novo): fila FIFO persistida em `data/monitor-fila.json`
+  (`enfileirar`, `tamanhoFila`, `limparFila`, `liberarProximo`, `iniciarFilaWorker`).
+  Worker checa a cada 5s e libera **1 item a cada `MONITOR_FILA_INTERVALO_S`** (default 45).
+  Fila ociosa → o 1º item sai no próximo tick; depois é 45s entre cada um.
+  Não envia `ENFILEIRADA` quando `autoEnviar=false` (segura a fila).
+- `webhook.ts`: produção agora **enfileira** (`acao: "ENFILEIRADO"`, evento `ENFILEIRADA`)
+  em vez de enviar na hora; `dryRun` (teste da UI) continua enviando simulado na hora, sem
+  tocar na fila. `marcarMonitorado` no enfileiramento (reserva contra re-enfileirar).
+- `state.ts`: status novo `ENFILEIRADA`; `zerarContadores()` e `limparDedup()`.
+- `server.ts`: inicia o worker no boot; `/api/monitor/status` devolve `fila` e `intervaloFila`;
+  `POST /api/monitor/zerar` com alvo `contadores|dedup|fila|tudo` (**alvo inválido → 400, não zera**).
+  UI: linha "🚦 fila anti-rajada: N em espera · 1 a cada 45s (≈ M min p/ esvaziar)" + 3 botões
+  (Zerar contadores / Limpar dedup / Esvaziar fila).
+- **Robustez**: `carregar()` em `state.ts`/`fila.ts` mantém cache da última leitura boa e a
+  gravação virou **atômica (tmp+rename)** — um erro transitório de I/O não devolve mais estado
+  vazio (e a próxima escrita não persiste o vazio). Suspeita da perda do histórico de eventos.
+
+**Provas**
+- Drip controlado (destinos vazios, sem enviar): 3 enfileirados → 1ª liberação imediata (fila ociosa),
+  2ª imediata **BLOQUEADA** (correto), depois 1 a cada 45s (46s→ok, 92s→ok) → fila 0.
+- Real: `14:05:44 ENFILEIRADA` (fila: 1) → `14:05:49 ENCAMINHADA` (fila ociosa, saiu no tick de 5s).
+- Estado sobreviveu a 2 `--force-recreate` (cache + escrita atômica).
+- `alvo:"naoexiste"` → 400 e contadores intactos.
+
+**Observação**: `disparo real` hoje só sai por `Royal Masculine | 1` (o usuário trocou as regras
+pela UI); as demais origens estão off.

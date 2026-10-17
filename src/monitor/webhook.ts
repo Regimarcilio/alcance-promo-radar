@@ -8,6 +8,7 @@ import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { jaMonitorado, marcarMonitorado, registrarEvento } from "./state.js";
+import { enfileirar, tamanhoFila, intervaloFila } from "./fila.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { formatar } from "../wa/formatter.js";
 
@@ -45,7 +46,7 @@ export function extrairMensagem(p: WebhookPayload): MensagemExtraida | null {
 }
 
 export interface ResultadoMonitor {
-  acao: "IGNORADO" | "DUPLICADO" | "REVISAO" | "ENCAMINHADO" | "ERRO";
+  acao: "IGNORADO" | "DUPLICADO" | "REVISAO" | "ENCAMINHADO" | "ENFILEIRADO" | "ERRO";
   programa?: string;
   motivo?: string;
   mensagem?: string;
@@ -131,38 +132,53 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "sem destinos", mensagem: corpo };
   }
 
-  const enviados: { jid: string; messageId: string }[] = [];
-  for (const destino of destinos) {
-    try {
+  // 8) Enviar: teste (dryRun) na hora; produção entra na FILA anti-rajada (RF-036)
+  if (dryRun) {
+    const simulados: { jid: string; messageId: string }[] = [];
+    for (const destino of destinos) {
       const r = await enviarParaGrupo({
         grupo: destino.jid,
         imagem: tr.produto?.imagem ?? "",
         legenda: corpo,
-        dryRun,
+        dryRun: true,
       });
-      enviados.push({ jid: destino.jid, messageId: r.messageId });
-    } catch (e: any) {
-      registrarEvento({
-        em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-        idProduto: idEfetivo, linkTransformado: tr.url, destino: destino.jid,
-        status: "ERRO", detalhe: String(e?.message ?? e).slice(0, 120),
-      });
+      simulados.push({ jid: destino.jid, messageId: r.messageId });
     }
+    registrarEvento({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: idEfetivo, linkTransformado: tr.url,
+      destino: simulados.map((e) => e.jid).join(","),
+      status: "ENCAMINHADA", messageId: simulados[0]?.messageId, detalhe: "teste (dryRun)",
+    });
+    return {
+      acao: "ENCAMINHADO",
+      programa: rotulo(oferta.principal.programa),
+      mensagem: corpo,
+      destinos: simulados,
+    };
   }
 
-  if (enviados.length > 0) marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url);
+  enfileirar({
+    origem: msg.origem,
+    programa: oferta.principal.programa,
+    idProduto: idEfetivo,
+    link: tr.url,
+    mensagem: corpo,
+    imagem: tr.produto?.imagem ?? "",
+    destinos: destinos.map((d) => d.jid),
+  });
+  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url); // reserva (evita re-enfileirar)
   registrarEvento({
     em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
     idProduto: idEfetivo, linkTransformado: tr.url,
-    destino: enviados.map((e) => e.jid).join(",") || null,
-    status: enviados.length > 0 ? "ENCAMINHADA" : "ERRO",
-    messageId: enviados[0]?.messageId,
+    destino: destinos.map((d) => d.jid).join(","),
+    status: "ENFILEIRADA",
+    detalhe: `fila: ${tamanhoFila()} item(ns), 1 a cada ${intervaloFila()}s`,
   });
   return {
-    acao: enviados.length > 0 ? "ENCAMINHADO" : "ERRO",
+    acao: "ENFILEIRADO",
     programa: rotulo(oferta.principal.programa),
     mensagem: corpo,
-    destinos: enviados,
   };
 }
 
