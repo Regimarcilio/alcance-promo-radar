@@ -70,3 +70,36 @@ com `X-Webhook-Key`); cadastrar as origens/destinos reais; validar ponta a ponta
 
 **Próximo**: parear a sessão; resolver o JID do grupo de teste via `group/inviteInfo`; definir
 deploy (substituir container antigo ou porta separada); configurar o webhook `messages.upsert`.
+
+---
+
+## 2026-10-17 | E6-MONITOR-03 | planmaster | Deploy 8099 + webhook + E2E real (via `restart`)
+
+**Diagnóstico**: instância `radar-piloto` presa — `fetchInstances` dizia `connectionStatus:open`
+(conta "Eletrônica", `5500000000002`) mas o socket Baileys estava `Connection Closed`. **`POST
+/instance/restart/{inst}`** (não `PUT`) derrubou/religou o socket e voltou para `open`.
+
+**Feito**
+- Deploy: `promo_radar_manager` na **8099** (rede `automensagemwhats_default`); imagem rebuikada.
+- Convite resolvido: `INVITE_REDACTED_0000000` → **`120363000000000001@g.us`** ("Mano dos Achadinhos").
+- Origem = Mano dos Achadinhos; Destino = **"Radar Teste"** (`120363000000000002@g.us`).
+- Webhook: `POST /webhook/set/radar-piloto` → `http://promo_radar_manager:8091/api/webhook/evolution`,
+  `events:[MESSAGES_UPSERT]`, header `X-Webhook-Key` (chave 24 bytes gerada, no `.env`).
+
+**Bug corrigido**: `processar()` **ignorava o flag `autoEnviar`** (enviava mesmo com "OFF/vai p/
+revisão"). Agora, com `autoEnviar=false`, registra `REVISAO`; só envia quando ligado.
+
+**E2E real (passou)**
+- Produto ativo ML (`MLB-6467824944`) → transformado em **`https://meli.la/1TZpZHA`** (tag ecoada).
+- Webhook → `acao:ENCAMINHADO` → mensagem **entregue de verdade** no "Radar Teste" (`msgId 3EB0FD69...`).
+- Reenvio da mesma oferta → `DUPLICADO` (dedup 7d). Mensagem própria (`fromMe`) → `IGNORADO` (anti-loop).
+- Estado de teste limpo; grupos mantidos; `autoEnviar=true`.
+
+**Achados operacionais**
+- API pública do ML está bloqueada (403 PolicyAgent) p/ descoberta de produtos; IDs de catálogo
+  `/p/MLB` não servem no `createLink` (só item `MLB-<id>` ativo). Erros do ML: `URL Invalid.`,
+  `article must be active, status: paused`.
+- `AMAZON_TAG`/`SHOPEE_SUBID`/`KABUM_REF` ainda vazios → esses programas caem em REVISAO até configurar.
+
+**Próximo**: definir `AMAZON_TAG`/`SHOPEE_SUBID`/`KABUM_REF`; validar com oferta real postada no
+grupo de origem; decidir substituição futura do manager antigo (8091).

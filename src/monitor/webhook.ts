@@ -98,7 +98,17 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: tr.motivo };
   }
 
-  // 6) Montar mensagem e rotear destinos (RF-033/034 / RN-010 anti-loop)
+  // 6) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
+  if (!carregarMonitor().autoEnviar) {
+    registrarEvento({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: oferta.principal.idProduto, linkTransformado: tr.url, destino: null,
+      status: "REVISAO", detalhe: "envio direto desligado — aguardando revisão",
+    });
+    return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "autoEnviar=false" };
+  }
+
+  // 7) Montar mensagem e rotear destinos (RF-033/034 / RN-010 anti-loop)
   const corpo = montarRepasse(msg.texto, oferta, tr.url);
   const destinos = destinosPara(msg.origem);
   if (destinos.length === 0) {
