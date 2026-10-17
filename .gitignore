@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+!.env.example
+*.log
+qr*.png
+cookie.txt
+*cookie*.txt
+*.pem
+*.key
+migracao-*.tar.gz*
+links_categorias.txt
