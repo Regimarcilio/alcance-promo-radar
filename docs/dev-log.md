@@ -133,3 +133,41 @@ Brother, Vasculha, Herói do Perfume) — todas ainda apontando p/ "Mano dos Ach
 **OFF**. Falta o usuário dar destino próprio a cada origem.
 
 **Próximo**: usuário monta as regras reais pela UI; definir tags Amazon/Shopee/KaBuM.
+
+---
+
+## 2026-10-17 | E6-MONITOR-05 | master | Link curto + formato anterior com foto
+
+**Feedback do usuário (2 issues)**
+1. O repasse deve ter o **formato anterior** — não só o texto, também a formatação e a **foto do produto**.
+2. O sistema **recebia mas não tratava/reenviava** as mensagens reais.
+
+**Diagnóstico** (capturado do webhook real, `MONITOR_DEBUG=1`)
+- Causa 1: as mensagens reais usam **link curto** `https://meli.la/XXXX` (ex.: `meli.la/2GQWuZ8`),
+  que **não contém o MLB id**. O `createLink` exige o id → 77 eventos `REVISAO`.
+- Causa 2: o `montarRepasse` preservava só o texto original + rodapé — sem foto/formatação.
+
+**Feito**
+- **`src/monitor/produto.ts`** (novo): `resolverProdutoML()` segue o redirect do link curto (UA de
+  browser) e extrai **MLB id + og:title + og:image** da página do anúncio; `imagemCompativel()`
+  troca `.webp → .jpg` (mlstatic serve ambos; WhatsApp lida melhor com jpg). `extrairPrecos()`
+  lê "De:/Por:" do texto (fallback maior=De, menor=Por).
+- **`transformer.ts`**: ML agora **resolve o link curto antes** de converter (`produto.id` →
+  `https://produto.mercadolivre.com.br/MLB-<id>` → createLink). Devolve `produto` no resultado.
+- **`webhook.ts`**: `montarRepasse()` usa o **template anterior** (RN-001 v3: 🔥 título + `~De~` /
+  `*Por ... no Pix*` / parcelas + link) quando há título+preço; senão cai no formato preservado.
+  Envia a **foto** via `enviarParaGrupo({ imagem })` → `sendMedia`.
+- `server.ts`: log opt-in `MONITOR_DEBUG=1` do payload cru (debug do parser).
+
+**Provas (E2E real)**
+- Link curto `meli.la/2GQWuZ8` → MLB `3573257631` → `createLink` **200** (tagOk) → `meli.la/32dnmmo`
+  em ~0,5s.
+- Webhook real com o texto do hunter: `acao: REVISAO (autoEnviar=false)`, mensagem montada no
+  **formato anterior** com `De R$ 202,90` / `Por R$ 98,80 no Pix` / `Ou R$ 109,67 em 6x`.
+- Envio real com `autoEnviar=ON` (destino temporário "Radar Teste"): `ENCAMINHADO`
+  messageId `3EB06A0E9E8568B000F705`. `sendMedia` da og:image `.jpg` → Evolution monta
+  `imageMessage` (messageId `3EB03258CED6327292BE23`).
+
+**Estado**: `autoEnviar` **OFF** (restaurado); 6 regras → Mano dos Achadinhos intactas.
+**Nota**: modo automático e monitor **sem limite diário** (removido a pedido).
+**Próximo**: decidir se liga `autoEnviar` (passa a reenviar as 6 origens de verdade).

@@ -6,12 +6,15 @@
  *   o link (marcando NAO_TRANSFORMADO para revisão, nunca inventa link).
  */
 import { converterLink } from "../ml/provider.js";
+import { resolverProdutoML, type DadosProduto } from "./produto.js";
 import type { LinkDetectado } from "./parser.js";
 
 export interface ResultadoTransformacao {
   url: string;
   ok: boolean; // true = link de afiliado do usuário aplicado
   motivo?: string; // quando ok=false
+  /** Dados reais do anúncio (título/foto) para montar o template anterior. */
+  produto?: DadosProduto;
 }
 
 function comParam(url: string, chave: string, valor: string): string {
@@ -26,14 +29,26 @@ function comParam(url: string, chave: string, valor: string): string {
 
 /** Mercado Livre: geração direta com tag+cookie (fonte única de verdade já testada). */
 async function transformarML(link: LinkDetectado, conta?: string): Promise<ResultadoTransformacao> {
-  const r = await converterLink(link.url, { conta });
-  if (r.fonte === "conversor" && /^https?:\/\//.test(r.linkAfiliado) && r.linkAfiliado !== link.url) {
-    return { url: r.linkAfiliado, ok: true };
+  // Link curto (meli.la/XXXX) não traz o MLB id → resolve o redirect p/ achar
+  // o id (createLink) e a foto do produto (template anterior). Falha → segue
+  // com a URL original (o converterLink tenta mesmo assim).
+  const produto = await resolverProdutoML(link.url);
+  const id = link.idProduto ?? produto?.id ?? null;
+  const alvo = produto?.id
+    ? `https://produto.mercadolivre.com.br/${produto.id}`
+    : link.idProduto
+      ? `https://produto.mercadolivre.com.br/MLB-${String(link.idProduto).replace(/^MLB-?/i, "")}`
+      : link.url;
+
+  const r = await converterLink(alvo, { conta });
+  if (r.fonte === "conversor" && /^https?:\/\//.test(r.linkAfiliado) && r.linkAfiliado !== alvo) {
+    return { url: r.linkAfiliado, ok: true, produto: produto ?? undefined };
   }
   return {
     url: link.url,
     ok: false,
     motivo: r.aviso ?? "COOKIE_OU_CONVERSOR_FALHOU — link ML não transformado",
+    produto: produto ?? undefined,
   };
 }
 

@@ -495,6 +495,12 @@ const server = createServer(async (req, res) => {
     }
     try {
       const p = JSON.parse(await lerCorpo(req));
+      if (process.env.MONITOR_DEBUG === "1") {
+        try {
+          const { appendFileSync } = await import("node:fs");
+          appendFileSync("/app/data/debug-webhook.log", new Date().toISOString() + " " + JSON.stringify(p).slice(0, 1500) + "\n");
+        } catch { /* ignore */ }
+      }
       const msg = extrairMensagem(p);
       if (!msg) return json(200, { ok: true, ignorado: "sem texto" });
       const r = await processarMonitor(msg, { dryRun: false });

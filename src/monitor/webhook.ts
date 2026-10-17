@@ -5,9 +5,11 @@
  */
 import { detectar, rotulo, type OfertaDetectada } from "./parser.js";
 import { transformar } from "./transformer.js";
+import { extrairPrecos } from "./produto.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { jaMonitorado, marcarMonitorado, registrarEvento } from "./state.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
+import { formatar } from "../wa/formatter.js";
 
 /** Payload cru do Evolution (v2 e GO usam nomes ligeiramente diferentes). */
 export interface WebhookPayload {
@@ -99,8 +101,8 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: tr.motivo };
   }
 
-  // 6) Monta a mensagem repassada (título/contexto + link do usuário)
-  const corpo = montarRepasse(msg.texto, oferta, tr.url);
+  // 6) Monta a mensagem repassada (formato anterior + link do usuário)
+  const corpo = montarRepasse(msg.texto, oferta, tr.url, tr.produto ?? null);
 
   // 7) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
   if (!carregarMonitor().autoEnviar) {
@@ -126,7 +128,12 @@ export async function processar(
   const enviados: { jid: string; messageId: string }[] = [];
   for (const destino of destinos) {
     try {
-      const r = await enviarParaGrupo({ grupo: destino.jid, imagem: "", legenda: corpo, dryRun });
+      const r = await enviarParaGrupo({
+        grupo: destino.jid,
+        imagem: tr.produto?.imagem ?? "",
+        legenda: corpo,
+        dryRun,
+      });
       enviados.push({ jid: destino.jid, messageId: r.messageId });
     } catch (e: any) {
       registrarEvento({
@@ -154,10 +161,36 @@ export async function processar(
 }
 
 /**
- * Formata a mensagem repassada: preserva o texto original (título/contexto),
- * troca o link pelo do usuário e acrescenta o rodapé padrão.
+ * Formata a mensagem repassada.
+ * - Com dados reais do anúncio (título + preço): usa o TEMPLATE ANTERIOR
+ *   (RN-001 v3: foto 🔥 título + De/Por + link) — formato completo, não só texto.
+ * - Sem dados suficientes: preserva o texto original + troca o link (fallback).
  */
-export function montarRepasse(textoOriginal: string, oferta: OfertaDetectada, linkNovo: string): string {
+export function montarRepasse(
+  textoOriginal: string,
+  oferta: OfertaDetectada,
+  linkNovo: string,
+  produto?: { titulo: string | null; imagem: string | null } | null
+): string {
+  if (produto?.titulo) {
+    const { precoDe, precoAtual } = extrairPrecos(textoOriginal);
+    if (precoAtual != null) {
+      try {
+        return formatar({
+          headline: "",
+          subtitulo: "",
+          nome: produto.titulo,
+          precoDe,
+          precoPix: precoAtual,
+          link: linkNovo,
+          categoria: oferta.principal?.programa ?? "desconhecido",
+          score: 0,
+        });
+      } catch {
+        /* mensagem longa/inválida → usa o fallback abaixo */
+      }
+    }
+  }
   const base = oferta.textoLimpo || textoOriginal.replace(oferta.principal?.url ?? "", "").trim();
   const linhas = [
     ...(base ? [base, ``] : []),
