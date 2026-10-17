@@ -19,8 +19,7 @@ import { formatar } from "../wa/formatter.js";
 import { registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import {
-  carregarMonitor, adicionarOrigem, adicionarDestino, remover as removerGrupoMonitor,
-  definirAutoEnviar,
+  carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor } from "../monitor/state.js";
@@ -388,21 +387,22 @@ const server = createServer(async (req, res) => {
   // ---------- E6 MONITOR ----------
   if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
     const s = carregarMonitor();
-    json(200, { origens: s.origens, destinos: s.destinos, autoEnviar: s.autoEnviar });
+    json(200, { regras: s.regras, autoEnviar: s.autoEnviar });
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/monitor/grupos") {
     try {
       const b = JSON.parse(await lerCorpo(req));
-      if (b.acao === "remover") {
-        removerGrupoMonitor(b.tipo === "destino" ? "destino" : "origem", b.jid ?? "");
-      } else if (b.tipo === "destino") {
-        adicionarDestino(b.jid ?? "", b.nome ?? "");
+      if (b.acao === "removerRegra") {
+        removerRegra(b.origemJid ?? "");
+      } else if (b.acao === "removerDestino") {
+        removerDestino(b.origemJid ?? "", b.destinoJid ?? "");
       } else {
-        adicionarOrigem(b.jid ?? "", b.nome ?? "");
+        // ação padrão: adicionar "um de cada vez" (origem + destino)
+        adicionarRegra(b.origemJid ?? "", b.origemNome ?? "", b.destinoJid ?? "", b.destinoNome ?? "");
       }
       const s = carregarMonitor();
-      json(200, { ok: true, origens: s.origens, destinos: s.destinos, autoEnviar: s.autoEnviar });
+      json(200, { ok: true, regras: s.regras, autoEnviar: s.autoEnviar });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -420,7 +420,8 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/api/monitor/status") {
     const s = carregarMonitor();
-    json(200, { ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.origens.length, destinos: s.destinos.length, eventos: eventosMonitor(50) });
+    const destinos = s.regras.reduce((n, r) => n + r.destinos.length, 0);
+    json(200, { ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.regras.length, destinos, eventos: eventosMonitor(50) });
     return;
   }
   // Conta pareada + estado (para trocar o celular)
@@ -534,6 +535,15 @@ button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:poin
 .result{background:#06281f;border:1px solid #00a884;border-radius:14px;padding:14px;margin-top:14px;font-size:13px;display:none}
 .result code{background:#000;padding:2px 8px;border-radius:6px;color:#9ff0c8}
 .hint{font-size:12px;color:#8696a0;margin:4px 0 8px}
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;margin-top:8px;flex-wrap:wrap}
+.mbox{background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:12px;margin-top:10px}
+.mini{font-size:12px;color:#8696a0}.mini code{background:#000;padding:1px 5px;border-radius:5px;color:#9ff0c8}
+.mbtn{background:#202c33;color:#fff;width:auto;margin:0;padding:7px 12px;font-size:12.5px;white-space:nowrap}
+.mbtn.ok{background:#00a884;color:#04241d}
+.regra{background:#0b141a;border:1px solid #2a3942;border-left:3px solid #53bdeb;border-radius:10px;padding:10px 12px;margin-top:8px}
+.regra .orig{font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.regra .dest{font-size:13px;margin:6px 0 0 14px;padding:4px 0 0 10px;border-left:1px solid #2a3942;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.jidtag{color:#8696a0;font-size:11px}
 pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space:pre-wrap;margin-top:8px;color:#d1f4cc;max-height:220px;overflow:auto}</style></head>
 <body>
 <h1>🤖 Gerenciador <span>autoMensagemWhats</span></h1>
@@ -580,31 +590,35 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div id="vitrineout" style="font-size:13px">carregando vitrine…</div></div>
 </div>
 <div class="panel" style="border-color:#53bdeb">
-<label>📡 Monitor de grupos de afiliados — recebe, troca o link e reencaminha</label>
-<div class="hint">Escolha abaixo <b>quais grupos são origem</b> (monitorar) e <b>quais são destino</b> (enviar). Mensagem com link (ML, Shopee, KaBuM, Amazon) é reconhecida, o link vira o <b>seu</b> e ela é reenviada.</div>
-<div class="row" style="background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-<div><b id="mcontalabel">Conta WhatsApp: …</b><br><span id="mcontaestado" style="font-size:12px;color:#8696a0"></span></div>
-<div style="display:flex;gap:8px;flex-shrink:0">
-<button class="ghost" style="margin-top:0;width:auto" onclick="reiniciarEvo()">↻ Reconectar</button>
-<button class="ghost" style="margin-top:0;width:auto" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
-<div style="margin-top:10px;border-top:1px solid #222d34;padding-top:10px">
-<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-<label style="margin:0">📥 Grupos da conta pareada (puxar da Evolution)</label>
-<button class="buscar" style="margin-top:0;width:auto" onclick="buscarGruposWhats()">🔄 Buscar grupos</button></div>
-<div class="hint">Clique <b>→ Origem</b> para monitorar um grupo de achadinhos; <b>→ Destino</b> para os seus grupos de envio.</div>
-<div id="mwhatsgrupos" style="font-size:13px;max-height:260px;overflow:auto;margin-top:6px"><span style="color:#8696a0">clique em “Buscar grupos”.</span></div></div>
-<div class="grid2" style="margin-top:12px">
-<div><label>Grupos de ORIGEM (monitorados — máx 10)</label><div id="morigens" style="font-size:13px;margin-bottom:6px"></div>
-<div style="display:flex;gap:8px"><input id="mjidor" style="flex:2" placeholder="JID ou dígitos: 120363...@g.us"><input id="mnomeor" style="flex:1" placeholder="apelido (opcional)"><button class="buscar" style="margin-top:0;width:auto" onclick="addMonitor('origem')">➕</button></div></div>
-<div><label>Grupos de DESTINO (seus — máx 10)</label><div id="mdestinos" style="font-size:13px;margin-bottom:6px"></div>
-<div style="display:flex;gap:8px"><input id="mjiddest" style="flex:2" placeholder="JID ou dígitos: 120363...@g.us"><input id="mnomedest" style="flex:1" placeholder="apelido (opcional)"><button class="buscar" style="margin-top:0;width:auto" onclick="addMonitor('destino')">➕</button></div></div></div>
-<div class="row" style="margin-top:10px;background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center">
-<div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span style="font-size:12px;color:#8696a0">ON encaminha sozinho • OFF espera revisão</span></div>
-<button class="ghost" id="mautobtn" style="margin-top:0;width:auto" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
-<div id="mstatus" style="margin-top:8px;font-size:13px"></div>
+<label>📡 Monitor — cada grupo de origem encaminha para os SEUS destinos</label>
+<div class="hint">Oferta publicada numa <b>origem</b> (grupo de achadinhos que você monitora) tem o link trocado pelo <b>seu</b> e é reenviada <b>apenas</b> para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.</div>
+
+<div class="mrow">
+<div><b id="mcontalabel">Conta WhatsApp: …</b><br><span class="mini" id="mcontaestado"></span></div>
+<div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
+
+<div class="mrow">
+<div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
+<button class="mbtn" id="mautobtn" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
+
+<div class="mbox">
+<label>➕ Nova regra — escolha <b>uma</b> origem e <b>um</b> destino</label>
+<div class="grid2">
+<div><label>Origem (grupo que eu monitoro)</label><select id="mselOrigem"><option value="">— carregue os grupos —</option></select></div>
+<div><label>Destino (meu grupo que recebe)</label><select id="mselDestino"><option value="">— carregue os grupos —</option></select></div></div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+<button class="mbtn ok" onclick="adicionarRegraUI()">➕ Adicionar regra</button>
+<button class="mbtn" onclick="carregarGruposSelects(1)">🔄 Carregar grupos da conta</button>
+<span class="mini" id="mgruposinfo" style="align-self:center"></span></div>
+<div class="mini" style="margin-top:6px">Dica: para dar <b>mais de um destino</b> à mesma origem, escolha a mesma origem de novo com outro destino.</div></div>
+
+<div style="margin-top:12px"><label>🔗 Regras ativas <span class="mini" id="mregrasn"></span></label>
+<div id="mregras"></div></div>
+
+<div id="mstatus" style="margin-top:10px;font-size:13px"></div>
 <div class="grid2" style="margin-top:8px">
 <div><label>Testar reconhecimento (cole a mensagem recebida)</label><textarea id="mteste" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Cole aqui uma mensagem com link de afiliado..."></textarea>
-<div style="display:flex;gap:8px;margin-top:6px"><input id="mtesteorigem" style="flex:1" placeholder="origem monitorada (JID)"><button class="buscar" style="margin-top:0;width:auto" onclick="testarMonitor()">🧪 Testar</button></div>
+<div style="display:flex;gap:8px;margin-top:6px"><select id="mtesteorigem" style="flex:1"><option value="">primeira origem das regras</option></select><button class="mbtn ok" onclick="testarMonitor()">🧪 Testar</button></div>
 <pre id="mtesteout"></pre></div>
 <div><label>Últimos eventos do monitor</label><pre id="meventos" style="max-height:220px"></pre></div></div>
 </div>
@@ -798,14 +812,26 @@ async function salvarMapa(){
 async function carregarMonitorUI(){
   try{
     const d=await (await fetch('/api/monitor/grupos')).json();
-    $('morigens').innerHTML=(d.origens||[]).map(g=>linhaGrupo('origem',g)).join('')||'<span style="color:#8696a0">nenhum</span>';
-    $('mdestinos').innerHTML=(d.destinos||[]).map(g=>linhaGrupo('destino',g)).join('')||'<span style="color:#8696a0">nenhum</span>';
+    renderRegras(d.regras||[]);
+    preencherOrigemTeste(d.regras||[]);
     const on=d.autoEnviar===true;
-    $('mautolabel').textContent='Envio direto — '+(on?'ON':'OFF (vai p/ revisão)');
+    $('mautolabel').textContent='Envio direto — '+(on?'ON (encaminha sozinho)':'OFF (vai p/ revisão)');
     $('mautobtn').textContent=on?'Desligar envio direto':'Ligar envio direto';
     carregarContaMonitor();
     carregarMonitorStatus();
   }catch(e){}
+}
+function renderRegras(regras){
+  $('mregrasn').textContent=regras.length?('· '+regras.length):'';
+  if(!regras.length){$('mregras').innerHTML='<div class="mini" style="padding:6px 0">nenhuma regra ainda — monte a primeira acima.</div>';return;}
+  $('mregras').innerHTML=regras.map(function(r){
+    const dests=r.destinos.length?r.destinos.map(function(d){
+      return '<div class="dest"><span>→ <b>'+esc(d.nome)+'</b> <span class="jidtag">'+esc(d.jid)+'</span></span>'
+        +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" data-d="'+esc(d.jid)+'" onclick="removerDestinoUI(this)">✕</button></div>';
+    }).join(''):'<div class="dest mini">⚠️ sem destino — esta origem não encaminha nada</div>';
+    return '<div class="regra"><div class="orig"><span>🔎 <b>'+esc(r.origem.nome)+'</b> <span class="jidtag">'+esc(r.origem.jid)+'</span></span>'
+      +'<button class="mbtn" style="padding:3px 8px;font-size:11px" data-o="'+esc(r.origem.jid)+'" onclick="removerRegraUI(this)">✕ origem</button></div>'+dests+'</div>';
+  }).join('');
 }
 async function carregarContaMonitor(){
   try{
@@ -815,31 +841,34 @@ async function carregarContaMonitor(){
     $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+(d.estado||'?'))+' • instância '+d.instancia;
   }catch(e){}
 }
-async function buscarGruposWhats(){
-  $('mwhatsgrupos').innerHTML='<span style="color:#8696a0">buscando…</span>';
+async function carregarGruposSelects(forcar){
+  $('mgruposinfo').textContent='buscando grupos…';
   try{
-    const d=await (await fetch('/api/monitor/whats-grupos?forcar=1')).json();
-    if(!d.ok){$('mwhatsgrupos').innerHTML='<span style="color:#f8806a">'+(d.erro||'erro')+'</span>';return;}
+    const d=await (await fetch('/api/monitor/whats-grupos'+(forcar?'?forcar=1':''))).json();
+    if(!d.ok){$('mgruposinfo').innerHTML='<span style="color:#f8806a">'+(d.erro||'erro')+'</span>';return;}
     window.__wgrupos=d.grupos||[];
-    if(!window.__wgrupos.length){$('mwhatsgrupos').innerHTML='<span style="color:#8696a0">nenhum grupo encontrado.</span>';return;}
-    $('mwhatsgrupos').innerHTML=window.__wgrupos.map(function(g,i){
-      return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #1b252c">'
-        +'<span>'+esc(g.nome)+' <span style="color:#8696a0">'+(g.tamanho!=null?'('+g.tamanho+')':'')+'</span></span>'
-        +'<span style="display:flex;gap:6px;flex-shrink:0">'
-        +'<button class="buscar" style="margin:0;width:auto;padding:4px 8px;font-size:11px" data-i="'+i+'" data-tipo="origem" onclick="escolherGrupoBtn(this)">→ Origem</button>'
-        +'<button class="ghost" style="margin:0;width:auto;padding:4px 8px;font-size:11px" data-i="'+i+'" data-tipo="destino" onclick="escolherGrupoBtn(this)">→ Destino</button>'
-        +'</span></div>';
-    }).join('');
-  }catch(e){$('mwhatsgrupos').innerHTML='<span style="color:#f8806a">erro: '+e.message+'</span>';}
+    const opts=window.__wgrupos.map(function(g){return '<option value="'+esc(g.jid)+'">'+esc(g.nome)+(g.tamanho!=null?' ('+g.tamanho+')':'')+'</option>';}).join('');
+    $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
+    $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
+    $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados';
+  }catch(e){$('mgruposinfo').innerHTML='<span style="color:#f8806a">erro: '+e.message+'</span>';}
 }
-function escolherGrupoBtn(el){return escolherGrupo(Number(el.dataset.i),el.dataset.tipo);}
-async function escolherGrupo(i,tipo){
-  const g=(window.__wgrupos||[])[i];
-  if(!g)return;
-  const r=await (await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,jid:g.jid,nome:g.nome})})).json();
+async function adicionarRegraUI(){
+  const o=$('mselOrigem'), dd=$('mselDestino');
+  if(!o.value||!dd.value)return alert('Escolha a origem e o destino.');
+  const onome=o.options[o.selectedIndex].textContent, dnome=dd.options[dd.selectedIndex].textContent;
+  const r=await (await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origemJid:o.value,origemNome:onome,destinoJid:dd.value,destinoNome:dnome})})).json();
   if(r.erro)return alert(r.erro);
   carregarMonitorUI();
-  alert('Adicionado como '+tipo+': '+g.nome);
+}
+async function removerRegraUI(el){
+  if(!confirm('Remover a regra desta origem (e todos os seus destinos)?'))return;
+  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'removerRegra',origemJid:el.dataset.o})});
+  carregarMonitorUI();
+}
+async function removerDestinoUI(el){
+  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'removerDestino',origemJid:el.dataset.o,destinoJid:el.dataset.d})});
+  carregarMonitorUI();
 }
 async function reiniciarEvo(){
   if(!confirm('Reconectar o socket da instância (destrava estado preso)?'))return;
@@ -855,33 +884,18 @@ async function trocarCelular(){
   alert('Conta deslogada. Abra http://'+location.hostname+':8097 para escanear o QR com o celular correto.');
   carregarContaMonitor();
 }
-function linhaGrupo(tipo,g){
-  return '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span>• <b>'+esc(g.nome)+'</b> <span style="color:#8696a0">'+esc(g.jid)+'</span></span>'
-    +'<button class="ghost" style="margin:0;width:auto;padding:2px 8px" data-tipo="'+tipo+'" data-jid="'+esc(g.jid)+'" onclick="delMonitor(this.dataset.tipo,this.dataset.jid)">✕</button></div>';
+function preencherOrigemTeste(regras){
+  $('mtesteorigem').innerHTML='<option value="">primeira origem das regras</option>'+regras.map(function(r){return '<option value="'+esc(r.origem.jid)+'">'+esc(r.origem.nome)+'</option>';}).join('');
 }
 async function carregarMonitorStatus(){
   try{
     const d=await (await fetch('/api/monitor/status')).json();
-    $('mstatus').innerHTML='📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
+    $('mstatus').innerHTML='🔗 origens: <b>'+(d.origens||0)+'</b> · destinos: <b>'+(d.destinos||0)+'</b> · 📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
     $('meventos').textContent=(d.eventos||[]).map(e=>horaLocal(e.em)+' ['+e.status+'] '+e.programa+' '+(e.idProduto||'')+' ← '+e.origem+(e.destino?' → '+e.destino:'')+(e.detalhe?' ('+e.detalhe+')':'')).join('\\n')||'(sem eventos)';
   }catch(e){}
 }
-async function addMonitor(tipo){
-  const jid=tipo==='destino'?$('mjiddest').value:$('mjidor').value;
-  const nome=tipo==='destino'?$('mnomedest').value:$('mnomeor').value;
-  if(!jid.trim())return alert('Informe o JID (ou os dígitos) do grupo.');
-  const r=await (await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,jid,nome})})).json();
-  if(r.erro)return alert(r.erro);
-  if(tipo==='destino'){$('mjiddest').value='';$('mnomedest').value='';}else{$('mjidor').value='';$('mnomeor').value='';}
-  carregarMonitorUI();
-}
-async function delMonitor(tipo,jid){
-  if(!confirm('Remover '+jid+'?'))return;
-  await fetch('/api/monitor/grupos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'remover',tipo,jid})});
-  carregarMonitorUI();
-}
 async function toggleAutoMonitor(){
-  const on=($('mautolabel').textContent||'').indexOf('ON')>=0 && ($('mautolabel').textContent||'').indexOf('OFF')<0;
+  const on=($('mautolabel').textContent||'').indexOf('ON')>=0;
   await fetch('/api/monitor/auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoEnviar:!on})});
   carregarMonitorUI();
 }
