@@ -1,6 +1,7 @@
-# SRS — Software Requirements Specification — autoMensagemWhats
+# SRS — Software Requirements Specification — promo-radar-novo
 
-> Versão 0.1 | 2026-10-12 | Branch `develop` | Stack alvo: Node 20+ ESM + TypeScript + Evolution API + Afilimax/Garimpei + EngAI Gateway
+> Versão 0.3 | 2026-10-17 | Branch `develop` | Stack alvo: Node 20+ ESM + TypeScript + Evolution API + Afilimax/Garimpei + EngAI Gateway
+> Modo duplo: **AUTOMÁTICO** (envio de ofertas ML, RF-001–023) + **MONITOR** (receber/transformar/encaminhar, RF-030–035)
 > Referência visual: `image/Screenshot_20261011_223512_WhatsApp.jpg` | Curso: https://integrador-cedup.glide.page/dl/a400f7
 
 ## 1. Introdução
@@ -78,7 +79,24 @@ Nenhum lote >1 msg sai sem aprovação explícita OP/ADM; ação destrutiva exig
 Interface `DispatchProvider.send()` com `EvolutionProvider` no MVP e `CloudProvider` futuro sem reescrever; fila, rate-limit (≥30s entre msgs piloto), backoff, QR-reconnect.
 
 ### RF-010 — Agendar/enviar para grupo piloto (Must)
-Selecionar grupo opt-in, agendar, enviar imagem+legenda, registrar messageId/status.
+Selecionar grupo opt-in, agendar, enviar imagem+legenda (qtd ofertas por ciclo), registrar messageId/status. O usuário configura `qtd ∈ {1,2}` e `intervaloS ∈ {45, 60, 90}` na interface de START.
+
+**Comportamento:**
+- Se `qtd = 1`: envia 1 oferta a cada ciclo de 5 min.
+- Se `qtd = 2`: envia 2 ofertas por ciclo, com intervalo `intervaloS` segundos de respiro humano entre elas (com jitter ±10s), seguido da pausa de 8 min a cada 55 min.
+
+### RF-022 — Quantidade de postagens por ciclo (Should)
+O piloto enviará `qtd` ofertas por ciclo, onde `qtd ∈ {1, 2}`. O usuário escolhe no START do loop:
+- `qtd = 1`: uma mensagem por ciclo (intervalo 5 min).
+- `qtd = 2`: duas mensagens por ciclo, com intervalo humano entre elas (45–90s com jitter ±10s).
+**Aceite:** ao iniciar loop com `qtd=2`, o sistema envia a primeira, espera o intervalo configurado, envia a segunda, então respiro de 8 min a cada 55 min antes do próximo ciclo.
+
+### RF-023 — Intervalo entre postagens dentro do ciclo (Should)
+Quando `qtd = 2`, o intervalo entre a primeira e a segunda mensagem será de `intervaloS` segundos, com jitter humano de ±10 segundos para evitar padrão robótico:
+- `intervaloS = 45`: ~45s (±5s) entre mensagens
+- `intervaloS = 60`: ~1 min (±6s) entre mensagens  
+- `intervaloS = 90`: ~1:30 min (±9s) entre mensagens
+**Aceite:** o log exibirá "⏱️ respiro humano de XXs entre as 2 do ciclo" e o tempo será respeitado mesmo que o próximo candidato já esteja pronto.
 
 ### RF-011 — Histórico e reenvio (Should)
 Listar ofertas, status, messageId, reenviar/editar copy.
@@ -91,6 +109,59 @@ Job diário valida cookie ML e sessão Evolution, alerta em log/`/stats`.
 
 ### RF-014 — Anonimizar PII de prints (Must, LGPD)
 Borrar telefones/nomes ao importar screenshot para treino/template mining.
+
+---
+
+## 3.A Modo MONITOR — receber, transformar e reencaminhar (v0.3)
+
+> Funcionalidade nova: monitorar grupos de afiliados, reconhecer links de afiliado e reencaminhar para os grupos próprios com o link do usuário. Convivência com o modo automático (RF-001 a RF-023) na **mesma interface**.
+
+### RF-030 — Monitorar grupos de afiliados (Must)
+**Ator:** OP. **Desc:** cadastrar até 10 grupos WhatsApp de origem para monitoramento; receber mensagens entrantes via webhook do Evolution API; ignorar grupos não monitorados.
+**Aceite:**
+```gherkin
+Dado que cadastrei o grupo "INVITE_REDACTED_0000000" como monitorado
+Quando chega uma mensagem nesse grupo com link de oferta
+Então o sistema registra a mensagem como candidata e segue para análise
+E mensagens de grupos não cadastrados são ignoradas
+```
+
+### RF-031 — Identificar oferta e programa de afiliado (Must)
+**Ator:** SISTEMA. **Desc:** varredura textual da mensagem, extração de URLs e classificação por programa (Mercado Livre, Shopee, Kabum, Amazon) via allowlist de domínios + padrões. Extrair MLB ID/ASIN quando possível.
+**Aceite:**
+```gherkin
+Dado uma mensagem com "https://meli.la/2aKpCmQ"
+Quando o parser analisa
+Então classifica como Mercado Livre e extrai o link canônico
+E links de domínio desconhecido geram status NAO_RECONHECIDO (fila de revisão)
+```
+
+### RF-032 — Transformar link para o link de afiliado do usuário (Must)
+**Ator:** SISTEMA. **Desc:** converter a URL original para a URL de afiliado do usuário usando os mesmos dados de acesso ML já configurados (tag/cookie do provedor). Reutilizar `src/ml/provider.ts` (`converterLink`/`gerarLinkAfiliado`). Nunca alterar preços/números.
+**Aceite:**
+```gherkin
+Dado um link ML reconhecido na mensagem
+Quando aplico a transformação
+Então o link final usa a tag/atribuição do usuário e preserva o produto (nunca cai no perfil)
+```
+
+### RF-033 — Aplicar template padrão do usuário (Should)
+**Ator:** SISTEMA. **Desc:** reformatar a mensagem recebida no template Emipe (RN-001) preenchendo título, preços e link transformado; campos não reconhecidos são preservados do texto original.
+**Aceite:** mensagem transformada mantém o padrão de bolha WhatsApp (🔥/💵/🎟️/🛒) e o link do usuário.
+
+### RF-034 — Encaminhar para os grupos próprios (Must)
+**Ator:** SISTEMA. **Desc:** enviar a mensagem transformada para os grupos de destino configurados, respeitando o ritmo RN-007 e o mesmo `DispatchProvider` do modo automático (`src/wa/dispatch.ts`).
+**Aceite:** o log registra origem → destino com `messageId`; limite diário por nº é respeitado.
+
+### RF-035 — Anti-loop e dedup do monitor (Must)
+**Ator:** SISTEMA. **Desc:** nunca reencaminhar para o grupo de origem; hash de dedup próprio (MLB/ASIN + link transformado) por 7 dias; mensagem já processada não é reencaminhada.
+**Aceite:**
+```gherkin
+Dado que a mensagem X do grupo monitorado já foi reencaminhada
+Quando a mesma mensagem reaparece
+Então o sistema marca DUPLICADO_MONITOR e não reenvia
+E nenhum envio tem como destino o próprio grupo de origem
+```
 
 ## 4. Requisitos não-funcionais
 - NFR-001 Perf: ingest→preview p95 <15s (sem IA) / <40s (com IA 5 variações).
@@ -126,12 +197,19 @@ Exemplo real (imagem): HEADLINE=`RELÓGIO DE QUALIDADE ABSURDA`, SUB=`caiu muito
 - RN-005 IA nunca altera números/link/cupom, só texto persuasivo.
 - RN-006 Lote >1 exige approval; disparo noturno (22h-8h) exige flag explícita.
 - RN-007 1 IP dedicado BR por nº Evolution; aquecimento: dia1 ≤20, dia2 ≤35, dia3+ ≤50 msgs.
+- RN-008 (Monitor) Domínios aceitos: `mercadolivre.com.br`, `meli.la`, `shopee.com.br`, `shope.ee`, `kabum.com.br`, `amazon.com.br`, `amzn.to`. Fora da allowlist → `NAO_RECONHECIDO`.
+- RN-009 (Monitor) Se doc contém vários links, priorizar o primeiro link de programa reconhecido; demais ficam como texto.
+- RN-010 (Monitor) Nunca reencaminhar para o grupo de origem; dedup 7d por hash `programa + idProduto + linkTransformado`.
+- RN-011 (Monitor) Cada mensagem monitorada só é encaminhada 1x (1 destino primário); fan-out opcional exige flag explícita.
+- RN-012 (Monitor) Se o link não puder ser transformado (cookie/tag falha), mensagem vai para fila `REVISAO_MONITOR`, nunca sai sem transformação válida.
+- RN-013 (Monitor) O modo monitor e o modo automático compartilham o mesmo contador diário por nº (RN-007) — a soma dos dois não pode exceder o limite do dia.
 
 ## 6. Interfaces / Integrações
 | Integração | Contrato | Falha |
 |---|---|---|
 | ML provider (Afilimax/Garimpei) | `POST /extract {url}` → `{titulo,precos,imagem,link}` / `POST /convert-links` | `COOKIE_EXPIRED` → guia refresh; fallback manual |
 | Evolution API | `POST /message/sendText+Image {instance,number,media,caption}` + webhook `status` | `CONNECTION_CLOSED` → backoff+QR; fila retém |
+| Evolution API (entrada) | Webhook `messages.upsert` → `POST /api/webhook/evolution` (header `X-Webhook-Key`) | payload inválido → 400 e descarta; grupo não monitorado → ignora |
 | Cloud API (futuro) | `POST /messages {template|text+image}` Graph | `131047` fora janela → exige template |
 | LLM Gateway | `generate({prompt,mode:cheap|smart})` → `{text,cost,ms}` + `trace.json` | fallback template fixo |
 
@@ -145,6 +223,11 @@ Exemplo real (imagem): HEADLINE=`RELÓGIO DE QUALIDADE ABSURDA`, SUB=`caiu muito
 | RF-008,009,010 | RN-006,007 | US-06,07 | Dispatch dry-run + approval obrigatório |
 | RF-012,013 | — | US-08 | Health-check simula cookie expirado |
 | RF-014 | — | US-09 | PII borrada em import |
+| RF-022,023 | — | US-14,15 | Loop qtd=1 vs qtd=2 + jitter de intervalo |
+| RF-030,031 | RN-008,009 | US-16,17 | Monitor de grupo + parser ML/Shopee/Kabum/Amazon |
+| RF-032 | RN-012 | US-18 | Link transformado usa tag do usuário; nunca cai no perfil |
+| RF-033,034 | RN-011,013 | US-19 | Template aplicado + encaminhamento + limite compartilhado |
+| RF-035 | RN-010 | US-20 | Anti-loop (origem) + dedup 7d do monitor |
 
 ## 8. Riscos e mitigações
 | Risco | Prob. | Impacto | Mitigação |
