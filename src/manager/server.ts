@@ -53,6 +53,8 @@ function lerBusca(): Oportunidade[] {
   }
 }
 
+let cacheGrupos: { em: number; dados: any[] } | null = null;
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   const json = (code: number, obj: unknown) => {
@@ -246,7 +248,13 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/api/grupos") {
     // Grupos reais do WhatsApp pareado (para amarrar categoria → grupo).
+    // fetchAllGroups é lento (~10s): cache de 60s para a UI abrir instantânea.
     try {
+      const refresh = url.searchParams.get("refresh") === "1";
+      if (cacheGrupos && !refresh && Date.now() - cacheGrupos.em < 60_000) {
+        json(200, { grupos: cacheGrupos.dados, cache: true });
+        return;
+      }
       const base = (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
       const inst = process.env.EVO_INSTANCE ?? "radar-piloto";
       const ctrl = new AbortController();
@@ -257,13 +265,13 @@ const server = createServer(async (req, res) => {
       }).finally(() => clearTimeout(t));
       if (!r.ok) throw new Error(`Evolution ${r.status}`);
       const gs: any[] = await r.json();
-      json(200, {
-        grupos: (Array.isArray(gs) ? gs : []).map((g: any) => ({
-          id: g.id, nome: g.subject ?? g.name ?? g.id, tamanho: g.size ?? null,
-        })),
-      });
+      const dados = (Array.isArray(gs) ? gs : []).map((g: any) => ({
+        id: g.id, nome: g.subject ?? g.name ?? g.id, tamanho: g.size ?? null,
+      }));
+      cacheGrupos = { em: Date.now(), dados };
+      json(200, { grupos: dados });
     } catch (e: any) {
-      json(200, { grupos: [], aviso: `Evolution inacessível: ${e.message}` });
+      json(200, { grupos: cacheGrupos?.dados ?? [], aviso: `Evolution inacessível: ${e.message}` });
     }
     return;
   }
@@ -803,6 +811,7 @@ fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   $('mapcat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
   $('pacat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
   carregarContas();
+  carregarGrupos();
   carregarVitrine();
   carregarCupons();
   carregarMonitorUI();
@@ -843,13 +852,27 @@ async function carregarContas(){
   if(d.mapa&&d.mapa[$('mapcat').value]){const m=d.mapa[$('mapcat').value];$('mapconta').value=m.conta||'-';if(m.grupo)$('mapgrupo').value=m.grupo;if(m.sub)window._mapsub=m.sub;}
   carregarGrupos();carregarSubs('mapcat','mapsub',true);carregarSubs('pacat','pasub',false);
 }
-async function carregarGrupos(){
-  const g=await (await fetch('/api/grupos')).json();
-  const opts=(g.grupos||[]).map(function(x){return '<option value="'+x.id+'">'+x.nome+' ('+x.id.slice(0,12)+'…)</option>';}).join('');
-  $('mapgrupo').innerHTML='<option value="">Grupo padrão (.env)</option>'+opts;
-  $('pagrupo').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
-  atualizarPiloto();
+let _gruposEm=0, _gruposCarregando=false;
+async function carregarGrupos(forcar){
+  if(_gruposCarregando)return;
+  if(!forcar && Date.now()-_gruposEm<60000 && $('pagrupo').options.length>1)return;
+  _gruposCarregando=true;
+  $('pagrupo').innerHTML='<option value="">— carregando grupos… (pode levar 10s)</option>';
+  try{
+    const g=await (await fetch('/api/grupos'+(forcar?'?refresh=1':''))).json();
+    let opts=(g.grupos||[]).map(function(x){return '<option value="'+x.id+'">'+x.nome+' ('+x.id.slice(0,12)+'…)</option>';}).join('');
+    $('mapgrupo').innerHTML='<option value="">Grupo padrão (.env)</option>'+opts;
+    $('pagrupo').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
+    if(g.aviso)$('pagrupo').innerHTML+='<option value="" disabled>⚠️ '+g.aviso+'</option>';
+    _gruposEm=Date.now();
+  }catch(e){
+    $('pagrupo').innerHTML='<option value="">⚠️ erro ao carregar — clique para tentar de novo</option>';
+  }finally{_gruposCarregando=false;atualizarPiloto();}
 }
+['pagrupo','mapgrupo'].forEach(function(id){
+  const el=$(id); if(!el)return;
+  el.addEventListener('focus',function(){ if(el.options.length<=1) carregarGrupos(true); });
+});
 setInterval(atualizarPiloto, 10000);
 async function atualizarPiloto(){
   try{

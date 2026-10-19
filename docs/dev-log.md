@@ -428,3 +428,12 @@ consumidos na interpolação, o JS servido saiu como `verQR(''+i.instancia+'')` 
 **script inteiro** falhava no parse (por isso nada do painel respondia).
 **Fix**: `\\'` no fonte (chega como `\'` no HTML). Validação: extraí o `<script>` servido e
 rodei `node --check` → OK; `POST /api/instancias` cria e devolve QR (data URI 13 KB).
+
+### E6-MONITOR-14 | select de grupo do piloto demorava/vazio
+**Sintoma**: "Grupo de destino" do piloto automático não listava os grupos.
+**Causa provável**: `/api/grupos` chama `fetchAllGroups` da Evolution e leva ~10s (medido 9,7s);
+o select só era preenchido no fim de `carregarContas()` e, sem feedback, parecia travado.
+**Fix**: cache de 60s no backend (`?refresh=1` força), estado "carregando… (pode levar 10s)",
+`try/catch` com opção de erro clicável, `carregarGrupos()` chamado direto no init e
+recarregamento no `focus` do select quando vazio.
+**Prova**: 1ª chamada 9,77s → 2ª 0,02s (`cache:true`), 33 grupos; `<script>` servido passa no `node --check`.
