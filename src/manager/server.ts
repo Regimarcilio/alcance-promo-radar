@@ -1000,10 +1000,10 @@ async function carregarInstancias(){
     $('minstlist').innerHTML=itens.map(function(i){
       const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
       let acoes='';
-      if(i.estado!=='open') acoes+='<button class="mbtn" onclick="verQR(\''+i.instancia+'\')">QR</button>';
-      acoes+='<button class="mbtn" onclick="instAtivo(\''+i.instancia+'\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
-      acoes+='<button class="mbtn" onclick="instPeso(\''+i.instancia+'\','+i.peso+')">peso</button>';
-      acoes+='<button class="mbtn" onclick="instRemover(\''+i.instancia+'\')">🗑</button>';
+      if(i.estado!=='open') acoes+='<button class="mbtn" onclick="verQR(\\''+i.instancia+'\\')">QR</button>';
+      acoes+='<button class="mbtn" onclick="instAtivo(\\''+i.instancia+'\\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
+      acoes+='<button class="mbtn" onclick="instPeso(\\''+i.instancia+'\\','+i.peso+')">peso</button>';
+      acoes+='<button class="mbtn" onclick="instRemover(\\''+i.instancia+'\\')">🗑</button>';
       return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #1f2c33">'+
         '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+i.peso+' · '+i.enviadas+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
         '<span style="display:flex;gap:4px;flex-wrap:wrap">'+acoes+'</span></div>';

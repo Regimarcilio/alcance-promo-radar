@@ -421,3 +421,10 @@ sorteio **aleatório ponderado**; número **desconectado é pulado**; conta ML c
 - Envio real pelo dispatch: `3EB096FD90F264DCB9CAD0`; `instancias.json` gravou `enviadas: 1`.
   (O contador não apareceu na hora no `GET` porque o teste rodou em **outro processo**, com cache
   próprio; no processo do servidor — que é quem envia — o cache é o mesmo.)
+
+### Hotfix E6-MONITOR-13 | botão "Adicionar celular" não funcionava
+**Causa**: o card é gerado dentro de um template literal; os `\'` dos `onclick` foram
+consumidos na interpolação, o JS servido saiu como `verQR(''+i.instancia+'')` e o
+**script inteiro** falhava no parse (por isso nada do painel respondia).
+**Fix**: `\\'` no fonte (chega como `\'` no HTML). Validação: extraí o `<script>` servido e
+rodei `node --check` → OK; `POST /api/instancias` cria e devolve QR (data URI 13 KB).
