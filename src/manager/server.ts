@@ -1165,7 +1165,7 @@ async function carregarMonitorStatus(){
   try{
     const d=await (await fetch('/api/monitor/status')).json();
     $('mstatus').innerHTML='🔗 origens: <b>'+(d.origens||0)+'</b> · destinos: <b>'+(d.destinos||0)+'</b> · 📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
-    $('mfila').innerHTML='🚦 fila anti-rajada: <b>'+(d.fila||0)+'</b> em espera · liberando 1 a cada <b>'+(d.intervaloFila||45)+'s</b>'+(d.fila>0?' <span class="mini">(≈ '+Math.ceil((d.fila*(d.intervaloFila||45))/60)+' min p/ esvaziar)</span>':'');
+    $('mfila').innerHTML='🚦 fila anti-rajada: <b>'+(d.fila||0)+'</b> em espera · liberando 1 a cada <b>'+(d.intervaloFila||120)+'s</b>'+(d.fila>0?' <span class="mini">(≈ '+Math.ceil((d.fila*(d.intervaloFila||120))/60)+' min p/ esvaziar)</span>':'');
     $('meventos').textContent=(d.eventos||[]).map(e=>horaLocal(e.em)+' ['+e.status+'] '+e.programa+' '+(e.idProduto||'')+' ← '+e.origem+(e.destino?' → '+e.destino:'')+(e.detalhe?' ('+e.detalhe+')':'')).join('\\n')||'(sem eventos)';
   }catch(e){}
 }

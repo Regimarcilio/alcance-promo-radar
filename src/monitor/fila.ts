@@ -67,10 +67,10 @@ function salvar(s: StoreFila): void {
   }
 }
 
-/** Intervalo fixo entre liberações (env MONITOR_FILA_INTERVALO_S, default 45s). */
+/** Intervalo entre liberações da fila de rajada (env, default 120s = 2 min). */
 export function intervaloMs(): number {
-  const s = Number(process.env.MONITOR_FILA_INTERVALO_S ?? 45);
-  return (Number.isFinite(s) && s > 0 ? s : 45) * 1000;
+  const s = Number(process.env.MONITOR_FILA_INTERVALO_S ?? 120);
+  return (Number.isFinite(s) && s > 0 ? s : 120) * 1000;
 }
 
 export function intervaloFila(): number {
@@ -101,6 +101,55 @@ export function enfileirar(item: Omit<ItemFila, "id" | "criadoEm">): ItemFila {
   return novo;
 }
 
+// --- rajada: > 3 mensagens da MESMA origem dentro de 1 minuto ---------------
+const JANELA_RAJADA_MS = 60_000;
+const LIMITE_RAJADA = 3;
+const recentes = new Map<string, number[]>();
+
+/**
+ * Conta a mensagem na janela de 1 minuto e responde se a origem estourou o
+ * limite (4ª em diante). Só as excedentes vão para a fila; as 3 primeiras
+ * seguem direto. Estado em memória: restart zera a janela (a fila persiste).
+ */
+export function ehRajada(origem: string, agora = Date.now()): boolean {
+  const arr = (recentes.get(origem) ?? []).filter((t) => agora - t < JANELA_RAJADA_MS);
+  arr.push(agora);
+  recentes.set(origem, arr);
+  return arr.length > LIMITE_RAJADA;
+}
+
+/** Envia um item para todos os destinos e registra evento por destino. */
+export async function entregarItem(
+  item: Omit<ItemFila, "id" | "criadoEm">
+): Promise<{ jid: string; messageId: string }[]> {
+  const dry = process.env.MONITOR_DRY === "1"; // rede de segurança
+  const enviados: { jid: string; messageId: string }[] = [];
+  for (const jid of item.destinos) {
+    try {
+      const r = await enviarParaGrupo({
+        grupo: jid,
+        imagem: item.imagem,
+        legenda: item.mensagem,
+        dryRun: dry,
+      });
+      enviados.push({ jid, messageId: r.messageId });
+      registrarEvento({
+        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
+        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
+        status: "ENCAMINHADA", messageId: r.messageId,
+        detalhe: dry ? `${item.fonte ?? ""} (dry)`.trim() : item.fonte,
+      });
+    } catch (e: any) {
+      registrarEvento({
+        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
+        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
+        status: "ERRO", detalhe: String(e?.message ?? e).slice(0, 120),
+      });
+    }
+  }
+  return enviados;
+}
+
 /**
  * Libera o próximo item se (a) há item, (b) o envio direto está ligado e
  * (c) já passou o intervalo desde a última liberação.
@@ -117,29 +166,7 @@ export async function liberarProximo(): Promise<ItemFila | null> {
   s.ultimoEnvio = new Date().toISOString();
   salvar(s); // já sai da fila (não reenvia em loop se o envio falhar)
 
-  const dry = process.env.MONITOR_DRY === "1"; // rede de segurança: não envia de verdade
-  for (const jid of item.destinos) {
-    try {
-      const r = await enviarParaGrupo({
-        grupo: jid,
-        imagem: item.imagem,
-        legenda: item.mensagem,
-        dryRun: dry,
-      });
-      registrarEvento({
-        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
-        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
-        status: "ENCAMINHADA", messageId: r.messageId,
-        detalhe: dry ? `${item.fonte ?? ""} (dry)`.trim() : item.fonte,
-      });
-    } catch (e: any) {
-      registrarEvento({
-        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
-        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
-        status: "ERRO", detalhe: String(e?.message ?? e).slice(0, 120),
-      });
-    }
-  }
+  await entregarItem(item);
   return item;
 }
 

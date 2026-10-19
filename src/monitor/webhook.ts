@@ -9,7 +9,7 @@ import { extrairPrecos } from "./produto.js";
 import { salvarMidia } from "./midia.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { jaMonitorado, marcarMonitorado, registrarEvento } from "./state.js";
-import { enfileirar, tamanhoFila, intervaloFila } from "./fila.js";
+import { enfileirar, tamanhoFila, intervaloFila, ehRajada, entregarItem } from "./fila.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { formatar } from "../wa/formatter.js";
 
@@ -41,17 +41,42 @@ export interface MensagemExtraida {
   midia?: { base64: string; mimetype: string };
 }
 
+/**
+ * Desembrulha mensagens "temporárias" (grupo com mensagens que desaparecem),
+ * "ver uma vez" e documento-com-legenda. Sem isso, grupos que usam
+ * ephemeralMessage chegam como `tipos:["ephemeralMessage"]` e o texto/imagem
+ * fica escondido um nível abaixo — era o caso da #55 Emipe.
+ */
+function desembrulhar(m: any): any {
+  let atual: any = m ?? {};
+  for (let i = 0; i < 5; i++) {
+    const prox =
+      atual.ephemeralMessage?.message ??
+      atual.viewOnceMessage?.message ??
+      atual.viewOnceMessageV2?.message ??
+      atual.documentWithCaptionMessage?.message ??
+      atual.editedMessage?.message ??
+      null;
+    if (!prox) break;
+    atual = prox;
+  }
+  return atual;
+}
+
 /** Extrai o essencial do payload do webhook, tolerante a variações. */
 export function extrairMensagem(p: WebhookPayload): MensagemExtraida | null {
   const d = p.data ?? {};
   const origem = d.key?.remoteJid ?? d.remoteJid ?? "";
   const deMim = d.key?.fromMe ?? d.fromMe ?? false;
-  const msg = d.message ?? {};
+  const bruto: any = d.message ?? {};
+  const msg: any = desembrulhar(bruto); // ephemeral/viewOnce/documentWithCaption
   const texto =
     msg.conversation ?? msg.extendedTextMessage?.text ?? msg.imageMessage?.caption ?? "";
   const messageId = d.key?.id ?? "";
   if (!origem || !texto.trim()) return null;
-  const b64 = typeof msg.base64 === "string" ? msg.base64 : "";
+  // base64 pode vir no envelope externo ou no interno (ephemeral)
+  const b64 =
+    typeof msg.base64 === "string" ? msg.base64 : typeof bruto.base64 === "string" ? bruto.base64 : "";
   const midia = b64
     ? { base64: b64, mimetype: msg.imageMessage?.mimetype ?? "image/jpeg" }
     : undefined;
@@ -188,7 +213,7 @@ export async function processar(
     };
   }
 
-  enfileirar({
+  const item = {
     origem: msg.origem,
     programa: oferta.principal.programa,
     idProduto: idEfetivo,
@@ -197,19 +222,33 @@ export async function processar(
     imagem: foto,
     fonte: fonteFoto,
     destinos: destinos.map((d) => d.jid),
-  });
-  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url); // reserva (evita re-enfileirar)
-  registrarEvento({
-    em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-    idProduto: idEfetivo, linkTransformado: tr.url,
-    destino: destinos.map((d) => d.jid).join(","),
-    status: "ENFILEIRADA",
-    detalhe: `fila: ${tamanhoFila()} item(ns), 1 a cada ${intervaloFila()}s · ${fonteFoto}`,
-  });
+  };
+  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url); // reserva (evita duplicar)
+
+  // 9) Rajada? Só da 4ª mensagem da MESMA origem no último minuto em diante
+  //    entra na fila (liberada 1 a cada 2 min). Até 3, segue na hora.
+  if (ehRajada(msg.origem)) {
+    enfileirar(item);
+    registrarEvento({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: idEfetivo, linkTransformado: tr.url,
+      destino: destinos.map((d) => d.jid).join(","),
+      status: "ENFILEIRADA",
+      detalhe: `rajada (>3/min): fila ${tamanhoFila()} item(ns), 1 a cada ${intervaloFila()}s · ${fonteFoto}`,
+    });
+    return {
+      acao: "ENFILEIRADO",
+      programa: rotulo(oferta.principal.programa),
+      mensagem: corpo,
+    };
+  }
+
+  const enviados = await entregarItem(item);
   return {
-    acao: "ENFILEIRADO",
+    acao: "ENCAMINHADO",
     programa: rotulo(oferta.principal.programa),
     mensagem: corpo,
+    destinos: enviados,
   };
 }
 

@@ -437,3 +437,29 @@ o select só era preenchido no fim de `carregarContas()` e, sem feedback, pareci
 `try/catch` com opção de erro clicável, `carregarGrupos()` chamado direto no init e
 recarregamento no `focus` do select quando vazio.
 **Prova**: 1ª chamada 9,77s → 2ª 0,02s (`cache:true`), 33 grupos; `<script>` servido passa no `node --check`.
+
+---
+
+## 2026-10-19 | E6-MONITOR-15 | Emipe não repassava + fila só para rajada
+
+**Diagnóstico (payload real capturado com MONITOR_DEBUG)**: a `#55 Emipe Promoções Tech`
+usa **mensagens temporárias** — todo post chega como `tipos:["ephemeralMessage"]`, com o
+texto/imagem um nível abaixo (`message.ephemeralMessage.message`). O `extrairMensagem` só
+olhava o topo e devolvia `"sem texto"` → 183 mensagens entre 11:09–11:15 UTC foram descartadas.
+**Fix**: `desembrulhar()` recursivo para `ephemeralMessage`, `viewOnceMessage(V2)`,
+`documentWithCaptionMessage` e `editedMessage`; `base64` lido no envelope interno ou externo.
+
+**Fila (pedido do usuário)**: antes TODA mensagem entrava na fila (1 a cada 45s).
+Agora:
+- até **3 mensagens da mesma origem por minuto** → envio **imediato**;
+- da **4ª em diante** → fila, liberada **1 a cada 120s** (`MONITOR_FILA_INTERVALO_S`);
+- a janela conta só mensagens válidas (depois de dedup/link/destino);
+- UI já mostra `🚦 fila anti-rajada: N em espera` e o ETA — `N` cai a cada liberação.
+
+**Provas**:
+- `extrairMensagem` com payload ephemeral → texto + base64 extraídos; normal segue ok.
+- `ehRajada` 5 chamadas: `false,false,false,true,true`; após 61s volta a `false`.
+- Ponta a ponta (webhook real): 3 primeiras `ENCAMINHADO`, 4ª `ENFILEIRADO`, `fila:1`;
+  `ultimoEnvio` 15:05:31 → liberada 15:07:31 (120s), `fila:0`.
+- Os 3 envios de teste usaram imagem falsa (`QUJD`) → Evolution 500 e **nada foi postado**;
+  `monitor.json` não foi alterado (a edição local falhou por permissão root).
