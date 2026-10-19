@@ -109,7 +109,7 @@ export async function configurarWebhook(url: string, webhookKey: string): Promis
         enabled: true,
         url,
         webhookByEvents: false,
-        webhookBase64: false,
+        webhookBase64: true,
         events: ["MESSAGES_UPSERT"],
         headers: webhookKey ? { "X-Webhook-Key": webhookKey } : {},
       },

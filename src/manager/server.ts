@@ -29,6 +29,10 @@ import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
 } from "../monitor/evolution.js";
+import {
+  listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
+  definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
+} from "../wa/rotacao.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dataDir = join(root, "data");
@@ -387,6 +391,61 @@ const server = createServer(async (req, res) => {
     return;
   }
   // ---------- E6 MONITOR ----------
+  if (req.method === "GET" && url.pathname === "/api/instancias") {
+    const itens = await Promise.all(
+      listarInstancias().map(async (i) => ({ ...i, estado: await estadoInstanciaWhats(i.instancia) }))
+    );
+    json(200, { max: MAX_INSTANCIAS, itens });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: true, ...(await adicionarInstancia(String(b.nome ?? ""))) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/qr") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: true, qr: await qrInstancia(String(b.instancia ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/ativo") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirAtivoWhats(String(b.instancia ?? ""), b.ativo === true);
+      json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/peso") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirPeso(String(b.instancia ?? ""), Number(b.peso));
+      json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/remover") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      await removerInstancia(String(b.instancia ?? ""));
+      json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
     const s = carregarMonitor();
     json(200, { regras: s.regras, autoEnviar: s.autoEnviar, foto: s.foto });
@@ -671,6 +730,15 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div><b id="mcontalabel">Conta WhatsApp: …</b><br><span class="mini" id="mcontaestado"></span></div>
 <div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
 
+<div class="mbox">
+<label>📱 Números para envio rotativo <span class="mini" id="minstmax"></span></label>
+<div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
+<div id="minstlist" class="mini">carregando…</div>
+<div style="display:flex;gap:6px;margin-top:8px">
+<input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<button class="mbtn" onclick="addInstancia()">➕ Adicionar celular</button></div>
+<div id="minstqr" style="margin-top:10px"></div></div>
+
 <div class="mrow">
 <div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
 <button class="mbtn" id="mautobtn" onclick="toggleAutoMonitor()">Ligar envio direto</button></div>
@@ -907,6 +975,7 @@ async function carregarMonitorUI(){
     renderFoto(d.foto||'origem');
     renderMalerta(d.regras||[], on);
     carregarContaMonitor();
+    carregarInstancias();
     carregarMonitorStatus();
   }catch(e){}
 }
@@ -920,6 +989,62 @@ async function definirFotoUI(fonte){
   const r=await (await fetch('/api/monitor/foto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({foto:fonte})})).json();
   if(r.erro)return alert(r.erro);
   renderFoto(r.foto);
+}
+// ---------- NUMEROS (rotacao) ----------
+async function carregarInstancias(){
+  try{
+    const d=await (await fetch('/api/instancias')).json();
+    const itens=d.itens||[];
+    $('minstmax').textContent='· '+itens.length+'/'+d.max+' · sorteio ponderado';
+    if(!itens.length){$('minstlist').textContent='nenhum número — adicione um.';return;}
+    $('minstlist').innerHTML=itens.map(function(i){
+      const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
+      let acoes='';
+      if(i.estado!=='open') acoes+='<button class="mbtn" onclick="verQR(\''+i.instancia+'\')">QR</button>';
+      acoes+='<button class="mbtn" onclick="instAtivo(\''+i.instancia+'\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
+      acoes+='<button class="mbtn" onclick="instPeso(\''+i.instancia+'\','+i.peso+')">peso</button>';
+      acoes+='<button class="mbtn" onclick="instRemover(\''+i.instancia+'\')">🗑</button>';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #1f2c33">'+
+        '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+i.peso+' · '+i.enviadas+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
+        '<span style="display:flex;gap:4px;flex-wrap:wrap">'+acoes+'</span></div>';
+    }).join('');
+  }catch(e){}
+}
+function mostrarQR(qr,nome){
+  if(!qr){$('minstqr').innerHTML='<span class="mini">Instância criada. Clique em <b>QR</b> na lista para gerar o código.</span>';return;}
+  $('minstqr').innerHTML='<div class="mini">Escaneie com o WhatsApp do <b>'+esc(nome||'novo celular')+'</b> — Aparelhos conectados → Conectar aparelho:</div>'+
+    '<img src="'+qr+'" style="width:200px;height:200px;background:#fff;border-radius:8px;margin-top:6px">';
+}
+async function addInstancia(){
+  const nome=$('minstnome').value.trim();
+  if(!nome)return alert('Dê um nome (ex.: Celular 2).');
+  $('minstqr').innerHTML='<span class="mini">criando instância e gerando QR…</span>';
+  const r=await (await fetch('/api/instancias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome})})).json();
+  if(r.erro){$('minstqr').innerHTML='';return alert(r.erro);}
+  $('minstnome').value='';
+  mostrarQR(r.qr,r.nome);
+  carregarInstancias();
+}
+async function verQR(inst){
+  const r=await (await fetch('/api/instancias/qr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst})})).json();
+  if(r.erro)return alert(r.erro);
+  mostrarQR(r.qr,inst);
+}
+async function instAtivo(inst,ativo){
+  await fetch('/api/instancias/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,ativo:ativo})});
+  carregarInstancias();
+}
+async function instPeso(inst,peso){
+  const v=prompt('Peso no sorteio (1 a 10). Maior = recebe mais mensagens:',String(peso));
+  if(v===null)return;
+  await fetch('/api/instancias/peso',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,peso:Number(v)})});
+  carregarInstancias();
+}
+async function instRemover(inst){
+  if(!confirm('Remover '+inst+' do cadastro e da Evolution?'))return;
+  const r=await (await fetch('/api/instancias/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst})})).json();
+  if(r.erro)return alert(r.erro);
+  carregarInstancias();
 }
 function renderRegras(regras){
   $('mregrasn').textContent=regras.length?('· '+regras.length):'';

@@ -389,3 +389,35 @@ publicar só o que interessa ao grupo.
 **Provas**:
 - `EVO_URL` inalcançável → `repetindo em 2s (2/3)`, `repetindo em 4s (3/3)`, desiste em **6.3s**.
 - Envio real de mídia no grupo de teste após a mudança → `OK: 3EB0B52944B66330600CB5`.
+
+---
+
+## 2026-10-19 | E6-MONITOR-13 | master | Multi-número com rodízio aleatório ponderado
+
+**Pedido**: cadastrar outros celulares (em vez do "Trocar celular", que desloga) e enviar
+as mensagens alternando entre eles, até 5, para não concentrar tudo num número só.
+
+**Decisões do produto** (via question): rotação vale para **tudo** (piloto + monitor);
+sorteio **aleatório ponderado**; número **desconectado é pulado**; conta ML continua a **principal**.
+
+**Feito**:
+- `src/wa/rotacao.ts` (novo): store `data/instancias.json` (`instancia`, `nome`, `ativo`, `peso`,
+  `enviadas`, `ultimaEm`), `MAX_INSTANCIAS=5`, cache de estado com TTL 45s, `proximaInstancia()`
+  (ponderado, só `open`; se todos fechados ainda sorteia um ativo p/ o retry), `registrarEnvio()`,
+  `adicionarInstancia()` (cria na Evolution + webhook com `webhookBase64:true` + QR),
+  `qrInstancia()`, `definirAtivo/Peso`, `removerInstancia()` (apaga na Evolution também).
+- `src/wa/dispatch.ts`: `comRetry(fn(instancia))` — **cada tentativa sorteia de novo**, então
+  se o número caiu a repetição já sai por outro. `sendText` e `sendMedia` usam a instância sorteada.
+- Rotação no dispatch ⇒ vale para o piloto **e** para os repasses do monitor (fila incluída).
+- Webhook de novas instâncias já nasce com `base64` (foto da origem).
+- UI: card "📱 Números para envio rotativo" (lista com estado/peso/envios, ➕ Adicionar celular,
+  QR inline, ativar/desativar, peso 1–10, remover).
+- `webhookBase64: false` → `true` em `monitor/evolution.ts` (armadilha que desligaria a foto da origem).
+
+**Provas**:
+- Seed: `Celular 1 | radar-piloto | open`.
+- Criada instância de teste: apareceu `connecting` e o sorteio a **pulou 5/5**
+  (`radar-piloto, radar-piloto, ...`) — "pula desconectado" ok. Removida em seguida.
+- Envio real pelo dispatch: `3EB096FD90F264DCB9CAD0`; `instancias.json` gravou `enviadas: 1`.
+  (O contador não apareceu na hora no `GET` porque o teste rodou em **outro processo**, com cache
+  próprio; no processo do servidor — que é quem envia — o cache é o mesmo.)

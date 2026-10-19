@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
+import { proximaInstancia, registrarEnvio } from "./rotacao.js";
 
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
@@ -25,11 +26,15 @@ function transitorio(msg: string): boolean {
  * Repete só erros TRANSITÓRIOS (WhatsApp/Evolution cai e volta em segundos).
  * Um 500 isolado não deve custar a oferta do ciclo.
  */
-async function comRetry<T>(fn: () => Promise<T>, tentativas = 3): Promise<T> {
+async function comRetry<T>(fn: (instancia: string) => Promise<T>, tentativas = 3): Promise<T> {
   let ultimo: any;
   for (let i = 0; i < tentativas; i++) {
+    // cada tentativa sorteia de novo: se o número caiu, a próxima já sai por outro
+    const instancia = await proximaInstancia();
     try {
-      return await fn();
+      const r = await fn(instancia);
+      registrarEnvio(instancia);
+      return r;
     } catch (e: any) {
       ultimo = e;
       const msg = String(e?.message ?? e);
@@ -53,7 +58,6 @@ export async function enviarParaGrupo(args: {
   if (engine() === "go") return enviarViaGo(args);
   const evoUrl = process.env.EVO_URL;
   const evoKey = process.env.EVO_KEY;
-  const instance = process.env.EVO_INSTANCE ?? "radar-piloto";
   if (args.dryRun || !evoUrl || !evoKey) {
     console.log(
       `[dry-run] grupo=${args.grupo} legenda=${args.legenda.length}chars imagem=${args.imagem || "(sem)"}`
@@ -65,7 +69,7 @@ export async function enviarParaGrupo(args: {
     args.imagem.startsWith("data:") ||
     arquivoLocal(args.imagem);
   if (temFoto) return enviarMidia({ ...args, mediatype: "image" });
-  return comRetry(async () => {
+  return comRetry(async (instance) => {
     const res = await fetch(`${evoUrl}/message/sendText/${instance}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: evoKey },
@@ -93,7 +97,6 @@ export async function enviarMidia(args: {
 }): Promise<EnvioResult> {
   const evoUrl = process.env.EVO_URL;
   const evoKey = process.env.EVO_KEY;
-  const instance = process.env.EVO_INSTANCE ?? "radar-piloto";
   if (args.dryRun || !evoUrl || !evoKey) {
     console.log(`[dry-run:midia] grupo=${args.grupo} legenda=${args.legenda.length}chars`);
     return { messageId: `dryrun-midia-${Date.now()}`, dryRun: true };
@@ -111,7 +114,7 @@ export async function enviarMidia(args: {
   } else if (!/^https?:\/\//.test(args.imagem) && !args.imagem.startsWith("data:")) {
     mimetype = mimetype ?? "image/jpeg";
   }
-  return comRetry(async () => {
+  return comRetry(async (instance) => {
     const res = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: evoKey },
