@@ -531,3 +531,37 @@ variável inexistente — resolvido com alias `--mut` no `:root`.
 (390px) e `tema-live-completo.png` (página real em 8099 já populada pela API). Os 2 `<script>`
 servidos passam em `node --check`; `data-paleta="verde"` + 4 swatches no HTML; zero cores escuras
 residuais no fonte.
+
+---
+
+## 2026-10-19 | E6-UI-02 | Marca "Alcance" + paletas criativas de 3 cores (fundos tingidos)
+
+**Pedido**: (1) renomear "autoMensagemWhats" para algo que se venda como produto; (2) refazer as
+paletas como **combinação criativa de 2–3 cores derivadas** (verde/azul/laranja/vermelho) e
+**não manter tudo em fundo branco**.
+
+**Nome**: 6 candidatas de branding apresentadas (Propaga, Cascata, Radial, Loop, Alcance, +livre);
+usuário escolheu **Alcance**. Aplicado em `<title>` ("Alcance — central de ofertas que se
+espalham") e no cabeçalho: monograma "A" em bloco com gradiente + wordmark "Alcance" em
+`background-clip:text` + tagline "capta · filtra · distribui — alcance é o que vende".
+Zero ocorrências de "autoMensagemWhats" no HTML servido.
+
+**Sistema cromático** (3 tokens por paleta: `--primary`, `--accent`, `--tertiary`):
+- verde: esmeralda `#047857` + teal `#0f766e` + lima `#65a30d`;
+- azul: royal `#2563eb` + violeta `#6d28d9` + ciano `#0891b2`;
+- laranja: terracota `#c2410c` + âmbar `#b45309` + coral `#fb923c`;
+- vermelho: carmim `#d02626` + rosa-forte `#be123c` + coral `#f97316`.
+Fundos deixaram de ser brancos: `--bg`/`--bg-2` em gradiente tingido (`linear-gradient(168deg)`
+fixo no body), superfícies `--surface`/`--surface-2` levemente tingidas, bordas e sombra
+(`--shadow-tint`) na cor da paleta, `--code-bg` tingido.
+Aplicações do trio: faixa do painel Piloto = grad-a→grad-b, Monitor = `--accent`→`--tertiary`,
+Clientes = `--tertiary`→grad-b; CTAs em gradiente (`--grad-a`→`--grad-b`); toggles ON em
+`accent`→`primary`; swatches mostram a combinação em gradiente de 135°.
+
+**Contraste (WCAG, calculado)**: branco sobre grad-a/grad-b = verde 5.47/5.48 · azul 7.10/5.17 ·
+laranja 5.02/5.18 · vermelho 6.29/5.27 (todos AA). Os `--tertiary` (2.26–3.68 vs branco) são
+**exclusivamente decorativos** — nenhum texto sobre eles.
+
+**Provas**: `docs/prints/top-{verde,azul,laranja,vermelho}.png` (cabeçalho + 1º painel de cada
+paleta), `alcance-mobile.png` (420px) e `alcance-live.png` (página real em :8099). Scripts
+servidos OK no `node --check`.
