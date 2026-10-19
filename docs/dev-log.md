@@ -463,3 +463,37 @@ Agora:
   `ultimoEnvio` 15:05:31 → liberada 15:07:31 (120s), `fila:0`.
 - Os 3 envios de teste usaram imagem falsa (`QUJD`) → Evolution 500 e **nada foi postado**;
   `monitor.json` não foi alterado (a edição local falhou por permissão root).
+
+---
+
+## 2026-10-19 | E6-CLIENTES-01 | Card CLIENTES + títulos editáveis por painel
+
+**Pedido**: (1) nomear cada card; (2) gerenciar contatos por celular cadastrado e disparar
+propaganda individual ou para listas de distribuição. Decisões do usuário: contatos vêm dos
+**participantes dos grupos** + cadastro manual; intervalo de disparo é livre (default 60s).
+
+**Diagnóstico da fonte de contatos**: `POST /chat/findContacts` e `/chat/findChats` da Evolution
+retornam `[]`; `fetchAllGroups?getParticipants=true` → 500; `findGroupInfos` estoura timeout em
+grupo grande. **Funciona**: `GET /group/participants/{instance}?groupJid=` (rápido; sem nomes;
+entradas `@lid` sem `phoneNumber` são ignoradas).
+
+**Entregue**:
+- `src/clientes/clientes.ts`: contatos persistidos em `data/clientes.json`, listas e fila em
+  `data/clientes-fila.json`; sync em background (33 grupos, progresso consultável); campanha com
+  envio 1 a cada `CLIENTES_INTERVALO_S` (default 60) via rotação de números.
+- `src/ui/titulos.ts`: títulos por card em `data/ui.json` (`piloto`, `monitor`, `numeros`, `clientes`).
+- `src/manager/server.ts`: endpoints `/api/ui`, `/api/ui/titulo`, `/api/clientes`,
+  `/api/clientes/sync|contato|contato/renomear|contato/remover|lista|lista/remover|enviar|fila/limpar`;
+  `iniciarClientesWorker()` no boot; card "👥 Clientes" (sync, cadastro, busca, seleção,
+  listas, propaganda, fila) e links ✏️ renomear nos 4 cards. Lista usa `data-*` + event
+  delegation para não repetir a armadilha do escape.
+
+**Provas**:
+- `/api/ui` devolve os 4 títulos; renomear "👥 Clientes (base)" persistiu e voltou no GET.
+- Contato manual `5500000000001` criado; lista "Lista Teste" criada; disparo enfileirado
+  (`pendentes:1`) e liberado no tick seguinte: `enviados:1`, `pendentes:0`,
+  id `3EB0BD1B2CB98248841E6D` (mensagem enviada ao próprio número, teste seguro).
+- Sync: 33/33 grupos, **1439 contatos** em 45s.
+- `<script>` servido validado com `node --check` (pegadinha do `\n`/`\'` dentro do template
+  literal corrigida antes do deploy).
+- Monitor segue saudável (`autoEnviar:true`, `fila:0`); piloto religado (loop #2, 2/ciclo a 60s).

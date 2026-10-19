@@ -25,6 +25,12 @@ import {
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor, zerarContadores, limparDedup } from "../monitor/state.js";
 import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker } from "../monitor/fila.js";
+import {
+  listarContatos, listarListas, criarLista, removerLista, adicionarContato, renomearContato,
+  removerContato, sincronizar as sincronizarClientes, estadoSync, enfileirarCampanha,
+  estadoFilaClientes, limparFilaClientes, iniciarClientesWorker,
+} from "../clientes/clientes.js";
+import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
@@ -454,6 +460,96 @@ const server = createServer(async (req, res) => {
     }
     return;
   }
+  // ---------------- CLIENTES ----------------
+  if (req.method === "GET" && url.pathname === "/api/ui") {
+    json(200, { titulos: lerTitulos() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/ui/titulo") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: true, titulos: definirTitulo(String(b.chave ?? ""), String(b.titulo ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/clientes") {
+    json(200, {
+      contatos: listarContatos(), listas: listarListas(), sync: estadoSync(), fila: estadoFilaClientes(),
+    });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/sync") {
+    // roda em background; a UI acompanha por GET /api/clientes
+    sincronizarClientes().catch((e) => console.log(`[clientes] sync falhou: ${String(e?.message ?? e)}`));
+    json(200, { ok: true, sync: estadoSync() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/contato") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: true, contato: adicionarContato(String(b.nome ?? ""), String(b.telefone ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/contato/renomear") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const ok = renomearContato(String(b.jid ?? ""), String(b.nome ?? ""));
+      json(ok ? 200 : 404, ok ? { ok: true } : { erro: "contato não encontrado" });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/contato/remover") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: removerContato(String(b.jid ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/lista") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: true, lista: criarLista(String(b.nome ?? ""), Array.isArray(b.contatos) ? b.contatos : []) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/lista/remover") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      json(200, { ok: removerLista(String(b.id ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/enviar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const pendentes = enfileirarCampanha({
+        texto: String(b.texto ?? ""),
+        imagem: String(b.imagem ?? ""),
+        jids: Array.isArray(b.jids) ? b.jids.map(String) : [],
+      });
+      json(200, { ok: true, fila: estadoFilaClientes(), pendentes });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/fila/limpar") {
+    json(200, { ok: true, removidos: limparFilaClientes(), fila: estadoFilaClientes() });
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
     const s = carregarMonitor();
     json(200, { regras: s.regras, autoEnviar: s.autoEnviar, foto: s.foto });
@@ -708,7 +804,7 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div id="cuponsml" style="font-size:12px;margin-top:6px;color:var(--mut)"></div></div>
 </div>
 <div class="panel" style="border-color:#00a884">
-<label>🚀 Piloto automático — 2 ofertas aleatórias a cada 5 min, sozinho</label>
+<label><span id="tit-piloto">🚀 Piloto automático</span> — 2 ofertas aleatórias a cada 5 min, sozinho <a href="#" onclick="renomearCard('piloto');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
 <div class="hint">Aperte <b>LIGA TUDO</b> e esqueça: liga 1 loop por categoria amarrada (conta+grupo do mapa, até 5). Ou monte 1 loop manual abaixo.</div>
 <div style="display:flex;gap:8px;margin-bottom:10px"><button class="buscar" style="margin-top:0;flex:1;font-size:16px" onclick="ligaTudo()">▶ LIGA TUDO (automático)</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ DESLIGA TUDO</button></div>
 <div class="grid4">
@@ -731,7 +827,7 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div id="vitrineout" style="font-size:13px">carregando vitrine…</div></div>
 </div>
 <div class="panel" style="border-color:#53bdeb">
-<label>📡 Monitor — cada grupo de origem encaminha para os SEUS destinos</label>
+<label><span id="tit-monitor">📡 Monitor</span> — cada grupo de origem encaminha para os SEUS destinos <a href="#" onclick="renomearCard('monitor');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
 <div class="hint">Oferta publicada numa <b>origem</b> (grupo de achadinhos que você monitora) tem o link trocado pelo <b>seu</b> e é reenviada <b>apenas</b> para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.</div>
 
 <div class="mrow">
@@ -739,7 +835,7 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
 
 <div class="mbox">
-<label>📱 Números para envio rotativo <span class="mini" id="minstmax"></span></label>
+<label><span id="tit-numeros">📱 Números</span> para envio rotativo <span class="mini" id="minstmax"></span> <a href="#" onclick="renomearCard('numeros');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
 <div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
 <div id="minstlist" class="mini">carregando…</div>
 <div style="display:flex;gap:6px;margin-top:8px">
@@ -785,6 +881,35 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <pre id="mtesteout"></pre></div>
 <div><label>Últimos eventos do monitor</label><pre id="meventos" style="max-height:220px"></pre></div></div>
 </div>
+
+<div class="panel" style="border-color:#f9a825">
+<label><span id="tit-clientes">👥 Clientes</span> <a href="#" onclick="renomearCard('clientes');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
+<div class="hint">Contatos puxados dos <b>grupos do seu celular</b> + cadastro manual. Selecione e dispare uma propaganda <b>individual</b> (não é grupo). A fila envia 1 por vez para não parecer robô.</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+<button class="mbtn ok" onclick="syncClientes()">🔄 Puxar contatos dos grupos</button>
+<span class="mini" id="clisync"></span></div>
+<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+<input id="clinome" placeholder="nome (ex.: João)" style="flex:1;min-width:130px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<input id="clifone" placeholder="telefone com DDD" style="flex:1;min-width:130px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<button class="mbtn" onclick="addContato()">➕ Contato</button></div>
+<div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+<input id="clibusca" placeholder="buscar por nome ou telefone" oninput="renderContatos()" style="flex:1;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<span class="mini" id="clicount" style="white-space:nowrap"></span></div>
+<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+<button class="mbtn" onclick="marcarTodos(true)">☑ Todos</button>
+<button class="mbtn" onclick="marcarTodos(false)">☐ Limpar</button>
+<button class="mbtn ok" onclick="salvarLista()">💾 Salvar selecionados como lista</button></div>
+<div id="clilist" style="max-height:240px;overflow:auto;border:1px solid #2a3942;border-radius:10px;padding:4px;margin-top:8px"></div>
+<div id="clilistas" style="margin-top:10px;font-size:13px"></div>
+<div class="mbox" style="margin-top:10px">
+<label>✉️ Propaganda para a seleção</label>
+<textarea id="clitexto" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Texto da propaganda (pode colar o link no meio)…"></textarea>
+<input id="cliimagem" placeholder="URL da imagem (opcional)" style="width:100%;margin-top:6px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+<button class="buscar" style="margin-top:0;width:auto" onclick="dispararClientes()">🚀 Disparar</button>
+<button class="mbtn" onclick="limparFilaClientesUI()">🗑 Cancelar fila</button>
+<span class="mini" id="clifila"></span></div></div>
+</div>
 <script>
 const $=id=>document.getElementById(id);
 // Chave do gerenciador: se o servidor exigir (MANAGER_KEY), pede 1 vez e reusa.
@@ -815,7 +940,10 @@ fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   carregarVitrine();
   carregarCupons();
   carregarMonitorUI();
+  carregarTitulos();
+  carregarClientes();
   setInterval(function(){try{carregarMonitorStatus();}catch(e){}},15000);
+  setInterval(function(){try{carregarClientes();}catch(e){}},15000);
 });
 let CS=[];
 async function carregarVitrine(){
@@ -1069,6 +1197,159 @@ async function instRemover(inst){
   if(r.erro)return alert(r.erro);
   carregarInstancias();
 }
+// ---------- TITULOS DOS CARDS ----------
+async function carregarTitulos(){
+  try{
+    const d=await (await fetch('/api/ui')).json();
+    const t=d.titulos||{};
+    Object.keys(t).forEach(function(k){const el=$('tit-'+k); if(el)el.textContent=t[k];});
+  }catch(e){}
+}
+async function renomearCard(chave){
+  const el=$('tit-'+chave);
+  const atual=el?el.textContent:'';
+  const novo=prompt('Novo nome para este card:',atual);
+  if(novo===null)return;
+  if(!novo.trim())return alert('nome vazio');
+  const r=await (await fetch('/api/ui/titulo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave,titulo:novo.trim()})})).json();
+  if(r.erro)return alert(r.erro);
+  if(el)el.textContent=(r.titulos||{})[chave]||novo.trim();
+}
+// ---------- CLIENTES ----------
+let CLIENTES={contatos:[],listas:[],sync:{},fila:{}};
+let SELECAO=new Set();
+function telFmt(t){const d=String(t||'').replace(/[^0-9]/g,'');return d.length>12?('+'+d.slice(0,2)+' '+d.slice(2,4)+' '+d.slice(4,9)+'-'+d.slice(9)):('+'+d);}
+async function carregarClientes(){
+  try{
+    const d=await (await fetch('/api/clientes')).json();
+    CLIENTES=d||{contatos:[],listas:[]};
+    const s=d.sync||{};
+    $('clisync').textContent = s.rodando
+      ? ('puxando… '+(s.feitos||0)+'/'+(s.total||0)+' grupos · '+(s.contatos||0)+' contatos')
+      : (s.ultimoSync ? ('último sync: '+new Date(s.ultimoSync).toLocaleString('pt-BR')+' · '+(s.contatos||0)+' contatos') : 'nunca sincronizado');
+    const f=d.fila||{};
+    $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s';
+    renderContatos(); renderListas();
+  }catch(e){}
+}
+function filtroContatos(){
+  const q=($('clibusca').value||'').toLowerCase().trim();
+  return (CLIENTES.contatos||[]).filter(function(c){
+    if(!q)return true;
+    return (c.nome||'').toLowerCase().includes(q)||String(c.telefone||'').includes(q);
+  });
+}
+function renderContatos(){
+  const arr=filtroContatos(), cap=arr.slice(0,300);
+  $('clicount').textContent=SELECAO.size+' sel. · '+arr.length+' contato(s)'+(arr.length>cap.length?(' (mostrando '+cap.length+')'):'');
+  if(!cap.length){
+    $('clilist').innerHTML='<div class="mini" style="padding:8px">nenhum contato — use <b>Puxar contatos dos grupos</b> ou cadastre 1 acima.</div>';
+    return;
+  }
+  $('clilist').innerHTML=cap.map(function(c){
+    const nome=c.nome||telFmt(c.telefone);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #1f2c33">'
+      +'<input type="checkbox" data-sel="'+c.jid+'"'+(SELECAO.has(c.jid)?' checked':'')+'>'
+      +'<span style="flex:1;font-size:13px">'+esc(nome)+(c.nome?(' <span class="mini">'+esc(telFmt(c.telefone))+'</span>'):'')
+      +(c.origem?('<br><span class="mini">'+esc(String(c.origem).slice(0,42))+'</span>'):'')+'</span>'
+      +'<button class="mbtn" data-act="ren" data-jid="'+c.jid+'">✏️</button>'
+      +'<button class="mbtn" data-act="del" data-jid="'+c.jid+'">🗑</button></div>';
+  }).join('');
+}
+function renderListas(){
+  const ls=CLIENTES.listas||[];
+  if(!ls.length){$('clilistas').innerHTML='<span class="mini">nenhuma lista salva</span>';return;}
+  $('clilistas').innerHTML='<label>📋 Listas salvas</label>'+ls.map(function(l){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1f2c33">'
+      +'<span style="flex:1">'+esc(l.nome)+' <span class="mini">'+l.contatos.length+' contato(s)</span></span>'
+      +'<button class="mbtn" data-act="sell" data-jid="'+l.id+'">selecionar</button>'
+      +'<button class="mbtn" data-act="dell" data-jid="'+l.id+'">🗑</button></div>';
+  }).join('');
+}
+async function syncClientes(){
+  $('clisync').textContent='iniciando…';
+  const r=await (await fetch('/api/clientes/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+async function addContato(){
+  const nome=$('clinome').value.trim(), fone=$('clifone').value.trim();
+  if(!fone)return alert('informe o telefone com DDD');
+  const r=await (await fetch('/api/clientes/contato',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome,telefone:fone})})).json();
+  if(r.erro)return alert(r.erro);
+  $('clinome').value='';$('clifone').value='';
+  carregarClientes();
+}
+function marcarTodos(on){
+  const arr=filtroContatos();
+  if(on)arr.forEach(function(c){SELECAO.add(c.jid);});
+  else SELECAO.clear();
+  renderContatos();
+}
+async function salvarLista(){
+  if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
+  const nome=prompt('Nome da lista:','Lista '+(new Date().toLocaleDateString('pt-BR')));
+  if(!nome||!nome.trim())return;
+  const r=await (await fetch('/api/clientes/lista',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome.trim(),contatos:[...SELECAO]})})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+async function dispararClientes(){
+  if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
+  const texto=$('clitexto').value.trim();
+  if(!texto)return alert('escreva a propaganda');
+  const imagem=$('cliimagem').value.trim();
+  if(!confirm('Disparar para '+SELECAO.size+' contato(s)? A fila envia 1 por vez.'))return;
+  const r=await (await fetch('/api/clientes/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:texto,imagem:imagem,jids:[...SELECAO]})})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+async function limparFilaClientesUI(){
+  if(!confirm('Cancelar a fila de disparo? O que já saiu não volta.'))return;
+  const r=await (await fetch('/api/clientes/fila/limpar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+$('clilist').addEventListener('change',function(ev){
+  const el=ev.target;
+  if(el && el.getAttribute && el.getAttribute('data-sel')){
+    const jid=el.getAttribute('data-sel');
+    if(el.checked)SELECAO.add(jid); else SELECAO.delete(jid);
+    $('clicount').textContent=SELECAO.size+' sel.';
+  }
+});
+$('clilist').addEventListener('click',async function(ev){
+  const b=ev.target.closest('[data-act]');
+  if(!b)return;
+  const act=b.getAttribute('data-act'), jid=b.getAttribute('data-jid');
+  if(act==='ren'){
+    const c=(CLIENTES.contatos||[]).find(function(x){return x.jid===jid;})||{};
+    const nome=prompt('Nome do contato:',c.nome||'');
+    if(nome===null)return;
+    await fetch('/api/clientes/contato/renomear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid:jid,nome:nome})});
+    carregarClientes();
+  }else if(act==='del'){
+    if(!confirm('Remover este contato?'))return;
+    await fetch('/api/clientes/contato/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid:jid})});
+    SELECAO.delete(jid);
+    carregarClientes();
+  }
+});
+$('clilistas').addEventListener('click',async function(ev){
+  const b=ev.target.closest('[data-act]');
+  if(!b)return;
+  const act=b.getAttribute('data-act'), id=b.getAttribute('data-jid');
+  const l=(CLIENTES.listas||[]).find(function(x){return x.id===id;});
+  if(act==='sell'&&l){
+    SELECAO=new Set(l.contatos);
+    renderContatos();
+    $('clitexto').scrollIntoView({behavior:'smooth',block:'center'});
+  }else if(act==='dell'&&l){
+    if(!confirm('Remover a lista "'+l.nome+'"? (os contatos continuam cadastrados)'))return;
+    await fetch('/api/clientes/lista/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
+    carregarClientes();
+  }
+});
 function renderRegras(regras){
   $('mregrasn').textContent=regras.length?('· '+regras.length):'';
   if(!regras.length){$('mregras').innerHTML='<div class="mini" style="padding:6px 0">nenhuma regra ainda — monte a primeira acima.</div>';return;}
@@ -1205,5 +1486,6 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`gerenciador em http://localhost:${PORT} (rede: substitua localhost pelo IP)`);
   iniciarFilaWorker();
+  iniciarClientesWorker();
   console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);
 });
