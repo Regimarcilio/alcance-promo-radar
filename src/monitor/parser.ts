@@ -83,6 +83,19 @@ export function extrairId(url: string, programa: Programa): string | null {
   return null;
 }
 
+/** Remove uma URL do texto e descarta as linhas "decorativas" (só emoji,
+ *  seta, pontuação) — evita deixar um "👉" órfão no lugar do link antigo.
+ *  Exportado para reuso quando o link só é removido depois da expansão (curtos.ts). */
+export function limparTexto(texto: string, remover: string): string {
+  return texto
+    .replace(remover, "")
+    .split("\n")
+    .filter((l) => l.trim() === "" || /[\p{L}\p{N}]/u.test(l))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Varre o texto e retorna todos os links + o principal reconhecido. */
 export function detectar(texto: string): OfertaDetectada {
   const urls = [...texto.matchAll(RE_URL)].map((m) => m[0].replace(/[.,;!?]+$/, ""));
@@ -91,18 +104,7 @@ export function detectar(texto: string): OfertaDetectada {
     return { url, host, programa, idProduto: extrairId(url, programa) };
   });
   const principal = links.find((l) => l.programa !== "desconhecido") ?? null;
-  let textoLimpo = texto;
-  if (principal) {
-    // Remove a URL e descarta as linhas que ficaram "decorativas" (só emoji,
-    // seta, pontuação) — evita deixar um "👉" órfão no lugar do link antigo.
-    textoLimpo = texto
-      .replace(principal.url, "")
-      .split("\n")
-      .filter((l) => l.trim() === "" || /[\p{L}\p{N}]/u.test(l))
-      .join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  }
+  const textoLimpo = principal ? limparTexto(texto, principal.url) : texto;
   return { links, principal, textoLimpo };
 }
 

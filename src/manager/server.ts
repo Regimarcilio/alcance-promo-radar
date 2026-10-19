@@ -32,6 +32,7 @@ import {
 } from "../clientes/clientes.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
+import { expandirLink } from "../monitor/curtos.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
 } from "../monitor/evolution.js";
@@ -675,6 +676,15 @@ const server = createServer(async (req, res) => {
     try {
       const b = JSON.parse(await lerCorpo(req));
       const oferta = detectarOferta(String(b.texto ?? ""));
+      if (!oferta.principal) {
+        // mesma expansão do webhook (curtos.ts): preview do painel refletir
+        // links no domínio da própria origem (ex.: oferta.emipefps.com/...)
+        const desconhecido = oferta.links.find((l) => l.programa === "desconhecido");
+        if (desconhecido) {
+          const exp = await expandirLink(desconhecido.url);
+          if (exp) oferta.principal = exp;
+        }
+      }
       const msg = { origem: b.origem ?? "", deMim: false, texto: String(b.texto ?? ""), messageId: "teste" };
       const r = await processarMonitor(msg, { dryRun: true, conta: b.conta ?? undefined });
       json(200, {

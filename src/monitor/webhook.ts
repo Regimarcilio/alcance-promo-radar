@@ -3,7 +3,8 @@
  * Fluxo: webhook Evolution → origem monitorada? → parser → transformer →
  *        template → router (destinos) → dedup/anti-loop.
  */
-import { detectar, rotulo, type OfertaDetectada } from "./parser.js";
+import { detectar, rotulo, limparTexto, type OfertaDetectada } from "./parser.js";
+import { expandirLink } from "./curtos.js";
 import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
 import { salvarMidia } from "./midia.js";
@@ -115,6 +116,19 @@ export async function processar(
 
   // 2) Detectar oferta/link (RF-031)
   const oferta: OfertaDetectada = detectar(msg.texto);
+  if (!oferta.principal) {
+    // 2.1) Link no domínio da própria origem (ex.: oferta.emipefps.com/amazon/XXXX):
+    // expande para a URL final (amazon.com.br/dp/ASIN?tag=...) e reclassifica.
+    // Sem isso, o post do Emipe via domínio próprio morria em "sem link".
+    const desconhecido = oferta.links.find((l) => l.programa === "desconhecido");
+    if (desconhecido) {
+      const expandido = await expandirLink(desconhecido.url);
+      if (expandido) {
+        oferta.principal = expandido;
+        oferta.textoLimpo = limparTexto(msg.texto, desconhecido.url);
+      }
+    }
+  }
   if (!oferta.principal) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: "desconhecido",

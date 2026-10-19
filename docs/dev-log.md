@@ -590,3 +590,43 @@ escape latente (linha 1128), API com `origens`/`destinos` como número vs `regra
 escopo duplo no repo (afiliado ML × Alcance).
 
 **Sem alteração de código**: auditoria read-only; correções ficaram no plano P0/P1/P2 do doc.
+
+---
+
+## 2026-10-19 | E6-MONITOR-16 | Bug do grupo #55 (Epipe): links no domínio da origem + AMAZON_TAG
+
+**Pedido**: usuário relatou que o grupo "#55 Emipe Promoções Tech" "não está reconhecendo" (modelo de captura).
+
+**Diagnóstico (por evidências vivas)**:
+- Regras do Emipe **ativas** (1º check leu o campo errado `r.ativo`; o certo é `r.origem.ativo` — todas as 6 regras OK).
+- Mensagens **chegavam e desembrulhavam**: eventos tinham ENCAMINHADA (via `meli.la`) e DUPLICADO. O que falhava era
+  `REVISAO "sem link de afiliado reconhecido"` (ex.: 19:36:37) para posts no domínio próprio
+  `https://oferta.emipefps.com/amazon/XXXX` — host fora da allowlist do parser (RN-008).
+- Captura ao vivo (proxy transparente em container na rede do compose, webhook temporariamente apontado para ele):
+  a página do Epipe é um shell JS que resolve via `POST /api/public/abrir-link` →
+  `{destino:"https://www.amazon.com.br/dp/ASIN?tag=emipefps0f-20"}`.
+- 2ª causa: `AMAZON_TAG`/`SHOPEE_SUBID`/`KABUM_REF` **vazias** no `.env` → mesmo link Amazon reconhecido
+  morria em `REVISAO "AMAZON_TAG não configurado"`.
+
+**Correção**:
+- **Novo `src/monitor/curtos.ts`**: `expandirLink()` — resolvedores de hosts de redirecionamento das origens
+  (hoje `*.emipefps.com` via `/api/public/abrir-link`, timeout 8s, até 3 saltos). Host sem resolvedor → `null` sem rede.
+- **`webhook.ts` passo 2.1**: sem link na allowlist, tenta expandir o 1º desconhecido → reclassifica → vira `principal`;
+  `textoLimpo` recalculado (helper `limparTexto` extraído/exportado do `parser.ts`). Expansão falhou → REVISAO "sem link" como antes.
+- **Painel de teste** (`/api/monitor/testar`): preview "principal" usa a mesma expansão.
+- **`.env`**: `AMAZON_TAG=manodosachadi-20` (informada pelo usuário). Shopee/KaBuM seguem em revisão (usuário vai se inscrever).
+- **Primeiros testes automatizados do repo** (`src/monitor/parser.test.ts`, node:test): 6 casos puros (allowlist,
+  emipefps=desconhecido, detectar/limparTexto, extrairId ML/Amazon/Shopee) → `npm test` 6/6.
+
+**Validação**:
+- `expandirLink("https://oferta.emipefps.com/amazon/cpxhU6")` → URL final Amazon, ASIN B0DWGWN8GY ✓.
+- Replay do caption real capturado em `/api/monitor/testar`: `ENCAMINHADO | Amazon`, link final com `tag=manodosachadi-20` ✓.
+- Produção pós-deploy: **20:31:15 ENCAMINHADA amazon real** vinda do Emipe (B0HHNZFXL5, messageId real) ✓.
+- Webhook da Evolution **restaurado** para `http://promo_radar_manager:8091/api/webhook/evolution`
+  (confirmado em `/webhook/find`, enabled/base64/MESSAGES_UPSERT); container de captura `evo_captura` removido.
+
+**Arquivos**: `src/monitor/curtos.ts` (novo) · `src/monitor/parser.ts` · `src/monitor/webhook.ts` ·
+`src/manager/server.ts` · `src/monitor/parser.test.ts` (novo) · `.env` (não versionado).
+
+**Pendências**: 1 REVISAO "sem link" do Emipe às 20:31:13 (2s antes de um forward OK — provável mensagem
+não-oferta; watcher de 15s monitorando) · piloto com 0 loops (aguarda decisão do usuário) · tags Shopee/KaBuM.
