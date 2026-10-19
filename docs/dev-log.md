@@ -565,3 +565,28 @@ laranja 5.02/5.18 · vermelho 6.29/5.27 (todos AA). Os `--tertiary` (2.26–3.68
 **Provas**: `docs/prints/top-{verde,azul,laranja,vermelho}.png` (cabeçalho + 1º painel de cada
 paleta), `alcance-mobile.png` (420px) e `alcance-live.png` (página real em :8099). Scripts
 servidos OK no `node --check`.
+
+---
+
+## 2026-10-19 | E6-AUDIT-01 | Auditoria de consistência do projeto (nota 6,5/10)
+
+**Pedido**: avaliar a consistência geral do projeto e registrar o report.
+
+**Escopo auditado**: `src/` (30 módulos, 6.374 LOC), `docs/` (12 docs + 4 ADRs + dev-log),
+`data/` (18 arquivos de estado), git (branch/histórico/remoto/ignore), CI, compose/Dockerfile e
+runtime (containers, endpoints, logs, webhook, dedup).
+
+**Resultado**: relatório completo em **`docs/12-auditoria-consistencia.md`** —
+nota geral **6,5/10**, com tabela por dimensão (arquitetura 7,0 · docs×entrega 5,0 · qualidade 6,5 ·
+testes 1,0 · git 7,0 · operação 7,5 · segurança 7,0 · observabilidade 6,0).
+
+**3 críticos (P0)**: container legado `automensagem_manager` operando a **mesma** `EVO_INSTANCE`
+(`radar-piloto`) há 4 dias · **sem remoto git** (30+ commits só no disco) · **zero testes** apesar
+de `npm test` existir. **Achados médios**: `data/` root-only, `server.ts` monolítico (914 das 1.660
+linhas são a UI inline — origem dos 2 incidentes de escape), fila duplicada (`monitor/fila.ts` ×
+`clientes/clientes.ts`), dedup sem poda por idade, CI testando o produto antigo, sem handlers de
+erro/SIGTERM. **Baixos**: `pino` fantasma, 5 envs sem doc, resíduo `debug-webhook.log`, 1 ponto de
+escape latente (linha 1128), API com `origens`/`destinos` como número vs `regras` como lista,
+escopo duplo no repo (afiliado ML × Alcance).
+
+**Sem alteração de código**: auditoria read-only; correções ficaram no plano P0/P1/P2 do doc.
