@@ -7,7 +7,9 @@
  */
 import { converterLink } from "../ml/provider.js";
 import { resolverProdutoML, type DadosProduto } from "./produto.js";
-import type { LinkDetectado } from "./parser.js";
+import { extrairId, type LinkDetectado } from "./parser.js";
+import { expandirCurtoAmazon } from "./curtos.js";
+import { resolverProdutoAmazon } from "./amazon-api.js";
 
 export interface ResultadoTransformacao {
   url: string;
@@ -116,8 +118,33 @@ export async function transformar(
     case "amazon": {
       // Rastreio Amazon via tag de associado (AMAZON_TAG no .env).
       const tag = process.env.AMAZON_TAG?.trim();
-      if (tag) return { url: comParam(link.url, "tag", tag), ok: true };
-      return { url: link.url, ok: false, motivo: "AMAZON_TAG não configurado" };
+      // Encurtadores (amzn.to/amzn.com.br) não repassam query params: resolve o
+      // redirect ANTES de aplicar a tag, senão a comissão se perde no salto.
+      let alvo = link.url;
+      if (/^(www\.)?amzn\.(to|com\.br)$/i.test(link.host)) {
+        const final = await expandirCurtoAmazon(link.url);
+        if (final) alvo = final;
+      }
+      const asin = link.idProduto ?? extrairId(alvo, "amazon");
+      const url = tag ? comParam(alvo, "tag", tag) : alvo;
+      // Enriquecimento opcional (Creators API): título/foto p/ sair no template
+      // completo (com foto), igual ao Mercado Livre. Sem credencial/falha na
+      // API → segue como antes; nunca bloqueia o encaminhamento.
+      let produto: DadosProduto | undefined;
+      if (asin) {
+        const dados = await resolverProdutoAmazon(asin);
+        if (dados) {
+          produto = {
+            id: dados.asin,
+            ids: [dados.asin],
+            titulo: dados.titulo,
+            imagem: dados.imagem,
+            urlFinal: alvo,
+          };
+        }
+      }
+      if (tag) return { url, ok: true, produto };
+      return { url: alvo, ok: false, motivo: "AMAZON_TAG não configurado", produto };
     }
 
     case "shopee": {

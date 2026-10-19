@@ -63,3 +63,58 @@ export async function expandirLink(url: string): Promise<LinkDetectado | null> {
   }
   return null;
 }
+
+const UA_REDIRECT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+/**
+ * Encurtadores Amazon (`amzn.to`, `amzn.com.br`) respondem com 301/302 e NÃO
+ * repassam query params — aplicar `?tag=` direto neles perderia a comissão.
+ * Resolve o redirect até chegar num host de produto Amazon e devolve a URL
+ * final; null quando não conseguir (o chamador mantém o link original).
+ */
+export async function expandirCurtoAmazon(url: string): Promise<string | null> {
+  let atual = url;
+  for (let salto = 0; salto < 4; salto++) {
+    let host = "";
+    try {
+      host = new URL(atual).host.toLowerCase();
+    } catch {
+      return null;
+    }
+    const ehEncurtador = host === "amzn.to" || host === "amzn.com.br" || host.endsWith(".amzn.com.br");
+    if (!ehEncurtador) {
+      return classificar(atual).programa === "amazon" ? atual : null;
+    }
+    const loc = await obterLocation(atual);
+    if (!loc) return null;
+    atual = new URL(loc, atual).toString();
+  }
+  return null;
+}
+
+/** HEAD manual primeiro (sem baixar body); GET com follow como reserva. */
+async function obterLocation(url: string): Promise<string | null> {
+  try {
+    const h = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: { "User-Agent": UA_REDIRECT },
+      signal: AbortSignal.timeout(8000),
+    });
+    const loc = h.headers.get("location");
+    if (loc) return loc;
+  } catch {
+    /* cai no GET */
+  }
+  try {
+    const g = await fetch(url, {
+      redirect: "follow",
+      headers: { "User-Agent": UA_REDIRECT },
+      signal: AbortSignal.timeout(10000),
+    });
+    return g.url && g.url !== url ? g.url : null;
+  } catch {
+    return null;
+  }
+}

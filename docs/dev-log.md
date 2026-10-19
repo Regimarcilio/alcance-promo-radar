@@ -630,3 +630,51 @@ escopo duplo no repo (afiliado ML × Alcance).
 
 **Pendências**: 1 REVISAO "sem link" do Emipe às 20:31:13 (2s antes de um forward OK — provável mensagem
 não-oferta; watcher de 15s monitorando) · piloto com 0 loops (aguarda decisão do usuário) · tags Shopee/KaBuM.
+
+---
+
+## 2026-10-19 | E6-MONITOR-17 | Amazon: expansão de amzn.to + client Creators API (aguardando credenciais)
+
+**Pedido**: usuário perguntou como os links Amazon são tratados com a tag dele e aprovou 2 itens:
+(1) fechar o gap do `amzn.to`; (2) deixar o módulo da nova API Amazon pronto agora, com fallback total.
+
+**Contexto (pesquisa oficial, out/2026)**: a **PA-API 5.0 foi descontinuada em 15/05/2026**; a substituta é a
+**Creators API** (OAuth 2.0; sem AWS). Pré-requisitos: conta de associado com **aceitação final** e
+**≥ 10 vendas qualificadas nos últimos 30 dias**; credenciais (Credential ID + Secret + Version) geradas em
+Portal de Associados → Ferramentas → Creators API — confirmado nos portais US e BR. Brasil = região NA
+(Version 3.1 → token em `api.amazon.com/auth/o2/token`; API em `creatorsapi.amazon`; marketplace
+`www.amazon.com.br`).
+
+**Como a comissão funciona (inalterado)**: o link de afiliado continua sendo gerado pela **troca de `tag`**
+(`searchParams.set('tag', AMAZON_TAG)`) no transformer — a API nova é usada apenas para **enriquecer** o
+repasse (título/foto oficiais), nunca para gerar link. Provas ao vivo do mecanismo: forwards de Amazon do
+Epipe em 20:31:15, 20:38:19 e 20:57:08, todos com `tag=manodosachadi-20`.
+
+**Correção do gap `amzn.to`**: encurtadores Amazon respondem 301/302 e **não repassam query params** — aplicar
+`?tag=` direto neles perderia a comissão. Novo `expandirCurtoAmazon()` em `curtos.ts` resolve o redirect
+(HEAD manual → GET follow como reserva, máx. 4 saltos) e o transformer aplica a tag no **link final**
+`amazon.com.br/dp/...`. Falhou a expansão → mantém o comportamento anterior (não piora).
+
+**Módulo novo `src/monitor/amazon-api.ts`** (Creators API):
+- OAuth2 `client_credentials` (scope `creatorsapi::default`), endpoint de token pela Version da credencial
+  (3.1 NA/BR default · 3.2 EU · 3.3 FE), **token cacheado** (renova 2 min antes de expirar).
+- `GetItems` por ASIN (`itemInfo.title` + `images.primary.large/medium`), header `x-marketplace`.
+- Retry único em 401/403 com token renovado; timeouts 8s/10s; **inerte sem credenciais** (zero rede).
+- Preço não é buscado (o template usa `extrairPrecos` do texto da origem, igual ML); `offersV2` fica p/ futuro.
+
+**Integração** (`transformer.ts` case amazon): expande curto → extrai ASIN pós-expansão → aplica tag →
+enriquece via API (título/foto); falha/sem credencial → comportamento anterior; **nunca bloqueia**.
+
+**Config**: `.env.example` e `.env` com `AMAZON_CREATORS_ID/SECRET` (vazias) + notas de
+`AMAZON_CREATORS_VERSION`/`AMAZON_MARKETPLACE`. Quando as credenciais saírem: preencher o `.env` e
+recriar o container — nada de código a mudar.
+
+**Testes**: `amazon-api.test.ts` (4 casos: sem credencial=zero rede, fluxo feliz, cache do token, 401→renova)
++ `curtos.test.ts` (3: amzn.to 301, host direto, sem redirect) + helper `test-utils.ts`.
+Repo agora com **13/13** passando (`npm test`).
+
+**Validação**: typecheck + build + 13 testes OK; deploy + replay do caption real do Epipe →
+`ENCAMINHADO | Amazon` com `tag=manodosachadi-20` (3,8s).
+
+**Pendências**: credenciais Amazon (10 vendas/30d + aceitação final via portal); 1 REVISAO do Epipe em
+observação; piloto com 0 loops; decisões da auditoria P0 (container legado/git remoto).
