@@ -736,52 +736,158 @@ function lerCorpo(req: any): Promise<string> {
   });
 }
 
-const PAGINA = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+const PAGINA = `<!DOCTYPE html><html lang="pt-BR" data-paleta="verde"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Gerenciador — autoMensagemWhats</title>
-<style>*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Roboto,Arial,sans-serif}
-body{background:#0b141a;color:#e9edef;padding:16px;max-width:1100px;margin:auto}
-h1{font-size:20px;margin-bottom:4px}h1 span{color:#00a884}.sub{color:#8696a0;font-size:13px;margin-bottom:14px}
-.panel{background:#111b21;border:1px solid #222d34;border-radius:14px;padding:14px;margin-bottom:14px}
-label{font-size:12px;color:#8696a0;display:block;margin:8px 0 4px}
-select,input{width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:10px;font-size:14px}
-.grid2{display:grid;grid-template-columns:2fr 1fr;gap:10px}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-@media(max-width:700px){.grid2,.grid4{grid-template-columns:1fr 1fr}}
-button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:pointer}
-.buscar{background:#00a884;color:#04241d;width:100%;margin-top:12px;font-size:15px}
-.ghost{background:#202c33;color:#fff;width:100%;margin-top:12px;font-size:15px}
-.badge{font-size:11px;font-weight:800;border-radius:20px;padding:3px 10px}
-.live{background:#00a884;color:#04241d}.mock{background:#f9a825;color:#3d2b00}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
-.card{background:#111b21;border:1px solid #222d34;border-radius:14px;overflow:hidden}
-.card img{width:100%;height:170px;object-fit:cover;background:#202c33;display:block}
-.noimg{height:90px;display:flex;align-items:center;justify-content:center;font-size:40px;background:#202c33}
-.info{padding:12px;font-size:13px}.info b.t{font-size:14px}
-.preco{margin:6px 0}.de{text-decoration:line-through;color:#8696a0}.por{color:#00e676;font-weight:800;font-size:16px}
-.meta{color:#8696a0;font-size:12px;margin:4px 0}.link{color:#53bdeb;word-break:break-all;font-size:12px}
-.enviar{background:#00a884;color:#04241d;width:100%;margin-top:10px}
-.result{background:#06281f;border:1px solid #00a884;border-radius:14px;padding:14px;margin-top:14px;font-size:13px;display:none}
-.result code{background:#000;padding:2px 8px;border-radius:6px;color:#9ff0c8}
-.hint{font-size:12px;color:#8696a0;margin:4px 0 8px}
-.mrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:10px;margin-top:8px;flex-wrap:wrap}
-.mbox{background:#0b141a;border:1px solid #222d34;border-radius:10px;padding:12px;margin-top:10px}
-.mini{font-size:12px;color:#8696a0}.mini code{background:#000;padding:1px 5px;border-radius:5px;color:#9ff0c8}
-.mbtn{background:#202c33;color:#fff;width:auto;margin:0;padding:7px 12px;font-size:12.5px;white-space:nowrap}
-.mbtn.ok{background:#00a884;color:#04241d}
-.regra{background:#0b141a;border:1px solid #2a3942;border-left:3px solid #53bdeb;border-radius:10px;padding:10px 12px;margin-top:8px}
-.regra .orig{font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
-.regra .dest{font-size:13px;margin:6px 0 0 14px;padding:4px 0 0 10px;border-left:1px solid #2a3942;display:flex;justify-content:space-between;gap:8px;align-items:center}
+<style>:root{
+  color-scheme:light;
+  --bg:#f5f7f9; --surface:#ffffff; --surface-2:#f2f5f8;
+  --text:#15212a; --muted:#566470; --faint:#7b8894;
+  --border:#e4e9ee; --border-strong:#cfd8e0;
+  --mut:var(--muted);
+  --radius:10px; --radius-box:12px; --radius-card:16px;
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05),0 2px 8px rgba(15,23,42,.04);
+  --shadow-md:0 6px 20px rgba(15,23,42,.10);
+  --code-bg:#f6f8fa; --code-tx:#243445;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --ok-soft:#e7f6ef; --ok-bd:#a9dcc6; --ok-tx:#0b5c43;
+  --warn-soft:#fdf6e2; --warn-bd:#ecd28c; --warn-tx:#7a5410;
+  --danger-soft:#fdecec; --danger-bd:#f2b8b8; --danger-tx:#8f1d1d;
+  --info:#2563eb;
+  --price:#047857;
+  --ac-piloto:#0e9f6e; --ac-monitor:#2563eb; --ac-clientes:#d97706;
+  --primary:#047857; --primary-hover:#03624a; --primary-soft:#e7f6f0;
+  --primary-border:#b6dfd0; --primary-contrast:#ffffff; --ring:rgba(4,120,87,.30);
+}
+[data-paleta="azul"]{
+  --primary:#2563eb; --primary-hover:#1d4ed8; --primary-soft:#e9f0fe;
+  --primary-border:#bcd1fa; --primary-contrast:#ffffff; --ring:rgba(37,99,235,.28);
+}
+[data-paleta="laranja"]{
+  --primary:#c2410c; --primary-hover:#9a3412; --primary-soft:#fdeee5;
+  --primary-border:#f4c7a9; --primary-contrast:#ffffff; --ring:rgba(194,65,12,.28);
+}
+[data-paleta="vermelho"]{
+  --primary:#d02626; --primary-hover:#b91c1c; --primary-soft:#fdeaea;
+  --primary-border:#f4bcbc; --primary-contrast:#ffffff; --ring:rgba(208,38,38,.26);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scrollbar-color:var(--border-strong) transparent}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;
+  padding:24px 18px 56px;max-width:1100px;margin:auto;
+  transition:background .2s ease,color .2s ease;
+}
+h1{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:6px}
+h1 span{color:var(--primary)}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:18px;max-width:75ch}
+.sub b,.hint b{color:var(--text)}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+a:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
+::selection{background:var(--primary);color:var(--primary-contrast)}
+.paleta-bar{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.paleta-bar .rotulo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.swatch{width:26px;height:26px;border-radius:999px;padding:0;cursor:pointer;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border-strong);background:var(--sw,#c8d0d8);transition:transform .15s ease,box-shadow .15s ease}
+.swatch:hover{transform:scale(1.1)}
+.swatch:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--sw)}
+.swatch[aria-pressed="true"]::after{content:"✓";display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#fff;font-size:13px;font-weight:800}
+.swatch[data-p="verde"]{--sw:#10b981}
+.swatch[data-p="azul"]{--sw:#3b82f6}
+.swatch[data-p="laranja"]{--sw:#f97316}
+.swatch[data-p="vermelho"]{--sw:#ef4444}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);padding:18px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+.panel.ac-piloto{border-top:3px solid var(--ac-piloto)}
+.panel.ac-monitor{border-top:3px solid var(--ac-monitor)}
+.panel.ac-clientes{border-top:3px solid var(--ac-clientes)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:-2px 0 8px;font-size:13.5px;font-weight:600}
+.panel>label:first-child{margin-top:0}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius);padding:10px;font-size:14px;font-family:inherit;transition:border-color .15s ease,box-shadow .15s ease}
+textarea{resize:vertical}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
+input:disabled,select:disabled,textarea:disabled{background:var(--surface-2);color:var(--faint);cursor:not-allowed}
+input[type="checkbox"]{width:16px;height:16px;padding:0;accent-color:var(--primary);flex:0 0 auto}
+button{font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;border:1px solid transparent;border-radius:var(--radius);padding:11px 14px;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .05s ease}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.buscar,.enviar{background:var(--primary);color:var(--primary-contrast);width:100%;margin-top:12px;font-size:15px;font-weight:800}
+.buscar:hover,.enviar:hover{background:var(--primary-hover)}
+.enviar{margin-top:10px}
+.ghost{background:var(--surface);color:var(--text);border-color:var(--border-strong);width:100%;margin-top:12px;font-size:15px}
+.ghost:hover{background:var(--surface-2);border-color:#bfc9d2}
+.mbtn{background:var(--surface);color:var(--text);border-color:var(--border-strong);width:auto;margin:0;padding:7px 12px;font-size:12.5px;font-weight:600;border-radius:var(--radius);white-space:nowrap}
+.mbtn:hover{background:var(--surface-2);border-color:#bfc9d2}
+.mbtn.ok{background:var(--primary);border-color:var(--primary);color:var(--primary-contrast)}
+.mbtn.ok:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.tgl{background:var(--surface-2);color:var(--muted);border:1px solid var(--border-strong);border-radius:999px;padding:3px 12px;font-size:11px;font-weight:800;letter-spacing:.02em}
+.tgl:hover{color:var(--text);border-color:#bfc9d2}
+.tgl.on{background:var(--primary);border-color:var(--primary);color:var(--primary-contrast)}
+.tgl.on:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:700px){
+  body{padding:18px 14px 48px}
+  .grid2{grid-template-columns:1fr}
+  .grid4{grid-template-columns:1fr 1fr}
+}
+.badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+.live{background:var(--ok-soft);color:var(--ok-tx);border-color:var(--ok-bd)}
+.mock{background:var(--warn-soft);color:var(--warn-tx);border-color:var(--warn-bd)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .18s ease,transform .18s ease}
+.card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.card img{width:100%;height:170px;object-fit:cover;background:var(--surface-2);display:block}
+.noimg{height:110px;display:flex;align-items:center;justify-content:center;font-size:38px;color:var(--faint);background:linear-gradient(180deg,#f3f6f8,#e9eef2)}
+.info{padding:14px;font-size:13px;line-height:1.5}
+.info b.t{font-size:14px;display:block;margin-bottom:2px}
+.preco{margin:8px 0}
+.de{color:var(--muted);text-decoration:line-through}
+.por{color:var(--price);font-weight:800;font-size:16px}
+.meta{color:var(--muted);font-size:12px;margin:4px 0}
+.link{color:var(--primary);font-weight:600;font-size:12px;word-break:break-all;overflow-wrap:anywhere}
+.link:hover{text-decoration:underline}
+.result{background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:var(--radius-box);padding:14px;margin-top:14px;font-size:13px;display:none}
+.result code{background:var(--code-bg);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--code-tx);font-family:var(--mono)}
+code{font-family:var(--mono)}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 10px;line-height:1.55}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-box);padding:12px;font-size:11.5px;font-family:var(--mono);line-height:1.55;color:var(--code-tx);white-space:pre-wrap;word-break:break-word;margin-top:10px;max-height:220px;overflow:auto;scrollbar-color:var(--border-strong) transparent}
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-box);padding:12px;margin-top:10px}
+.mbox{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-box);padding:14px;margin-top:10px}
+.mini{font-size:12px;color:var(--muted);line-height:1.45}
+.mini code{background:var(--code-bg);border:1px solid var(--border);padding:1px 6px;border-radius:6px;color:var(--code-tx);font-family:var(--mono);font-size:11px}
+.regra{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:var(--radius-box);padding:10px 12px;margin-top:8px}
+.regra .orig{font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.regra .dest{font-size:13px;margin:8px 0 0 14px;padding:6px 0 0 10px;border-left:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .ctrls{display:flex;gap:6px;align-items:center;flex-shrink:0}
-.tgl{background:#202c33;color:#8696a0;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:800;cursor:pointer;border:1px solid #2a3942}
-.tgl.on{background:#00a884;color:#04241d;border-color:#00a884}
-.regra.off{opacity:.55}.regra.off .orig b{text-decoration:line-through}
-.dest.off{opacity:.6}.dest.off b{text-decoration:line-through}
-.jidtag{color:#8696a0;font-size:11px}
-.malerta{border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px;border:1px solid}
-.malerta.pare{background:#3a1d1d;border-color:#c0392b;color:#ffd0cb}
-.malerta.warn{background:#3a3316;border-color:#b99a16;color:#ffeeb8}
-.malerta.ok{background:#0f2f26;border-color:#00a884;color:#a8f0d8}
-pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space:pre-wrap;margin-top:8px;color:#d1f4cc;max-height:220px;overflow:auto}</style></head>
+.regra.off{opacity:.55;background:var(--surface-2)}
+.regra.off .orig b{text-decoration:line-through}
+.dest.off{opacity:.6}
+.dest.off b{text-decoration:line-through}
+.jidtag{color:var(--muted);font-size:11px;word-break:break-all;overflow-wrap:anywhere}
+.malerta{border-radius:var(--radius-box);padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.55;border:1px solid}
+.malerta.pare{background:var(--danger-soft);border-color:var(--danger-bd);color:var(--danger-tx)}
+.malerta.warn{background:var(--warn-soft);border-color:var(--warn-bd);color:var(--warn-tx)}
+.malerta.ok{background:var(--ok-soft);border-color:var(--ok-bd);color:var(--ok-tx)}
+.lk-mini{color:var(--primary);font-size:12px;font-weight:600;text-decoration:none}
+.lk-mini:hover{text-decoration:underline}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+  .card:hover{transform:none}
+  .swatch:hover{transform:none}
+}</style></head>
 <body>
+<script>try{var p=localStorage.getItem('paleta');if(p){document.documentElement.setAttribute('data-paleta',p);}}catch(e){}</script>
+<div class="paleta-bar" role="group" aria-label="Cor do tema da pagina">
+<span class="rotulo">Cor do tema</span>
+<button type="button" class="swatch" data-p="verde" aria-label="Usar tema verde" aria-pressed="true" title="Tema verde"></button>
+<button type="button" class="swatch" data-p="azul" aria-label="Usar tema azul" aria-pressed="false" title="Tema azul"></button>
+<button type="button" class="swatch" data-p="laranja" aria-label="Usar tema laranja" aria-pressed="false" title="Tema laranja"></button>
+<button type="button" class="swatch" data-p="vermelho" aria-label="Usar tema vermelho" aria-pressed="false" title="Tema vermelho"></button>
+</div>
 <h1>🤖 Gerenciador <span>autoMensagemWhats</span></h1>
 <div class="sub">Escolha <b>etiqueta → categoria → grupo</b>, aperte <b>LIGA TUDO</b> e receba <b>2 ofertas a cada 5 min</b> por categoria no WhatsApp (com pausa de 8 min a cada 55 min).</div>
 <div class="panel">
@@ -803,8 +909,8 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div style="display:flex;gap:8px;margin-top:6px"><input id="cpchave" style="flex:1" placeholder="chave: MLB1000 ou MLB1000:principal"><input id="cpcode" style="flex:1" placeholder="código: PRIMEHOJE"><input id="cpnome" style="flex:1" placeholder="nome: 10% OFF Voltagem"><button class="buscar" style="margin-top:0;width:auto" onclick="salvarCupomUI()">💾</button></div>
 <div id="cuponsml" style="font-size:12px;margin-top:6px;color:var(--mut)"></div></div>
 </div>
-<div class="panel" style="border-color:#00a884">
-<label><span id="tit-piloto">🚀 Piloto automático</span> — 2 ofertas aleatórias a cada 5 min, sozinho <a href="#" onclick="renomearCard('piloto');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
+<div class="panel ac-piloto">
+<div class="panel-head"><span><b id="tit-piloto">🚀 Piloto automático</b> — 2 ofertas aleatórias a cada 5 min, sozinho</span><a class="lk-mini" href="#" onclick="renomearCard('piloto');return false">✏️ renomear</a></div>
 <div class="hint">Aperte <b>LIGA TUDO</b> e esqueça: liga 1 loop por categoria amarrada (conta+grupo do mapa, até 5). Ou monte 1 loop manual abaixo.</div>
 <div style="display:flex;gap:8px;margin-bottom:10px"><button class="buscar" style="margin-top:0;flex:1;font-size:16px" onclick="ligaTudo()">▶ LIGA TUDO (automático)</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ DESLIGA TUDO</button></div>
 <div class="grid4">
@@ -815,19 +921,19 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div class="grid4" style="margin-top:8px">
 <div><label>Postagens por ciclo</label><select id="paqtd"><option value="2">2 por ciclo</option><option value="1">1 por ciclo</option></select></div>
 <div><label>Intervalo entre elas</label><select id="pagap"><option value="45">45s</option><option value="60" selected>1 min</option><option value="90">1:30 min</option></select></div>
-<div><label>Filtro por palavra (opcional)</label><input id="pafiltro" placeholder="ex.: perfume" maxlength="60" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px"></div>
+<div><label>Filtro por palavra (opcional)</label><input id="pafiltro" placeholder="ex.: perfume" maxlength="60" style="width:100%;"></div>
 </div>
 <div style="display:flex;gap:8px;margin-top:8px"><button class="buscar" style="margin-top:0;flex:1" onclick="pilotoStart()">▶ START</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ STOP TUDO</button></div>
 <div id="pstatus" style="margin-top:8px;font-size:13px"></div>
 <pre id="plog" style="max-height:140px"></pre>
-<div class="grid2" style="margin-top:8px"><div><label>Cesta da categoria (cole 1 vez — rodízio automático com foto)</label><textarea id="cestatext" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="URL | pix | de | título | foto (um por linha)"></textarea></div>
+<div class="grid2" style="margin-top:8px"><div><label>Cesta da categoria (cole 1 vez — rodízio automático com foto)</label><textarea id="cestatext" rows="3" style="width:100%;" placeholder="URL | pix | de | título | foto (um por linha)"></textarea></div>
 <div><label>&nbsp;</label><div id="cestainfo" style="font-size:12px;margin-bottom:8px"></div><div style="display:flex;gap:8px"><button class="buscar" style="margin-top:0" onclick="salvarCestaUI()">💾 Guardar links</button><button class="ghost" style="margin-top:0" onclick="limparCestaUI()">🗑 Limpar</button></div></div></div>
 <div style="margin-top:10px"><label>🏬 Vitrine ML (ofertas reais com preço+foto — sem colar nada)</label>
 <div class="hint">Folhas descobertas no perfil de afiliado. Amarre cada folha a uma categoria 1 vez → o piloto usa sozinho.</div>
 <div id="vitrineout" style="font-size:13px">carregando vitrine…</div></div>
 </div>
-<div class="panel" style="border-color:#53bdeb">
-<label><span id="tit-monitor">📡 Monitor</span> — cada grupo de origem encaminha para os SEUS destinos <a href="#" onclick="renomearCard('monitor');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
+<div class="panel ac-monitor">
+<div class="panel-head"><span><b id="tit-monitor">📡 Monitor</b> — cada grupo de origem encaminha para os SEUS destinos</span><a class="lk-mini" href="#" onclick="renomearCard('monitor');return false">✏️ renomear</a></div>
 <div class="hint">Oferta publicada numa <b>origem</b> (grupo de achadinhos que você monitora) tem o link trocado pelo <b>seu</b> e é reenviada <b>apenas</b> para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.</div>
 
 <div class="mrow">
@@ -835,11 +941,11 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
 
 <div class="mbox">
-<label><span id="tit-numeros">📱 Números</span> para envio rotativo <span class="mini" id="minstmax"></span> <a href="#" onclick="renomearCard('numeros');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
+<div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
 <div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
 <div id="minstlist" class="mini">carregando…</div>
 <div style="display:flex;gap:6px;margin-top:8px">
-<input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
 <button class="mbtn" onclick="addInstancia()">➕ Adicionar celular</button></div>
 <div id="minstqr" style="margin-top:10px"></div></div>
 
@@ -876,35 +982,35 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <button class="mbtn" onclick="limparFilaUI()">🗑 Esvaziar fila</button>
 <span class="mini" id="mresetout" style="align-self:center"></span></div>
 <div class="grid2" style="margin-top:8px">
-<div><label>Testar reconhecimento (cole a mensagem recebida)</label><textarea id="mteste" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Cole aqui uma mensagem com link de afiliado..."></textarea>
+<div><label>Testar reconhecimento (cole a mensagem recebida)</label><textarea id="mteste" rows="3" style="width:100%;" placeholder="Cole aqui uma mensagem com link de afiliado..."></textarea>
 <div style="display:flex;gap:8px;margin-top:6px"><select id="mtesteorigem" style="flex:1"><option value="">primeira origem das regras</option></select><button class="mbtn ok" onclick="testarMonitor()">🧪 Testar</button></div>
 <pre id="mtesteout"></pre></div>
 <div><label>Últimos eventos do monitor</label><pre id="meventos" style="max-height:220px"></pre></div></div>
 </div>
 
-<div class="panel" style="border-color:#f9a825">
-<label><span id="tit-clientes">👥 Clientes</span> <a href="#" onclick="renomearCard('clientes');return false" style="color:#53bdeb;font-size:12px">✏️ renomear</a></label>
+<div class="panel ac-clientes">
+<div class="panel-head"><span><b id="tit-clientes">👥 Clientes</b></span><a class="lk-mini" href="#" onclick="renomearCard('clientes');return false">✏️ renomear</a></div>
 <div class="hint">Contatos puxados dos <b>grupos do seu celular</b> + cadastro manual. Selecione e dispare uma propaganda <b>individual</b> (não é grupo). A fila envia 1 por vez para não parecer robô.</div>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
 <button class="mbtn ok" onclick="syncClientes()">🔄 Puxar contatos dos grupos</button>
 <span class="mini" id="clisync"></span></div>
 <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-<input id="clinome" placeholder="nome (ex.: João)" style="flex:1;min-width:130px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
-<input id="clifone" placeholder="telefone com DDD" style="flex:1;min-width:130px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<input id="clinome" placeholder="nome (ex.: João)" style="flex:1;min-width:130px;">
+<input id="clifone" placeholder="telefone com DDD" style="flex:1;min-width:130px;">
 <button class="mbtn" onclick="addContato()">➕ Contato</button></div>
 <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-<input id="clibusca" placeholder="buscar por nome ou telefone" oninput="renderContatos()" style="flex:1;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<input id="clibusca" placeholder="buscar por nome ou telefone" oninput="renderContatos()" style="flex:1;">
 <span class="mini" id="clicount" style="white-space:nowrap"></span></div>
 <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
 <button class="mbtn" onclick="marcarTodos(true)">☑ Todos</button>
 <button class="mbtn" onclick="marcarTodos(false)">☐ Limpar</button>
 <button class="mbtn ok" onclick="salvarLista()">💾 Salvar selecionados como lista</button></div>
-<div id="clilist" style="max-height:240px;overflow:auto;border:1px solid #2a3942;border-radius:10px;padding:4px;margin-top:8px"></div>
+<div id="clilist" style="max-height:240px;overflow:auto;border:1px solid var(--border-strong);border-radius:10px;padding:4px;margin-top:8px"></div>
 <div id="clilistas" style="margin-top:10px;font-size:13px"></div>
 <div class="mbox" style="margin-top:10px">
 <label>✉️ Propaganda para a seleção</label>
-<textarea id="clitexto" rows="3" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px" placeholder="Texto da propaganda (pode colar o link no meio)…"></textarea>
-<input id="cliimagem" placeholder="URL da imagem (opcional)" style="width:100%;margin-top:6px;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px">
+<textarea id="clitexto" rows="3" style="width:100%;" placeholder="Texto da propaganda (pode colar o link no meio)…"></textarea>
+<input id="cliimagem" placeholder="URL da imagem (opcional)" style="width:100%;margin-top:6px;">
 <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
 <button class="buscar" style="margin-top:0;width:auto" onclick="dispararClientes()">🚀 Disparar</button>
 <button class="mbtn" onclick="limparFilaClientesUI()">🗑 Cancelar fila</button>
@@ -976,7 +1082,7 @@ async function carregarContas(){
   const opts=d.contas.map(c=>\`<option value="\${c.nome}">\${c.nome} (\${c.tagMask})\${c.padrao?' ★':''}</option>\`).join('');
   $('paconta').innerHTML=opts;
   $('mapconta').innerHTML='<option value="-">Padrão</option>'+opts;
-  $('contasout').innerHTML=d.contas.map(c=>\`\${c.padrao?'★':'•'} <b>\${c.nome}</b> <small>\${c.tagMask}</small> <a href="#" style="color:#53bdeb" onclick="tornarPadrao('\${c.nome}');return false">tornar padrão</a>\`).join('<br>')||'Nenhuma conta — usando .env.';
+  $('contasout').innerHTML=d.contas.map(c=>\`\${c.padrao?'★':'•'} <b>\${c.nome}</b> <small>\${c.tagMask}</small> <a href="#" class="lk-mini" onclick="tornarPadrao('\${c.nome}');return false">tornar padrão</a>\`).join('<br>')||'Nenhuma conta — usando .env.';
   if(d.mapa&&d.mapa[$('mapcat').value]){const m=d.mapa[$('mapcat').value];$('mapconta').value=m.conta||'-';if(m.grupo)$('mapgrupo').value=m.grupo;if(m.sub)window._mapsub=m.sub;}
   carregarGrupos();carregarSubs('mapcat','mapsub',true);carregarSubs('pacat','pasub',false);
 }
@@ -1008,7 +1114,7 @@ async function atualizarPiloto(){
     const n=(s.loops||[]).length;
     let html=n? '' : '⚪ nenhum loop — monte acima e aperte START.';
     (s.loops||[]).forEach(function(l){
-      html+='<div style="border:1px solid #2a3942;border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px">'
+      html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px">'
         +'<b>#'+l.id+'</b> '+l.conta+' → '+l.category+' → '+String(l.grupo).slice(0,20)+'… '
         +'• enviadas: <b>'+l.enviadas+'</b>'
         +(l.ultimaMsg?' • última: '+horaLocal(l.ultimaMsg):'')
@@ -1155,7 +1261,7 @@ async function carregarInstancias(){
       acoes+='<button class="mbtn" onclick="instAtivo(\\''+i.instancia+'\\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
       acoes+='<button class="mbtn" onclick="instPeso(\\''+i.instancia+'\\','+i.peso+')">peso</button>';
       acoes+='<button class="mbtn" onclick="instRemover(\\''+i.instancia+'\\')">🗑</button>';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #1f2c33">'+
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">'+
         '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+i.peso+' · '+i.enviadas+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
         '<span style="display:flex;gap:4px;flex-wrap:wrap">'+acoes+'</span></div>';
     }).join('');
@@ -1197,6 +1303,26 @@ async function instRemover(inst){
   if(r.erro)return alert(r.erro);
   carregarInstancias();
 }
+(function(){
+  var raiz=document.documentElement;
+  var sws=document.querySelectorAll('.swatch');
+  var validas={verde:1,azul:1,laranja:1,vermelho:1};
+  function aplicar(p){
+    if(!validas[p])p='verde';
+    raiz.setAttribute('data-paleta',p);
+    for(var i=0;i<sws.length;i++){
+      var b=sws[i];
+      b.setAttribute('aria-pressed', b.getAttribute('data-p')===p ? 'true' : 'false');
+    }
+    try{localStorage.setItem('paleta',p);}catch(e){}
+  }
+  var salva='verde';
+  try{salva=localStorage.getItem('paleta')||'verde';}catch(e){}
+  aplicar(salva);
+  for(var j=0;j<sws.length;j++){
+    sws[j].addEventListener('click',function(){aplicar(this.getAttribute('data-p'));});
+  }
+})();
 // ---------- TITULOS DOS CARDS ----------
 async function carregarTitulos(){
   try{
@@ -1248,7 +1374,7 @@ function renderContatos(){
   }
   $('clilist').innerHTML=cap.map(function(c){
     const nome=c.nome||telFmt(c.telefone);
-    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #1f2c33">'
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--border)">'
       +'<input type="checkbox" data-sel="'+c.jid+'"'+(SELECAO.has(c.jid)?' checked':'')+'>'
       +'<span style="flex:1;font-size:13px">'+esc(nome)+(c.nome?(' <span class="mini">'+esc(telFmt(c.telefone))+'</span>'):'')
       +(c.origem?('<br><span class="mini">'+esc(String(c.origem).slice(0,42))+'</span>'):'')+'</span>'
@@ -1260,7 +1386,7 @@ function renderListas(){
   const ls=CLIENTES.listas||[];
   if(!ls.length){$('clilistas').innerHTML='<span class="mini">nenhuma lista salva</span>';return;}
   $('clilistas').innerHTML='<label>📋 Listas salvas</label>'+ls.map(function(l){
-    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1f2c33">'
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<span style="flex:1">'+esc(l.nome)+' <span class="mini">'+l.contatos.length+' contato(s)</span></span>'
       +'<button class="mbtn" data-act="sell" data-jid="'+l.id+'">selecionar</button>'
       +'<button class="mbtn" data-act="dell" data-jid="'+l.id+'">🗑</button></div>';
@@ -1392,13 +1518,13 @@ async function carregarGruposSelects(forcar){
   $('mgruposinfo').textContent='buscando grupos…';
   try{
     const d=await (await fetch('/api/monitor/whats-grupos'+(forcar?'?forcar=1':''))).json();
-    if(!d.ok){$('mgruposinfo').innerHTML='<span style="color:#f8806a">'+(d.erro||'erro')+'</span>';return;}
+    if(!d.ok){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">'+(d.erro||'erro')+'</span>';return;}
     window.__wgrupos=d.grupos||[];
     const opts=window.__wgrupos.map(function(g){return '<option value="'+esc(g.jid)+'">'+esc(g.nome)+(g.tamanho!=null?' ('+g.tamanho+')':'')+'</option>';}).join('');
     $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
     $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
     $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados';
-  }catch(e){$('mgruposinfo').innerHTML='<span style="color:#f8806a">erro: '+e.message+'</span>';}
+  }catch(e){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+e.message+'</span>';}
 }
 async function adicionarRegraUI(){
   const o=$('mselOrigem'), dd=$('mselDestino');

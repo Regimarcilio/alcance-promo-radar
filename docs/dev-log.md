@@ -497,3 +497,37 @@ entradas `@lid` sem `phoneNumber` são ignoradas).
 - `<script>` servido validado com `node --check` (pegadinha do `\n`/`\'` dentro do template
   literal corrigida antes do deploy).
 - Monitor segue saudável (`autoEnviar:true`, `fila:0`); piloto religado (loop #2, 2/ciclo a 60s).
+
+---
+
+## 2026-10-19 | E6-UI-01 | Tema claro + 4 paletas no topo (redesign CSS)
+
+**Pedido**: retrabalhar estilo da página — sair do modo escuro, usar círculo no topo para escolher
+entre **verde, azul, laranja e vermelho**, montar paleta moderna e trabalhar grids/cards.
+
+**Execução**: desenho do sistema visual com o agente `stylemaster` (nível ESSENCIAL/INTERMEDIÁRIO).
+Na leitura do arquivo ele apontou um bug latente: `color:var(--mut)` no `#cuponsml` apontava para
+variável inexistente — resolvido com alias `--mut` no `:root`.
+
+**Entregue**:
+- CSS todo reescrito em tema claro com tokens (`--surface`, `--border`, `--shadow-sm/md`,
+  `--radius*`), `color-scheme:light` e fontes 100% system stack.
+- **Semânticos separados da marca**: alertas (`pare/warn/ok`), status (`live/mock`) e preço
+  (`.por`) têm tokens fixos — trocar a paleta não repinta um erro nem um aviso.
+- 4 paletas via `[data-paleta]` no `<html>`: verde `#047857`, azul `#2563eb`, laranja `#c2410c`,
+  vermelho `#d02626` — todas com branco a ≥5.1:1 (AA) e anel de foco próprio.
+- `.paleta-bar` com 4 `.swatch` (<button> com `aria-label`/`aria-pressed`, anel + ✓ no ativo),
+  script anti-flash no topo do body e persistência em `localStorage['paleta']` (`aplicar()`
+  valida contra whitelist).
+- Grids: `.grid2` empilha em ≤700px, `.grid4` vira 2 colunas, `.cards` em `minmax(260px)`;
+  cards da vitrine com hover (sombra + `translateY`), `.noimg` com gradiente claro.
+- Painéis com faixa de seção de 3px (`.ac-piloto`/`.ac-monitor`/`.ac-clientes`) substituindo os
+  inline `border-color` escuros; títulos dos 4 cards viraram `.panel-head` com "✏️ renomear" à direita.
+- Limpeza: 9 inline styles escuros em inputs/textarea removidos; `#1f2c33`→`var(--border)`,
+  `#2a3942`→`var(--border-strong)`, `#f8806a`→`var(--danger-tx)`, links `#53bdeb`→`.lk-mini`;
+  `prefers-reduced-motion` desliga transições.
+
+**Provas** (prints em `docs/prints/`): `pal-verde/azul/laranja/vermelho.png`, `tema-mobile.png`
+(390px) e `tema-live-completo.png` (página real em 8099 já populada pela API). Os 2 `<script>`
+servidos passam em `node --check`; `data-paleta="verde"` + 4 swatches no HTML; zero cores escuras
+residuais no fonte.
