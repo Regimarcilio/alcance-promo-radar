@@ -367,3 +367,25 @@ publicar só o que interessa ao grupo.
 - Loop com `filtro:"zzzznaoexiste"` e 1 item na cesta -> `enviadas: 0` e
   `#1 filtro "zzzznaoexiste" não encontrou nada nesta volta — aguardando.`
 - `loop.filtro` aparece salvo no status; cesta de teste removida depois.
+
+---
+
+## 2026-10-19 | E6-MONITOR-12 | master | Dispatch: retry em erro transitório da Evolution
+
+**Sintoma**: `#1 falha em MLB-6642966774 (Evolution sendMedia 500 ...), tentando próximo.`
+
+**Diagnóstico** (não era a imagem): no mesmo horário a Evolution registrou **51 `Connection Closed`
+/ `Precondition Required` entre 10:04 e 10:09**, e o estado da instância ficou `open` desde então.
+- `connectionState` = `open` e estável (3 leituras); `disconnectionReasonCode: 401` é **evento velho**
+  de 17/10 (`disconnectionObject.date = 2026-10-17T04:15:56Z`), não a causa.
+- Container da Evolution **baixa** `http2.mlstatic.com` (HTTP 200) → não é rede/imagem.
+- `sendMedia` para o grupo de TESTE com a mesma imagem → **200** (`3EB039C76C6096E76E66F8`).
+- Ou seja: **surto transitório** de conexão do WhatsApp; o item era descartado no meio.
+
+**Feito** (`src/wa/dispatch.ts`): `comRetry()` com backoff (2s, 4s) só para erro transitório
+(`5xx`, `Connection Closed`, `Precondition Required`, `ECONNRESET/REFUSED/TIMEDOUT`, `fetch failed`,
+`socket hang up`). Aplicado em `sendText` e `sendMedia`. Erro definitivo (4xx) falha na hora.
+
+**Provas**:
+- `EVO_URL` inalcançável → `repetindo em 2s (2/3)`, `repetindo em 4s (3/3)`, desiste em **6.3s**.
+- Envio real de mídia no grupo de teste após a mudança → `OK: 3EB0B52944B66330600CB5`.

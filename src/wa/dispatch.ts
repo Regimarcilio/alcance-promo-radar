@@ -14,6 +14,36 @@ function arquivoLocal(p: string): boolean {
   }
 }
 
+/** Erro de rede/conexão (vale repetir)? 5xx, "Connection Closed", socket, timeout. */
+function transitorio(msg: string): boolean {
+  return /Evolution (sendMedia|sendText)?\s*5\d\d|Connection Closed|Precondition Required|ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|socket hang up|terminated|other side closed/i.test(
+    msg
+  );
+}
+
+/**
+ * Repete só erros TRANSITÓRIOS (WhatsApp/Evolution cai e volta em segundos).
+ * Um 500 isolado não deve custar a oferta do ciclo.
+ */
+async function comRetry<T>(fn: () => Promise<T>, tentativas = 3): Promise<T> {
+  let ultimo: any;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      ultimo = e;
+      const msg = String(e?.message ?? e);
+      if (i === tentativas - 1 || !transitorio(msg)) throw e;
+      const espera = 2000 * (i + 1); // 2s, 4s
+      console.log(
+        `[dispatch] erro transitório (${msg.slice(0, 80)}) — repetindo em ${espera / 1000}s (${i + 2}/${tentativas})`
+      );
+      await new Promise((r) => setTimeout(r, espera));
+    }
+  }
+  throw ultimo;
+}
+
 export async function enviarParaGrupo(args: {
   grupo: string;
   imagem: string;
@@ -35,15 +65,18 @@ export async function enviarParaGrupo(args: {
     args.imagem.startsWith("data:") ||
     arquivoLocal(args.imagem);
   if (temFoto) return enviarMidia({ ...args, mediatype: "image" });
-  const res = await fetch(`${evoUrl}/message/sendText/${instance}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: evoKey },
-    // linkPreview: tenta o cartão com foto do link (se o ML permitir a leitura)
-    body: JSON.stringify({ number: args.grupo, text: args.legenda, linkPreview: true }),
+  return comRetry(async () => {
+    const res = await fetch(`${evoUrl}/message/sendText/${instance}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evoKey },
+      // linkPreview: tenta o cartão com foto do link (se o ML permitir a leitura)
+      body: JSON.stringify({ number: args.grupo, text: args.legenda, linkPreview: true }),
+    });
+    const body = await res.text();
+    if (!res.ok) throw new Error(`Evolution sendText ${res.status}: ${body.slice(0, 300)}`);
+    const json: any = JSON.parse(body);
+    return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
   });
-  if (!res.ok) throw new Error(`Evolution ${res.status}: ${await res.text()}`);
-  const json: any = await res.json();
-  return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
 }
 
 /**
@@ -78,23 +111,25 @@ export async function enviarMidia(args: {
   } else if (!/^https?:\/\//.test(args.imagem) && !args.imagem.startsWith("data:")) {
     mimetype = mimetype ?? "image/jpeg";
   }
-  const res = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: evoKey },
-    body: JSON.stringify({
-      number: args.grupo,
-      mediatype: args.mediatype ?? "image",
-      ...(mimetype ? { mimetype } : {}),
-      caption: args.legenda,
-      media,
-    }),
+  return comRetry(async () => {
+    const res = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evoKey },
+      body: JSON.stringify({
+        number: args.grupo,
+        mediatype: args.mediatype ?? "image",
+        ...(mimetype ? { mimetype } : {}),
+        caption: args.legenda,
+        media,
+      }),
+    });
+    const body = await res.text();
+    if (!res.ok) throw new Error(`Evolution sendMedia ${res.status}: ${body.slice(0, 300)}`);
+    try {
+      const json: any = JSON.parse(body);
+      return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
+    } catch {
+      return { messageId: `midia-${Date.now()}`, dryRun: false };
+    }
   });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`Evolution sendMedia ${res.status}: ${body.slice(0, 300)}`);
-  try {
-    const json: any = JSON.parse(body);
-    return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
-  } catch {
-    return { messageId: `midia-${Date.now()}`, dryRun: false };
-  }
 }
