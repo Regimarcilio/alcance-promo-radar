@@ -49,6 +49,8 @@ export interface PilotoCfg {
   sub?: string; // subcategoria (folha ML); vazio = categoria inteira
   qtd?: number; // postagens por ciclo: 1 ou 2 (default 2)
   intervaloS?: number; // segundos entre elas: 45–90 (default 60, ±10s humano)
+  /** Palavra(s) que o título PRECISA conter (ex.: "perfume"). Vazio = sem filtro. */
+  filtro?: string;
 }
 
 export interface LoopState extends PilotoCfg {
@@ -74,10 +76,20 @@ const timers = new Map<number, NodeJS.Timeout>();
 function blankLoop(): LoopState {
   return {
     id: 0, conta: "", category: "MLB3937", grupo: "",
+    sub: "", filtro: "",
     minMin: CICLO_MIN, maxMin: CICLO_MIN, rodando: false,
     iniciadaEm: null, ultimaMsg: null, proximaEm: null, enviadas: 0,
     cicloInicio: null,
   };
+}
+
+/** Normaliza para casar filtro × título (sem acento, minúsculo). */
+function normalizarFiltro(s: string): string {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function embaralhar<T>(arr: T[]): T[] {
@@ -335,7 +347,7 @@ async function tick(id: number): Promise<void> {
     const sorts = ["relevance", "lowest_price", "highest_price"];
     const sort = sorts[(loop.giro ?? 1) % 3];
     const { candidatos, mock } = await hunt({
-      category: loop.category, q: "", descontoMin: 0, soComCupom: false, teto: 1e9, limite: 20,
+      category: loop.category, q: (loop.filtro ?? "").trim(), descontoMin: 0, soComCupom: false, teto: 1e9, limite: 20,
       sub: loop.sub ?? "", offset: giro * 18, sort,
     });
     let fonte = "";
@@ -401,6 +413,22 @@ async function tick(id: number): Promise<void> {
       log(`${tag} flexibilizando quarentena: usando o tipo mais antigo em vez de parar.`);
     }
     lista = [...frescos, ...esfriando];
+    // Filtro por palavra: vale para TODAS as fontes (caça, vitrine, cesta).
+    // Se a palavra não casar com nada, NÃO envia fora do escopo — só aguarda.
+    const filtro = (loop.filtro ?? "").trim();
+    if (filtro) {
+      const palavras = normalizarFiltro(filtro).split(/\s+/).filter(Boolean);
+      const casam = lista.filter((op) => {
+        const t = normalizarFiltro(op.titulo);
+        return palavras.every((w) => t.includes(w));
+      });
+      if (casam.length === 0) {
+        log(`${tag} filtro "${filtro}" não encontrou nada nesta volta — aguardando.`);
+        agendar(loop);
+        return;
+      }
+      lista = casam;
+    }
     if (lista.length === 0) {
       // sem candidatos em nenhuma fonte — único caso em que aguarda
       log(`${tag} sem candidatos em nenhuma fonte — aguardando próxima volta.`);
@@ -577,13 +605,14 @@ export function start(cfg: PilotoCfg, agora = false): LoopState {
     ...blankLoop(), id,
     conta: cfg.conta, category: cfg.category, grupo: cfg.grupo,
     sub: cfg.sub ?? "",
+    filtro: (cfg.filtro ?? "").trim(),
     qtd: cfg.qtd === 1 ? 1 : 2,
     intervaloS: Math.min(90, Math.max(45, cfg.intervaloS ?? 60)),
     minMin: cfg.minMin || 2, maxMin: cfg.maxMin || 2,
     rodando: true, iniciadaEm: new Date().toISOString(),
   };
   s.loops.push(loop);
-  log(`#${id} ▶️ START etiqueta=${loop.conta || "(mapa)"} categoria=${loop.category} grupo=${loop.grupo} ${loop.qtd}x a cada 5min / ${loop.intervaloS}s entre elas (${ativos.length + 1}/${MAX_LOOPS})`);
+  log(`#${id} ▶️ START etiqueta=${loop.conta || "(mapa)"} categoria=${loop.category}${loop.sub ? `/${loop.sub}` : ""} grupo=${loop.grupo} ${loop.qtd}x a cada 5min / ${loop.intervaloS}s entre elas${loop.filtro ? ` · filtro "${loop.filtro}"` : ""} (${ativos.length + 1}/${MAX_LOOPS})`);
   const esperaMs = agora ? 2000 : entre(loop.minMin, loop.maxMin) * 60000;
   loop.proximaEm = new Date(Date.now() + esperaMs).toISOString();
   salvar();

@@ -83,7 +83,7 @@ const server = createServer(async (req, res) => {
     try {
       const b = JSON.parse(await lerCorpo(req));
       const loop = pilotoStart(
-        { conta: b.conta ?? "", category: b.category ?? "", grupo: b.grupo ?? "", sub: b.sub ?? "", qtd: b.qtd ?? 2, intervaloS: b.intervaloS ?? 60, minMin: 5, maxMin: 5 },
+        { conta: b.conta ?? "", category: b.category ?? "", grupo: b.grupo ?? "", sub: b.sub ?? "", qtd: b.qtd ?? 2, intervaloS: b.intervaloS ?? 60, filtro: String(b.filtro ?? "").trim(), minMin: 5, maxMin: 5 },
         true
       );
       json(200, { ok: true, loop, ...pilotoStatus() });
@@ -652,6 +652,7 @@ pre{background:#000;border-radius:10px;padding:10px;font-size:11.5px;white-space
 <div class="grid4" style="margin-top:8px">
 <div><label>Postagens por ciclo</label><select id="paqtd"><option value="2">2 por ciclo</option><option value="1">1 por ciclo</option></select></div>
 <div><label>Intervalo entre elas</label><select id="pagap"><option value="45">45s</option><option value="60" selected>1 min</option><option value="90">1:30 min</option></select></div>
+<div><label>Filtro por palavra (opcional)</label><input id="pafiltro" placeholder="ex.: perfume" maxlength="60" style="width:100%;background:#0b141a;border:1px solid #2a3942;color:#e9edef;border-radius:10px;padding:8px"></div>
 </div>
 <div style="display:flex;gap:8px;margin-top:8px"><button class="buscar" style="margin-top:0;flex:1" onclick="pilotoStart()">▶ START</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ STOP TUDO</button></div>
 <div id="pstatus" style="margin-top:8px;font-size:13px"></div>
@@ -801,7 +802,7 @@ async function atualizarPiloto(){
   }catch(e){/* api acordando */}
 }
 async function pilotoStart(){
-  const r=await (await fetch('/api/piloto/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:$('paconta').value,category:$('pacat').value,grupo:$('pagrupo').value,sub:$('pasub').value,qtd:Number($('paqtd').value),intervaloS:Number($('pagap').value)})})).json();
+  const r=await (await fetch('/api/piloto/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:$('paconta').value,category:$('pacat').value,grupo:$('pagrupo').value,sub:$('pasub').value,qtd:Number($('paqtd').value),intervaloS:Number($('pagap').value),filtro:($('pafiltro')?$('pafiltro').value:'')})})).json();
   if(r.erro)return alert(r.erro);
   alert('Loop #'+r.loop.id+' ligado! Primeiras mensagens em segundos, depois 2 a cada 5 min (pausa 8 min/hora).');
   atualizarPiloto();carregarCesta();

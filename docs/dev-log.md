@@ -343,3 +343,27 @@ Religar um perfil = `POST /api/piloto/start` com `{conta, category, grupo, sub, 
 
 **Provas**: logs com o ⏸ e `loops[].rodando=false` no arquivo; após religar,
 `id 1 · enviadas 1 · ultimaMsg 15:38:14Z` e `✅ [caça LIVE|principal] ... id=3EB0D540F8486D5006DA92`.
+
+---
+
+## 2026-10-19 | E6-MONITOR-11 | master | Piloto: filtro por palavra no loop
+
+**Pedido**: um campo de filtro por palavra ao lado de "Intervalo entre elas", para o loop
+publicar só o que interessa ao grupo.
+
+**Feito**:
+- `PilotoCfg.filtro` + `LoopState.filtro` (persistido no `piloto.json`).
+- `start()` copia o filtro (antes montava o loop com lista explícita e **descartava**).
+- `hunt({ q: filtro })`: a palavra também entra na **busca** do ML (não só no pós-filtro).
+- Pós-filtro no título vale para TODAS as fontes (caça, vitrine, cesta): normaliza acento/caixa
+  e exige **todas** as palavras (AND). Sem casar nada -> `filtro "X" não encontrou nada` e aguarda;
+  nunca envia fora do escopo.
+- UI (painel ⚙ Automático): input "Filtro por palavra (opcional)" ao lado de "Intervalo entre elas";
+  `POST /api/piloto/start` aceita `filtro`; o START loga `· filtro "..."`.
+
+**Provas**:
+- `hunt` com `q="perfume"` -> 18 itens de perfume; `q="air fryer"` na categoria de perfumes -> 3 itens
+  (e o pós-filtro derrubaria o relógio que veio junto).
+- Loop com `filtro:"zzzznaoexiste"` e 1 item na cesta -> `enviadas: 0` e
+  `#1 filtro "zzzznaoexiste" não encontrou nada nesta volta — aguardando.`
+- `loop.filtro` aparece salvo no status; cesta de teste removida depois.
