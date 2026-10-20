@@ -40,12 +40,35 @@ import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
 } from "../wa/rotacao.js";
+import {
+  autenticar, auditar, checarLimite, configurarAuth, cookieExpirado, cookieSessao,
+  criarSessao, encerrarSessao, HashOcupadoError, iguais, iniciarLimpezaAuth, ipDoRequest,
+  limparLimite, registrarTentativa, sessaoDoRequest, validarConfigAuth, type Usuario,
+} from "./auth.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dataDir = join(root, "data");
 const cacheFile = join(dataDir, "ultima-busca.json");
 const CATS = catsJson as { id: string; name: string }[];
 const PORT = Number(process.env.MANAGER_PORT ?? 8091);
+
+configurarAuth(dataDir);
+try {
+  validarConfigAuth();
+} catch (e: any) {
+  console.error("[auth] " + String(e?.message ?? e));
+  process.exit(1);
+}
+if ((process.env.WEBHOOK_KEY?.trim() ?? "").length < 16) {
+  console.error(
+    "[auth] WEBHOOK_KEY ausente/curto (<16). O webhook ficaria aberto; configure no .env.",
+  );
+  process.exit(1);
+}
+iniciarLimpezaAuth();
+
+// Login lido de src/ (o Dockerfile copia src; tsc não copia HTML para dist).
+const LOGIN_HTML = readFileSync(join(root, "src", "manager", "login.html"), "utf8");
 
 function salvarBusca(items: Oportunidade[]): void {
   mkdirSync(dataDir, { recursive: true });
@@ -64,24 +87,160 @@ let cacheGrupos: { em: number; dados: any[] } | null = null;
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
-  const json = (code: number, obj: unknown) => {
-    res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
+  const metodo = req.method ?? "GET";
+  const json = (code: number, obj: unknown, headers: Record<string, string> = {}) => {
+    res.writeHead(code, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...headers,
+    });
     res.end(JSON.stringify(obj));
   };
-  // Trava opcional: se MANAGER_KEY definida no .env, POSTs exigem o header.
-  // GETs (leitura) seguem abertos na rede local.
-  // Exceção: /api/webhook/evolution usa WEBHOOK_KEY (validado na própria rota),
-  // pois o Evolution não envia X-Manager-Key.
-  const MKEY = process.env.MANAGER_KEY?.trim() || "";
-  const ehWebhook = url.pathname === "/api/webhook/evolution";
-  if (req.method === "POST" && MKEY && !ehWebhook && req.headers["x-manager-key"] !== MKEY) {
-    json(401, { erro: "MANAGER_KEY inválida." });
+  const html = (code: number, body: string, headers: Record<string, string> = {}) => {
+    res.writeHead(code, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...headers,
+    });
+    res.end(body);
+  };
+
+  // Cabeçalhos de segurança em toda resposta (inclusive login/redirect).
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+  );
+
+  const caminho = url.pathname;
+  const ip = ipDoRequest(req);
+  const ua = String(req.headers["user-agent"] ?? "");
+  const ehWebhook = caminho === "/api/webhook/evolution";
+
+  // CSRF de borda: navegador manda Origin; exige mesmo host. Webhook é S2S.
+  if (metodo !== "GET" && !ehWebhook && !origemPermitida(req)) {
+    auditar("origem_invalida", { ip, ua, detalhe: caminho });
+    json(403, { erro: "origem inválida" });
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(PAGINA);
+  // ---------- rotas públicas ----------
+  if (metodo === "GET" && (caminho === "/" || caminho === "/login")) {
+    const sessao = sessaoDoRequest(req);
+    if (caminho === "/login") {
+      if (sessao) {
+        res.writeHead(302, { Location: "/", "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      html(200, LOGIN_HTML);
+      return;
+    }
+    if (!sessao) {
+      res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" });
+      res.end();
+      return;
+    }
+    html(200, PAGINA);
+    return;
+  }
+
+  if (metodo === "POST" && caminho === "/api/auth/login") {
+    const limite = checarLimite(ip);
+    if (!limite.ok) {
+      auditar("rate_limited", { ip, ua });
+      json(429, { erro: "Muitas tentativas. Aguarde e tente novamente." }, {
+        "Retry-After": String(limite.retryAfter),
+      });
+      return;
+    }
+    let corpo: any;
+    try {
+      const tipo = String(req.headers["content-type"] ?? "");
+      if (!tipo.toLowerCase().includes("application/json")) {
+        json(415, { erro: "content-type deve ser application/json" });
+        return;
+      }
+      corpo = JSON.parse(await lerCorpo(req, 64 * 1024));
+    } catch {
+      json(400, { erro: "corpo inválido" });
+      return;
+    }
+    const nome = typeof corpo?.usuario === "string" ? corpo.usuario.trim() : "";
+    const senha = typeof corpo?.senha === "string" ? corpo.senha : "";
+    if (!nome || !senha) {
+      json(400, { erro: "informe usuário e senha" });
+      return;
+    }
+    if (nome.length > 256 || senha.length > 1024) {
+      json(400, { erro: "credenciais inválidas" });
+      return;
+    }
+    registrarTentativa(ip);
+    let usuario: Usuario | null = null;
+    try {
+      usuario = await autenticar(nome, senha);
+    } catch (e) {
+      if (e instanceof HashOcupadoError) {
+        json(503, { erro: "Sistema ocupado. Tente em instantes." }, { "Retry-After": "1" });
+        return;
+      }
+      throw e;
+    }
+    if (!usuario) {
+      auditar("login_falha", { usuario: nome, ip, ua });
+      json(401, { erro: "usuário ou senha inválidos" });
+      return;
+    }
+    limparLimite(ip);
+    const sessao = criarSessao(usuario, ip, ua);
+    auditar("login_ok", { usuario: usuario.usuario, ip, ua });
+    json(200, {
+      ok: true,
+      usuario: { nome: usuario.usuario, papel: usuario.papel },
+    }, { "Set-Cookie": cookieSessao(sessao.valor, sessao.maxAge) });
+    return;
+  }
+
+  if (metodo === "POST" && caminho === "/api/auth/logout") {
+    const sessao = sessaoDoRequest(req);
+    if (sessao) {
+      encerrarSessao(sessao.sid);
+      auditar("logout", { usuario: sessao.usuario.usuario, ip, ua });
+    }
+    json(200, { ok: true }, { "Set-Cookie": cookieExpirado() });
+    return;
+  }
+
+  if (metodo === "GET" && caminho === "/api/auth/me") {
+    const sessao = sessaoDoRequest(req);
+    if (!sessao) {
+      json(401, { erro: "não autenticado" });
+      return;
+    }
+    json(200, { usuario: { nome: sessao.usuario.usuario, papel: sessao.usuario.papel } });
+    return;
+  }
+
+  // ---------- gate default-deny ----------
+  // Webhook continua fora (autentica por WEBHOOK_KEY na própria rota).
+  // MANAGER_KEY vira credencial de máquina opcional para /api/*.
+  const sessao = sessaoDoRequest(req);
+  const mkey = process.env.MANAGER_KEY?.trim() || "";
+  const headerMkey = req.headers["x-manager-key"];
+  const chaveMaquina = !!mkey && typeof headerMkey === "string" && iguais(headerMkey, mkey);
+  if (!ehWebhook && !sessao && !(caminho.startsWith("/api/") && chaveMaquina)) {
+    if (caminho.startsWith("/api/")) {
+      json(401, { erro: "não autenticado" });
+    } else {
+      json(404, { erro: "rota?" });
+    }
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/categorias") {
@@ -700,7 +859,8 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/webhook/evolution") {
     // RF-030: entrada de mensagens do Evolution API (v2/GO).
     const wkey = process.env.WEBHOOK_KEY?.trim() || "";
-    if (wkey && req.headers["x-webhook-key"] !== wkey) {
+    const headerW = req.headers["x-webhook-key"];
+    if (!wkey || typeof headerW !== "string" || !iguais(headerW, wkey)) {
       json(401, { erro: "WEBHOOK_KEY inválida." });
       return;
     }
@@ -738,16 +898,45 @@ const server = createServer(async (req, res) => {
   json(404, { erro: "rota?" });
 });
 
-function lerCorpo(req: any): Promise<string> {
-  return new Promise((resolve) => {
+function lerCorpo(req: any, max = 1024 * 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
     let b = "";
-    req.on("data", (c: any) => (b += c));
-    req.on("end", () => resolve(b));
+    let n = 0;
+    let excedeu = false;
+    req.on("data", (c: any) => {
+      if (excedeu) return;
+      n += c.length;
+      if (n > max) {
+        excedeu = true;
+        return;
+      }
+      b += c;
+    });
+    req.on("end", () => {
+      if (excedeu) reject(new Error("corpo grande"));
+      else resolve(b);
+    });
+    req.on("error", reject);
   });
+}
+
+function origemPermitida(req: any): boolean {
+  const site = req.headers?.["sec-fetch-site"];
+  if (site === "cross-site") return false;
+  const origin = req.headers?.origin;
+  if (typeof origin !== "string" || !origin) return true;
+  try {
+    const o = new URL(origin);
+    const host = String(req.headers?.host ?? "");
+    return o.host === host && (o.protocol === "http:" || o.protocol === "https:");
+  } catch {
+    return false;
+  }
 }
 
 const PAGINA = `<!DOCTYPE html><html lang="pt-BR" data-paleta="verde"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Alcance — central de ofertas que se espalham</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23047857'/%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
 <style>/* ============ PALETA ATIVA: VERDE — esmeralda + teal + lima ============ */
 :root{
   color-scheme:light;
@@ -1015,6 +1204,8 @@ body{padding:0;max-width:none;margin:0}
 .top-title{font-size:25px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin:3px 0 2px}
 .top-sub{color:var(--muted);font-size:12.5px;max-width:72ch}
 .top-live{font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--ok-soft);border:1px solid var(--ok-bd);color:var(--ok-tx);white-space:nowrap}
+.sair-btn{font-size:11px;font-weight:750;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:background .16s,border-color .16s,color .16s}
+.sair-btn:hover{border-color:var(--danger-bd);background:var(--danger-soft);color:var(--danger-tx)}
 .view{display:none}
 .view.active{display:block;animation:viewIn .18s ease}
 @keyframes viewIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
@@ -1113,6 +1304,7 @@ body{padding:0;max-width:none;margin:0}
 </div>
 </details>
 <span class="top-live" id="top-live">● monitor · —</span>
+<button type="button" class="sair-btn" id="sair" title="Encerrar sessão">Sair</button>
 </div>
 </header>
 <section class="view" id="view-contas" data-view="contas">
@@ -1322,26 +1514,20 @@ function navegar(){
 }
 window.addEventListener('hashchange',navegar);
 navegar();
-// Chave do gerenciador: se o servidor exigir (MANAGER_KEY), pede 1 vez e reusa.
+// Sessão: 401 em qualquer chamada devolve para o login.
 (function(){
   const ofetch=window.fetch.bind(window);
   window.fetch=async function(u,opt){
-    opt=opt||{};
-    if(String(opt.method||'GET').toUpperCase()!=='GET'){
-      opt.headers=Object.assign({},opt.headers,{'x-manager-key':sessionStorage.getItem('mkey')||''});
-      let r=await ofetch(u,opt);
-      if(r.status===401){
-        const k=prompt('Chave do gerenciador (MANAGER_KEY do .env):');
-        if(k===null||k==='')return r;
-        sessionStorage.setItem('mkey',k);
-        opt.headers=Object.assign({},opt.headers,{'x-manager-key':k});
-        r=await ofetch(u,opt);
-      }
-      return r;
-    }
-    return ofetch(u,opt);
+    const r=await ofetch(u,opt);
+    if(r.status===401)window.location.replace('/login');
+    return r;
   };
 })();
+const btnSair=$('sair');
+if(btnSair)btnSair.addEventListener('click',async function(){
+  try{await fetch('/api/auth/logout',{method:'POST'});}catch(e){}
+  window.location.replace('/login');
+});
 fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   $('mapcat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
   $('pacat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
@@ -1952,7 +2138,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 </script></body></html>`;
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`gerenciador em http://localhost:${PORT} (rede: substitua localhost pelo IP)`);
+  console.log(`gerenciador em http://localhost:${PORT} (porta publicada só em 127.0.0.1; LAN exige TLS)`);
   iniciarFilaWorker();
   iniciarClientesWorker();
   console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);

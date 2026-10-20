@@ -9,6 +9,7 @@
     "start": "node dist/cli.js",
     "manager": "node dist/manager/server.js",
     "manager:dev": "tsx src/manager/server.ts",
+    "auth:user": "node scripts/auth-user.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test dist/**/*.test.js"
   },

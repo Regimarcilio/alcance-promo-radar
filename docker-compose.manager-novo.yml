@@ -6,7 +6,8 @@ services:
     image: promo-radar-manager:latest
     container_name: promo_radar_manager
     ports:
-      - "${MANAGER_PORT_NOVO:-8099}:8091"
+      # Bind local até o TLS/reverse proxy estar pronto (evita senha/cookie em HTTP na LAN).
+      - "127.0.0.1:${MANAGER_PORT_NOVO:-8099}:8091"
     env_file:
       - .env
     environment:

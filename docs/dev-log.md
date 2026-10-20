@@ -900,3 +900,42 @@ implementar backend de sessão + tela escolhida.
 
 **Pendências inalteradas**: credenciais Creators API, `SHOPEE_SUBID`, rotação das sessões ML, remote git
 (P0), piloto com 0 loops (decisão do usuário).
+
+---
+
+## 2026-10-20 | E6-AUTH-02 | Login real + gate default-deny + sessão
+
+**Pedido**: implementar a autenticação com a **opção 1 — Sala de controle** aprovada. Acesso ainda indefinido
+(“Ainda não sei”): subir em **HTTP local** agora e tratar TLS/reverse proxy como etapa separada antes de LAN.
+
+**Decisões**: single `admin`; sessão **8h absoluta + 30min idle**; `MANAGER_KEY` mantida só como credencial
+machine para `/api/*`; 6 paletas compartilhando a chave `paleta`; senha em `data/auth-users.json` (0600) via
+CLI, nunca no `.env`.
+
+**Implementação**:
+- `src/manager/auth.ts`: scrypt assíncrono (`N=2^15,r=8,p=1`, salt 16B), `timingSafeEqual` sobre SHA-256,
+  hash dummy para usuário inexistente, limite de 4 hashes concorrentes; sessão `sid` 32B + HMAC-SHA256,
+  store em memória com TTL absoluto/idle, limite de 5 sessões, sweeper; cookie `alcance_sid`
+  (`HttpOnly; SameSite=Strict; Path=/`), rate-limit 5/min por IP + 30/min global, auditoria JSONL com IP /24.
+- `src/manager/server.ts`: `GET /login`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`;
+  **default-deny** em `GET /` e `/api/*`; webhook isento com `WEBHOOK_KEY`; headers CSP/COOP/CORP/nosniff/
+  frame-deny/no-store; Origin + `Sec-Fetch-Site`; body limit; `MANAGER_KEY` só machine e timing-safe.
+- `src/manager/login.html`: opção 1 adaptada (6 paletas, sem dica de demo), erro/loading/selo, `fetch` real,
+  `prefers-reduced-motion`; painel ganhou botão **Sair** e perdeu o `sessionStorage['mkey']`.
+- `scripts/auth-user.mjs` + `npm run auth:user`: cria/atualiza credencial com prompt oculto ou `AUTH_PASSWORD`.
+- `.env`: `SESSION_SECRET`, `AUTH_TTL_HORAS=8`, `AUTH_IDLE_MIN=30`, `AUTH_COOKIE_SECURE=0`.
+- `docker-compose.manager-novo.yml`: porta publicada em **`127.0.0.1:8099`** até o TLS.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **22/22** (7 novos de auth); curl no container:
+`GET /` 302→`/login`, `/api/*` 401 sem sessão, login 200 + cookie, `/api/contas` 200 com sessão, logout 200,
+401 após logout, webhook 200 com chave, 6ª tentativa errada 429 + `Retry-After`; Playwright 1440×900 e
+390×844: login/erro/sucesso/selo/painel/Sair, 6 paletas, `scrollWidth=390`, **0 erros JS** (favicon incluído).
+Deploy `promo_radar_manager` recriado; `ss` confirma `127.0.0.1:8099`.
+
+**Credencial**: admin criado com senha temporária entregue no chat; trocar com
+`AUTH_PASSWORD='...' npm run auth:user -- admin` e reiniciar o manager. Sessões são em memória (restart
+desloga todos).
+
+**Pendências**: TLS/reverse proxy antes de LAN; container non-root; retenção/rotação do `auth-audit.log`;
+rate-limit do webhook; refatorar `onclick` inline para CSP sem `unsafe-inline`; credenciais Creators API,
+`SHOPEE_SUBID`, rotação das sessões ML, remote git (P0), piloto com 0 loops.
