@@ -726,3 +726,28 @@ mensagem fica para sempre); mensagens temporárias só existem em 24h / 7 dias /
 **Efeito**: encaminhamentos (e demais mensagens) **enviados a partir de agora** somem após 7 dias para
 todos; mensagens anteriores à ativação permanecem. Vale para todas as mensagens do grupo, inclusive de
 membros. Para desligar: mesmo endpoint com `expiration: 0` (ou 86400 / 7776000 para 24h / 90 dias).
+
+---
+
+## 2026-10-20 | E6-MONITOR-20 | Envios indevidos ao grupo "Perfumes" — legado desligado (P0 fechado)
+
+**Sintoma (usuário)**: mensagens chegando no grupo de teste "Perfumes" sem nenhuma configuração de envio
+para ele no sistema novo.
+
+**Investigação**: o sistema novo está limpo — `monitor.json` tem 6 regras de origem e **todas** apontam para
+o único destino "Mano dos Achadinhos"; `piloto.json` do novo está com `loops: []`. A origem era o
+**container legado `automensagem_manager`** (projeto `autoMensagemWhats`, porta 8091, up há 4 dias — P0 da
+auditoria), que rodava um piloto próprio com **5 loops ativos** na conta "manodaspromo":
+- 3 loops → `120363000000000003@g.us` = **Perfumes** (MLB6284 ×2 e MLB278194), envios a cada ~2min;
+- 2 loops → `120363000000000004@g.us` (MLB1055, MLB3813).
+Evidência: logs do container com `→ 120363000000000003@g.us` a cada poucos minutos (último envio 08:55).
+
+**Ação**: `docker update --restart=no` + `docker stop automensagem_manager` → `Exited (137)`, sem restart
+automático. Novo manager e as duas instâncias da Evolution (`radar-piloto`, `radar-mano-da-divulgacao-cfb`)
+seguem `open` — sem impacto no monitor.
+
+**Riscos residuais**: (1) o `data/piloto.json` do projeto antigo **preserva os 5 loops** — se alguém religar
+o container, os envios voltam (recomendo limpar/arquivar o projeto antigo); (2) `data/contas.json` antigo
+guarda cookies de sessão do ML em texto puro (P1 — rotacionar/limpar); (3) grupo
+`120363000000000004@g.us` não aparece na lista das duas instâncias (é de outra conta) — os envios, porém,
+partiam do piloto legado, agora parado.
