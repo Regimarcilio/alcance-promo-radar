@@ -9,7 +9,7 @@ import { converterLink } from "../ml/provider.js";
 import { resolverProdutoML, type DadosProduto } from "./produto.js";
 import { extrairId, type LinkDetectado } from "./parser.js";
 import { expandirCurtoAmazon } from "./curtos.js";
-import { resolverProdutoAmazon } from "./amazon-api.js";
+import { resolverProdutoAmazon, resolverImagemAmazon } from "./amazon-api.js";
 
 export interface ResultadoTransformacao {
   url: string;
@@ -141,6 +141,14 @@ export async function transformar(
             imagem: dados.imagem,
             urlFinal: alvo,
           };
+        } else {
+          // Sem Creators API (ou falha): imagem pelo CDN via ASIN — assim o
+          // repasse sai com foto em vez de "sem foto"; título fica p/ quando
+          // a API for liberada (o texto da origem já traz o nome).
+          const imagem = await resolverImagemAmazon(asin);
+          if (imagem) {
+            produto = { id: asin, ids: [asin], titulo: null, imagem, urlFinal: alvo };
+          }
         }
       }
       if (tag) return { url, ok: true, produto };

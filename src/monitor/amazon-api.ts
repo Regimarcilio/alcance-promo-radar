@@ -34,6 +34,28 @@ export interface DadosAmazonApi {
 
 let cacheToken: { token: string; expiraEm: number } | null = null;
 
+/** Padrões do CDN de imagem principal do anúncio (slot 01 = foto principal). */
+const IMAGEM_PADROES = ["01._SCLZZZZZZZ_SX500_.jpg", "01._SCLZZZZZZZ_.jpg"];
+
+/**
+ * Imagem principal do anúncio montada pelo padrão do CDN da Amazon.
+ * Fallback enquanto a Creators API não está liberada (sem API, sem scrape).
+ * Valida com HEAD antes de devolver: URL inexistente faria o sendMedia falhar.
+ */
+export async function resolverImagemAmazon(asin: string): Promise<string | null> {
+  if (!/^[A-Z0-9]{10}$/i.test(asin)) return null;
+  for (const sufixo of IMAGEM_PADROES) {
+    const url = `https://m.media-amazon.com/images/P/${asin.toUpperCase()}.${sufixo}`;
+    try {
+      const r = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+      if (r.ok) return url;
+    } catch {
+      // tenta o próximo padrão
+    }
+  }
+  return null;
+}
+
 function marketplace(): string {
   return process.env.AMAZON_MARKETPLACE?.trim() || "www.amazon.com.br";
 }

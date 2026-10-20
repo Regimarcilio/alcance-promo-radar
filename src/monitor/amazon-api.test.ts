@@ -1,7 +1,7 @@
 /** Testes do client Creators API (amazon-api.ts) — fetch mockado, sem rede real. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { limparCacheAmazon, resolverProdutoAmazon } from "./amazon-api.js";
+import { limparCacheAmazon, resolverImagemAmazon, resolverProdutoAmazon } from "./amazon-api.js";
 import { mockFetch, resJson } from "./test-utils.js";
 
 function comCredenciais(): void {
@@ -85,6 +85,28 @@ test("401 no getItems: renova o token e tenta mais 1x", async () => {
     const d = await resolverProdutoAmazon("B0DWGWN8GY");
     assert.equal(d?.titulo, "Y");
     assert.equal(m.chamadas.filter((u) => u.includes("auth/o2/token")).length, 2);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("imagem por CDN: HEAD 200 → URL montada (fallback sem API)", async () => {
+  const m = mockFetch(async (_url, init) =>
+    init?.method === "HEAD" ? new Response(null, { status: 200 }) : resJson({}),
+  );
+  try {
+    const url = await resolverImagemAmazon("b0dwgwn8gy");
+    assert.equal(url, "https://m.media-amazon.com/images/P/B0DWGWN8GY.01._SCLZZZZZZZ_SX500_.jpg");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("imagem por CDN: 404 nos dois padrões → null (segue sem foto)", async () => {
+  const m = mockFetch(async () => new Response(null, { status: 404 }));
+  try {
+    assert.equal(await resolverImagemAmazon("B0DWGWN8GY"), null);
+    assert.equal(m.chamadas.length, 2);
   } finally {
     m.restaurar();
   }

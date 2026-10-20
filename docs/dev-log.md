@@ -678,3 +678,28 @@ Repo agora com **13/13** passando (`npm test`).
 
 **Pendências**: credenciais Amazon (10 vendas/30d + aceitação final via portal); 1 REVISAO do Epipe em
 observação; piloto com 0 loops; decisões da auditoria P0 (container legado/git remoto).
+
+---
+
+## 2026-10-20 | E6-MONITOR-18 | Amazon com foto JÁ (CDN por ASIN, sem depender da API)
+
+**Pedido**: "preciso que as imagens dos links da Amazon apareçam" — não dava para esperar a liberação da
+Creators API (10 vendas/30d).
+
+**Solução**: imagem principal montada pelo padrão do CDN da Amazon a partir do ASIN —
+`https://m.media-amazon.com/images/P/<ASIN>.01._SCLZZZZZZZ_SX500_.jpg` — sem API e sem scrape de página.
+Validado ANTES de usar (HEAD, 5s; 2 padrões de sufixo; 404/timeout → segue sem foto, nunca quebra o envio).
+Novo `resolverImagemAmazon()` em `amazon-api.ts`; no `transformer.ts` o enriquecimento vira em cascata:
+**Creators API** (título+foto, quando liberada) → **CDN por ASIN** (foto; o texto da origem já traz o nome) →
+sem nada (comportamento antigo).
+
+**Evidência do padrão**: HEAD em 4/4 ASINs reais de hoje (`B0DWGWN8GY`, `B0HHNZFXL5`, `B0HHNVBHQ5`,
+`B0CRMCC6W8`) → `200 image/jpeg` nos três sufixos testados.
+
+**Testes**: +2 casos (`HEAD 200 → URL` / `404 nos dois padrões → null`); repo agora **15/15**.
+Deploy + replay do caption real: `ENCAMINHADO | Amazon`, evento `teste (dryRun) · foto do anúncio` e payload
+`[dry-run] ... imagem=https://m.media-amazon.com/images/P/B0DWGWN8GY.01._SCLZZZZZZZ_SX500_.jpg legenda=228chars`.
+Falta apenas o post real do Epipe para confirmar visualmente no grupo (mesmo caminho de envio do dry-run).
+
+**Ressalva**: ASIN com padrão de CDN diferente (raro) segue "sem foto" até a Creators API; detectável pelos
+eventos (detalhe "sem foto"). Título na mensagem Amazon só com a API liberada.
