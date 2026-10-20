@@ -811,3 +811,32 @@ artefato de captura, não da UI.
 
 **Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
 usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
+
+---
+
+## 2026-10-20 | E6-MONITOR-23 | UI: seletor de temas (verde/laranja + neutros elegantes)
+
+**Pedido**: a seleção de cores sumiu na reformulação da sidebar; voltar o seletor, manter verde e laranja e
+acrescentar variações de cinza escuro/marrom mais elegantes.
+
+**Implementação** (`src/manager/server.ts`, HTML/CSS/JS inline):
+- **6 temas** via `data-paleta` no `<html>`: `verde` (default), `laranja`, `areia` (taupe #8a6a4f),
+  `grafite` (charcoal #44403c), `marrom` (coffee #7c4a2d) e `cacau` (chocolate #4a2c1d). Cada tema define
+  `--primary/-hover/-soft/-border/-contrast`, `--ring`, `--grad-a/b`, `--accent/-soft`, `--info` e `--price`;
+  blocos antigos `azul`/`vermelho` removidos.
+- **Seletor no topbar** (`<details class="tema" id="temaBox">`): dot com amostra do gradiente, nome do tema,
+  menu com 6 botões `.tema-opt[data-p]`, check no ativo e `aria-pressed`. Abre em qualquer view; fecha ao
+  escolher, clicar fora ou `Esc`.
+- **Persistência**: `localStorage['paleta']`; script inline no `<head>` aplica o tema antes do paint e valida
+  a chave — valores legados (`azul`/`vermelho`) caem para `verde`.
+- **Acabamento**: removidos `.paleta-bar`/`.swatch` do rodapé da sidebar; ícones dos nav cards deixaram de ter
+  gradientes fixos coloridos e agora usam duotone do tema (`--primary-hover` sobre `--primary-soft`), com o
+  card ativo em gradiente cheio. Harmonia mantida nos 6 temas.
+
+**Validação**: `npm run typecheck` limpo; `npm run build`; `npm test` **15/15**; deploy
+`promo_radar_manager` (8099→8091, HTTP 200). Playwright (Chromium 1248): os 6 temas aplicam
+`data-paleta`/label/storage corretos; reload preserva a escolha (`cacau`); `azul` legado → `verde`; menu
+mobile 390×844 abre alinhado à direita com as 6 opções. Screenshots dos 6 temas + mobile conferidos.
+
+**Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
+usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
