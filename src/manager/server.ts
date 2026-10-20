@@ -931,9 +931,125 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
   *{transition:none !important;animation:none !important}
   .card:hover{transform:none}
   .swatch:hover{transform:none}
+}
+/* ============ APP SHELL — sidebar + views ============ */
+body{padding:0;max-width:none;margin:0}
+.app{display:flex;min-height:100vh;align-items:stretch}
+.sidebar{width:258px;flex:0 0 258px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:14px;padding:18px 14px 14px;background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);border-right:1px solid var(--border);overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:10px;padding:4px 6px 2px;border-radius:12px;text-decoration:none;color:var(--text)}
+.side-brand:hover{text-decoration:none;background:var(--surface-2)}
+.side-brand .brand-mark{width:40px;height:40px;border-radius:12px;font-size:21px;box-shadow:0 6px 14px var(--shadow-tint)}
+.side-brand .brand-txt h1{font-size:20px;line-height:1.1;margin:0;background:linear-gradient(92deg,var(--grad-a),var(--grad-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.side-brand .tagline{font-size:10.5px;margin-top:1px;font-weight:600}
+.side-nav{display:flex;flex-direction:column;gap:5px}
+.side-card{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid transparent;border-radius:14px;color:var(--text);text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+.side-card:hover{background:var(--surface);border-color:var(--border);text-decoration:none;transform:translateX(2px)}
+.side-card.active{background:linear-gradient(92deg,var(--primary-soft),var(--surface));border-color:var(--primary-border);box-shadow:0 4px 14px var(--shadow-tint)}
+.side-card:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.side-ico{width:36px;height:36px;flex:0 0 auto;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,var(--grad-a),var(--grad-b));box-shadow:0 5px 12px var(--shadow-tint)}
+.side-ico svg{width:19px;height:19px;display:block}
+.side-ico.i-contas{background:linear-gradient(135deg,#0ea5e9,#1d4ed8)}
+.side-ico.i-cupons{background:linear-gradient(135deg,#f59e0b,#dc2626)}
+.side-ico.i-piloto{background:linear-gradient(135deg,#7c3aed,#2563eb)}
+.side-ico.i-monitor{background:linear-gradient(135deg,#0d9488,#65a30d)}
+.side-ico.i-numeros{background:linear-gradient(135deg,#0284c7,#0d9488)}
+.side-ico.i-clientes{background:linear-gradient(135deg,#db2777,#f97316)}
+.side-txt{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.side-txt b{font-size:13.5px;font-weight:750;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-txt small{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-badge{margin-left:auto;flex:0 0 auto;min-width:22px;text-align:center;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted)}
+.side-card.active .side-badge{background:var(--primary);border-color:var(--primary);color:var(--primary-contrast)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:9px;padding-top:10px;border-top:1px solid var(--border)}
+.side-foot .paleta-bar{justify-content:flex-start;margin:0;gap:7px}
+.side-live{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted);padding:0 4px;font-weight:600}
+.live-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16)}
+.live-dot.off{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.16)}
+.content{flex:1;min-width:0;max-width:1160px;margin:0 auto;padding:22px 28px 64px}
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.top-kicker{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.top-title{font-size:25px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin:3px 0 2px}
+.top-sub{color:var(--muted);font-size:12.5px;max-width:72ch}
+.top-live{font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--ok-soft);border:1px solid var(--ok-bd);color:var(--ok-tx);white-space:nowrap}
+.view{display:none}
+.view.active{display:block;animation:viewIn .18s ease}
+@keyframes viewIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px;margin:0 0 14px}
+.kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:10px 12px 9px;box-shadow:0 3px 10px rgba(0,0,0,.03)}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.75}
+.kpi b{display:block;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}
+.kpi span{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.kpi.ok::before{background:linear-gradient(180deg,#16a34a,#65a30d)}
+.kpi.warn::before{background:linear-gradient(180deg,#f59e0b,#f97316)}
+.kpi.danger::before{background:linear-gradient(180deg,#dc2626,#be123c)}
+@media (max-width:980px){
+ .app{flex-direction:column}
+ .sidebar{position:static;width:100%;height:auto;flex:none;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;border-right:none;border-bottom:1px solid var(--border);overflow:visible}
+ .side-brand{padding:0;flex:0 0 auto}
+ .side-brand .tagline{display:none}
+ .side-nav{flex-direction:row;flex:1 1 auto;min-width:0;overflow-x:auto;gap:4px;padding-bottom:2px}
+ .side-card{padding:6px 8px;flex:0 0 auto}
+ .side-txt small{display:none}
+ .side-badge{display:none}
+ .side-foot{margin:0;padding:0;border:none;flex:0 0 auto}
+ .side-foot .paleta-bar{display:none}
+ .side-live{display:none}
+ .content{padding:16px 14px 48px;max-width:none}
+}
+@media (max-width:700px){
+ body{padding:0}
+ .side-txt{display:none}
+ .side-card{padding:6px}
+ .side-brand .brand-txt{display:none}
+ .side-ico{width:32px;height:32px;border-radius:10px}
+ .side-ico svg{width:17px;height:17px}
+ .side-brand .brand-mark{width:34px;height:34px;font-size:18px}
+ .side-nav{gap:2px}
+ .top-title{font-size:21px}
+ .kpis{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:7px}
+ .kpi{padding:8px 9px 7px}
+ .kpi b{font-size:17px}
 }</style></head>
 <body>
 <script>try{var p=localStorage.getItem('paleta');if(p){document.documentElement.setAttribute('data-paleta',p);}}catch(e){}</script>
+<div class="app">
+<aside class="sidebar">
+<a class="side-brand" href="#/monitor" aria-label="Alcance — ir para o monitor">
+<div class="brand-mark">A</div>
+<div class="brand-txt"><h1>Alcance</h1><div class="tagline">capta · filtra · distribui</div></div>
+</a>
+<nav class="side-nav" aria-label="Navegação principal">
+<a class="side-card" data-view="contas" href="#/contas">
+<span class="side-ico i-contas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.7" cy="10.2" r="1.9"/><path d="M5.8 16.2c.5-1.7 1.6-2.6 2.9-2.6s2.4.9 2.9 2.6M14 8.8h4.2M14 12.2h3.2M14 15.6h2.2"/></svg></span>
+<span class="side-txt"><b>Contas</b><small>etiquetas & vínculos</small></span>
+<span class="side-badge" id="badge-contas">—</span>
+</a>
+<a class="side-card" data-view="cupons" href="#/cupons">
+<span class="side-ico i-cupons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5A2.5 2.5 0 0 1 6 6h12a2.5 2.5 0 0 1 2.5 2.5v1.2a2.3 2.3 0 0 0 0 4.6v1.2A2.5 2.5 0 0 1 18 18H6a2.5 2.5 0 0 1-2.5-2.5v-1.2a2.3 2.3 0 0 0 0-4.6z"/><path d="M13.2 9.2l-2.4 5.6"/><path d="M10.7 10.7h.01M13.2 13.3h.01" stroke-width="2.4"/></svg></span>
+<span class="side-txt"><b>Cupons</b><small>códigos & ML</small></span>
+<span class="side-badge" id="badge-cupons">—</span>
+</a>
+<a class="side-card" data-view="piloto" href="#/piloto">
+<span class="side-ico i-piloto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.2 3.2c2.6 1.8 4.1 4.9 4.1 8.2l-4.1 4.1-4.1-4.1c0-3.3 1.5-6.4 4.1-8.2z"/><circle cx="12.2" cy="9" r="1.6"/><path d="M8.1 13.4l-2.3 1.5.6 3 2.9-.9M16.3 13.4l2.3 1.5-.6 3-2.9-.9"/><path d="M10.4 18.7c.5 1.3 1.2 2.1 1.8 2.3.6-.2 1.3-1 1.8-2.3"/></svg></span>
+<span class="side-txt"><b>Piloto</b><small>ofertas automáticas</small></span>
+<span class="side-badge" id="badge-piloto">—</span>
+</a>
+<a class="side-card" data-view="monitor" href="#/monitor">
+<span class="side-ico i-monitor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8" opacity=".35"/><circle cx="12" cy="12" r="5.2" opacity=".6"/><circle cx="12" cy="12" r="1.4"/><path d="M12 12l6.2-6.2"/><path d="M12 12l4.4 2.6" opacity=".5"/></svg></span>
+<span class="side-txt"><b>Monitor</b><small>encaminhamento</small></span>
+<span class="side-badge" id="badge-monitor">—</span>
+</a>
+<a class="side-card" data-view="numeros" href="#/numeros">
+<span class="side-ico i-numeros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6.8" y="3" width="10.4" height="18" rx="2.6"/><path d="M10.8 17.8h2.8"/><path d="M18.6 8.4c1.3.9 1.3 6.3 0 7.2" opacity=".55"/><path d="M20.6 6.2c2 1.6 2 10 0 11.6" opacity=".3"/></svg></span>
+<span class="side-txt"><b>Números</b><small>envio rotativo</small></span>
+<span class="side-badge" id="badge-numeros">—</span>
+</a>
+<a class="side-card" data-view="clientes" href="#/clientes">
+<span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3"/><path d="M3.4 19.2c.7-3 2.8-4.9 5.6-4.9s4.9 1.9 5.6 4.9"/><circle cx="17.2" cy="9.3" r="2.3"/><path d="M15.9 14.5c2.2.4 3.8 2.1 4.4 4.7"/></svg></span>
+<span class="side-txt"><b>Clientes</b><small>disparo individual</small></span>
+<span class="side-badge" id="badge-clientes">—</span>
+</a>
+</nav>
+<div class="side-foot">
 <div class="paleta-bar" role="group" aria-label="Cor do tema da pagina">
 <span class="rotulo">Cor do tema</span>
 <button type="button" class="swatch" data-p="verde" aria-label="Usar tema verde" aria-pressed="true" title="Tema verde"></button>
@@ -941,9 +1057,20 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <button type="button" class="swatch" data-p="laranja" aria-label="Usar tema laranja" aria-pressed="false" title="Tema laranja"></button>
 <button type="button" class="swatch" data-p="vermelho" aria-label="Usar tema vermelho" aria-pressed="false" title="Tema vermelho"></button>
 </div>
-<div class="brand"><div class="brand-mark">A</div><div class="brand-txt"><h1>Alcance</h1><div class="tagline"><b>capta · filtra · distribui</b> — alcance é o que vende</div></div></div>
-<div class="sub">Escolha <b>etiqueta → categoria → grupo</b>, aperte <b>LIGA TUDO</b> e receba <b>2 ofertas a cada 5 min</b> por categoria no WhatsApp (com pausa de 8 min a cada 55 min).</div>
-<div class="panel">
+<div class="side-live"><span class="live-dot" id="side-dot"></span><span id="side-live-txt">monitor · —</span></div>
+</div>
+</aside>
+<main class="content">
+<header class="topbar">
+<div><div class="top-kicker" id="top-kicker">operação</div><h2 class="top-title" id="top-title">Monitor</h2><div class="top-sub" id="top-sub">Cada grupo de origem encaminha para os seus destinos, com troca de link e anti-rajada.</div></div>
+<span class="top-live" id="top-live">● monitor · —</span>
+</header>
+<section class="view" id="view-contas" data-view="contas">
+<div class="kpis">
+<div class="kpi"><b id="kpi-contas">—</b><span>contas</span></div>
+<div class="kpi"><b id="kpi-cuponsn">—</b><span>cupons</span></div>
+</div>
+<div class="panel ac-contas">
 <label>👥 Contas de afiliado (uma etiqueta por categoria, se quiser)</label>
 <div class="hint">Sem conta extra, tudo usa a <b>padrão</b> (sua etiqueta vale para todas as categorias). Cookies nunca voltam pela API.</div>
 <div id="contasout" style="margin:8px 0;font-size:13px"></div>
@@ -956,11 +1083,27 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <div><label>&nbsp;</label><div style="display:flex;gap:8px"><select id="mapconta" style="flex:1"><option value="-">Padrão</option></select><select id="mapgrupo" style="flex:2"><option value="">Grupo padrão (.env)</option></select></div></div></div>
 <div style="display:flex;gap:8px;margin-top:8px"><select id="mapsub" style="flex:1"><option value="">Sem filtro (categoria inteira)</option></select><button class="buscar" style="margin-top:0;width:auto" onclick="salvarMapa()">✔ Salvar vínculo</button></div>
 <div class="hint">Ex.: Joias e Relógios → conta <b>principal</b> + grupo <b>Radar Teste</b>. Cada categoria pode ter sua etiqueta e seu grupo.</div>
+</div>
+</section>
+<section class="view" id="view-cupons" data-view="cupons">
+<div class="kpis">
+<div class="kpi"><b id="kpi-cupons-reg">—</b><span>registrados</span></div>
+<div class="kpi ok"><b id="kpi-cupons-ml">—</b><span>cupons ML na categoria</span></div>
+</div>
+<div class="panel ac-cupons">
 <div style="margin-top:10px"><label>🎟️ Cupons (códigos digitáveis, estilo Emipe — criados no portal)</label>
 <div class="hint">Cadastre 1 vez (ex.: chave <b>MLB1000</b>, código <b>PRIMEHOJE</b>) → anexado sozinho nas mensagens. Cupons do ML (clique-aplicar) vêm sozinhos por categoria.</div>
 <div id="cuponsout" style="font-size:13px"></div>
 <div style="display:flex;gap:8px;margin-top:6px"><input id="cpchave" style="flex:1" placeholder="chave: MLB1000 ou MLB1000:principal"><input id="cpcode" style="flex:1" placeholder="código: PRIMEHOJE"><input id="cpnome" style="flex:1" placeholder="nome: 10% OFF Voltagem"><button class="buscar" style="margin-top:0;width:auto" onclick="salvarCupomUI()">💾</button></div>
 <div id="cuponsml" style="font-size:12px;margin-top:6px;color:var(--mut)"></div></div>
+</div>
+</section>
+<section class="view" id="view-piloto" data-view="piloto">
+<div class="sub">Escolha <b>etiqueta → categoria → grupo</b>, aperte <b>LIGA TUDO</b> e receba <b>2 ofertas a cada 5 min</b> por categoria no WhatsApp (com pausa de 8 min a cada 55 min).</div>
+<div class="kpis">
+<div class="kpi"><b id="kpi-loops">—</b><span>loops ativos</span></div>
+<div class="kpi ok"><b id="kpi-piloto-env">—</b><span>enviadas</span></div>
+<div class="kpi"><b id="kpi-piloto-ult">—</b><span>último envio</span></div>
 </div>
 <div class="panel ac-piloto">
 <div class="panel-head"><span><b id="tit-piloto">🚀 Piloto automático</b> — 2 ofertas aleatórias a cada 5 min, sozinho</span><a class="lk-mini" href="#" onclick="renomearCard('piloto');return false">✏️ renomear</a></div>
@@ -985,6 +1128,18 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <div class="hint">Folhas descobertas no perfil de afiliado. Amarre cada folha a uma categoria 1 vez → o piloto usa sozinho.</div>
 <div id="vitrineout" style="font-size:13px">carregando vitrine…</div></div>
 </div>
+</section>
+<section class="view" id="view-monitor" data-view="monitor">
+<div class="kpis">
+<div class="kpi"><b id="kpi-recebidas">—</b><span>recebidas</span></div>
+<div class="kpi ok"><b id="kpi-encaminhadas">—</b><span>encaminhadas</span></div>
+<div class="kpi"><b id="kpi-origens">—</b><span>origens</span></div>
+<div class="kpi"><b id="kpi-destinos">—</b><span>destinos</span></div>
+<div class="kpi"><b id="kpi-duplicadas">—</b><span>duplicadas</span></div>
+<div class="kpi warn"><b id="kpi-revisao">—</b><span>revisão</span></div>
+<div class="kpi danger"><b id="kpi-erros">—</b><span>erros</span></div>
+<div class="kpi"><b id="kpi-fila">—</b><span>na fila</span></div>
+</div>
 <div class="panel ac-monitor">
 <div class="panel-head"><span><b id="tit-monitor">📡 Monitor</b> — cada grupo de origem encaminha para os SEUS destinos</span><a class="lk-mini" href="#" onclick="renomearCard('monitor');return false">✏️ renomear</a></div>
 <div class="hint">Oferta publicada numa <b>origem</b> (grupo de achadinhos que você monitora) tem o link trocado pelo <b>seu</b> e é reenviada <b>apenas</b> para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.</div>
@@ -992,15 +1147,6 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <div class="mrow">
 <div><b id="mcontalabel">Conta WhatsApp: …</b><br><span class="mini" id="mcontaestado"></span></div>
 <div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
-
-<div class="mbox">
-<div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
-<div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
-<div id="minstlist" class="mini">carregando…</div>
-<div style="display:flex;gap:6px;margin-top:8px">
-<input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
-<button class="mbtn" onclick="addInstancia()">➕ Adicionar celular</button></div>
-<div id="minstqr" style="margin-top:10px"></div></div>
 
 <div class="mrow">
 <div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
@@ -1040,7 +1186,28 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <pre id="mtesteout"></pre></div>
 <div><label>Últimos eventos do monitor</label><pre id="meventos" style="max-height:220px"></pre></div></div>
 </div>
-
+</section>
+<section class="view" id="view-numeros" data-view="numeros">
+<div class="kpis">
+<div class="kpi"><b id="kpi-numerosn">—</b><span>números</span></div>
+<div class="kpi ok"><b id="kpi-numeros-on">—</b><span>conectados</span></div>
+</div>
+<div class="panel ac-numeros">
+<div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
+<div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
+<div id="minstlist" class="mini">carregando…</div>
+<div style="display:flex;gap:6px;margin-top:8px">
+<input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
+<button class="mbtn" onclick="addInstancia()">➕ Adicionar celular</button></div>
+<div id="minstqr" style="margin-top:10px"></div>
+</div>
+</section>
+<section class="view" id="view-clientes" data-view="clientes">
+<div class="kpis">
+<div class="kpi"><b id="kpi-contatos">—</b><span>contatos</span></div>
+<div class="kpi"><b id="kpi-listas">—</b><span>listas</span></div>
+<div class="kpi warn"><b id="kpi-clifila">—</b><span>fila de envio</span></div>
+</div>
 <div class="panel ac-clientes">
 <div class="panel-head"><span><b id="tit-clientes">👥 Clientes</b></span><a class="lk-mini" href="#" onclick="renomearCard('clientes');return false">✏️ renomear</a></div>
 <div class="hint">Contatos puxados dos <b>grupos do seu celular</b> + cadastro manual. Selecione e dispare uma propaganda <b>individual</b> (não é grupo). A fila envia 1 por vez para não parecer robô.</div>
@@ -1069,8 +1236,42 @@ pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(-
 <button class="mbtn" onclick="limparFilaClientesUI()">🗑 Cancelar fila</button>
 <span class="mini" id="clifila"></span></div></div>
 </div>
+</section>
+</main>
+</div>
 <script>
 const $=id=>document.getElementById(id);
+// ===== Navegação por views (hash routing) =====
+const VIEW_META={
+  contas:{k:'configuração',t:'Contas & vínculos',s:'Etiquetas de afiliado, mapeamento categoria → conta/grupo e grupos padrão.'},
+  cupons:{k:'configuração',t:'Cupons',s:'Códigos digitáveis por categoria — anexados sozinhos nas mensagens quando existirem.'},
+  piloto:{k:'operação',t:'Piloto automático',s:'Caça ofertas por categoria e publica sozinho no grupo amarrado, com rodízio de links.'},
+  monitor:{k:'operação',t:'Monitor',s:'Cada grupo de origem encaminha para os seus destinos, com troca de link e anti-rajada.'},
+  numeros:{k:'infraestrutura',t:'Números',s:'Celulares de envio rotativo — sorteio ponderado entre ativos e conectados.'},
+  clientes:{k:'crescimento',t:'Clientes',s:'Contatos dos grupos + disparo individual com fila anti-bloqueio.'}
+};
+function viewAtual(){
+  const partes=(location.hash||'').replace('#','').split('/');
+  const h=partes[1]||partes[0]||'';
+  return VIEW_META[h]?h:'monitor';
+}
+function navegar(){
+  const v=viewAtual();
+  document.querySelectorAll('.view').forEach(function(el){el.classList.toggle('active',el.id==='view-'+v);});
+  document.querySelectorAll('.side-card').forEach(function(a){
+    const on=a.getAttribute('data-view')===v;
+    a.classList.toggle('active',on);
+    if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');
+  });
+  const m=VIEW_META[v];
+  $('top-kicker').textContent=m.k;
+  $('top-title').textContent=m.t;
+  $('top-sub').textContent=m.s;
+  document.title='Alcance — '+m.t;
+  window.scrollTo(0,0);
+}
+window.addEventListener('hashchange',navegar);
+navegar();
 // Chave do gerenciador: se o servidor exigir (MANAGER_KEY), pede 1 vez e reusa.
 (function(){
   const ofetch=window.fetch.bind(window);
@@ -1100,6 +1301,7 @@ fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   carregarCupons();
   carregarMonitorUI();
   carregarTitulos();
+  atualizarPiloto();
   carregarClientes();
   setInterval(function(){try{carregarMonitorStatus();}catch(e){}},15000);
   setInterval(function(){try{carregarClientes();}catch(e){}},15000);
@@ -1132,6 +1334,8 @@ async function salvarVitrineMap(leaf,i){
 }
 async function carregarContas(){
   const d=await (await fetch('/api/contas')).json();
+  const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+  kp('kpi-contas',(d.contas||[]).length);kp('badge-contas',(d.contas||[]).length);
   const opts=d.contas.map(c=>\`<option value="\${c.nome}">\${c.nome} (\${c.tagMask})\${c.padrao?' ★':''}</option>\`).join('');
   $('paconta').innerHTML=opts;
   $('mapconta').innerHTML='<option value="-">Padrão</option>'+opts;
@@ -1165,6 +1369,10 @@ async function atualizarPiloto(){
   try{
     const s=await (await fetch('/api/piloto')).json();
     const n=(s.loops||[]).length;
+    const env=(s.loops||[]).reduce(function(a,l){return a+(l.enviadas||0)},0);
+    const ult=(s.loops||[]).map(function(l){return l.ultimaMsg||''}).sort().pop()||'';
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-loops',n+'/5');kp('kpi-piloto-env',env);kp('kpi-piloto-ult',ult?horaLocal(ult):'—');kp('badge-piloto',n);
     let html=n? '' : '⚪ nenhum loop — monte acima e aperte START.';
     (s.loops||[]).forEach(function(l){
       html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px">'
@@ -1255,6 +1463,9 @@ async function carregarCupons(){
     const d=await (await fetch('/api/cupons?category='+encodeURIComponent(cat))).json();
     let html='<b>Registrados:</b> ';
     const regs=Object.entries(d.registrados||{});
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-cuponsn',regs.length);kp('badge-cupons',regs.length);
+    kp('kpi-cupons-reg',regs.length);kp('kpi-cupons-ml',(d.paraCategoria||[]).length);
     html+=regs.length?regs.map(function(e){const v=(typeof e[1]==='string')?{codigo:e[1],nome:''}:e[1];return e[0]+'=<b>'+v.codigo+'</b>'+(v.nome?' ('+v.nome+')':'');}).join(' · '):'nenhum';
     html+='<br><b>ML p/ esta categoria:</b> ';
     html+=(d.paraCategoria||[]).map(function(c){return c.titulo+(c.minimo?' ('+c.minimo+')':'');}).join(' · ')||'—';
@@ -1305,6 +1516,8 @@ async function carregarInstancias(){
   try{
     const d=await (await fetch('/api/instancias')).json();
     const itens=d.itens||[];
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-numerosn',itens.length);kp('kpi-numeros-on',itens.filter(function(i){return i.estado==='open'}).length);kp('badge-numeros',itens.length);
     $('minstmax').textContent='· '+itens.length+'/'+d.max+' · sorteio ponderado';
     if(!itens.length){$('minstlist').textContent='nenhum número — adicione um.';return;}
     $('minstlist').innerHTML=itens.map(function(i){
@@ -1402,12 +1615,15 @@ async function carregarClientes(){
   try{
     const d=await (await fetch('/api/clientes')).json();
     CLIENTES=d||{contatos:[],listas:[]};
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-contatos',(d.contatos||[]).length);kp('kpi-listas',(d.listas||[]).length);kp('badge-clientes',(d.contatos||[]).length);
     const s=d.sync||{};
     $('clisync').textContent = s.rodando
       ? ('puxando… '+(s.feitos||0)+'/'+(s.total||0)+' grupos · '+(s.contatos||0)+' contatos')
       : (s.ultimoSync ? ('último sync: '+new Date(s.ultimoSync).toLocaleString('pt-BR')+' · '+(s.contatos||0)+' contatos') : 'nunca sincronizado');
     const f=d.fila||{};
     $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s';
+    kp('kpi-clifila',f.pendentes||0);
     renderContatos(); renderListas();
   }catch(e){}
 }
@@ -1624,10 +1840,19 @@ function preencherOrigemTeste(regras){
 async function carregarMonitorStatus(){
   try{
     const d=await (await fetch('/api/monitor/status')).json();
-    $('mstatus').innerHTML='🔗 origens: <b>'+(d.origens||0)+'</b> · destinos: <b>'+(d.destinos||0)+'</b> · 📥 recebidas: <b>'+(d.recebidas||0)+'</b> · 🔄 encaminhadas: <b>'+(d.encaminhadas||0)+'</b> · ♻️ duplicadas: <b>'+(d.duplicadas||0)+'</b> · ✋ revisão: <b>'+(d.revisao||0)+'</b> · ⚠️ erros: <b>'+(d.erros||0)+'</b>';
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-origens',d.origens||0);kp('kpi-destinos',d.destinos||0);
+    kp('kpi-recebidas',d.recebidas||0);kp('kpi-encaminhadas',d.encaminhadas||0);
+    kp('kpi-duplicadas',d.duplicadas||0);kp('kpi-revisao',d.revisao||0);
+    kp('kpi-erros',d.erros||0);kp('kpi-fila',d.fila||0);
+    kp('badge-monitor',d.fila||0);
+    $('mstatus').innerHTML='atualizado às <b>'+horaLocal(new Date().toISOString())+'</b>'+(d.erros?(' · <b style="color:var(--danger-tx)">'+d.erros+' erro(s)</b>'):'');
     $('mfila').innerHTML='🚦 fila anti-rajada: <b>'+(d.fila||0)+'</b> em espera · liberando 1 a cada <b>'+(d.intervaloFila||120)+'s</b>'+(d.fila>0?' <span class="mini">(≈ '+Math.ceil((d.fila*(d.intervaloFila||120))/60)+' min p/ esvaziar)</span>':'');
     $('meventos').textContent=(d.eventos||[]).map(e=>horaLocal(e.em)+' ['+e.status+'] '+e.programa+' '+(e.idProduto||'')+' ← '+e.origem+(e.destino?' → '+e.destino:'')+(e.detalhe?' ('+e.detalhe+')':'')).join('\\n')||'(sem eventos)';
-  }catch(e){}
+    const dot=$('side-dot');if(dot)dot.classList.remove('off');
+    const live=$('side-live-txt');if(live)live.textContent='monitor · '+(d.encaminhadas||0)+' encaminhadas';
+    const top=$('top-live');if(top)top.textContent='● monitor · '+(d.fila>0?(d.fila+' na fila'):'sem fila');
+  }catch(e){const dot=$('side-dot');if(dot)dot.classList.add('off');}
 }
 async function zerarContadoresUI(){
   if(!confirm('Zerar os contadores do monitor (limpa o histórico de eventos)?\\nAs regras e o dedup continuam.'))return;

@@ -772,3 +772,42 @@ Container segue parado (`Exited 137`, `restart=no`); sem unit systemd e sem cron
 **Ação pendente do usuário (rotação)**: os cookies eram credenciais vivas de sessão do ML — recomendo entrar
 nas 3 contas e encerrar todas as sessões (ou trocar a senha), para invalidar qualquer cópia que tenha
 circulado. O sistema novo não usa esses cookies (usa link de afiliado + cupons).
+
+---
+
+## 2026-10-20 | E6-MONITOR-22 | UI: sidebar com links dinâmicos + views em dashboard
+
+**Pedido**: cards identificados → sidebar lateral com links dinâmicos, ícones criativos e cada card com seu
+conteúdo em formato de dashboard.
+
+**Implementação** (`src/manager/server.ts`, HTML/CSS/JS inline):
+- Shell `.app` = `<aside class="sidebar">` (258px, sticky, tema/status no rodapé) + `<main class="content">`
+  com topbar (kicker/título/subtítulo por view + chip de status).
+- 6 nav cards com **SVG inline** próprios: Contas (cartão), Cupons (ticket), Piloto (foguete), Monitor
+  (radar), Números (celular + sinal), Clientes (pessoas); gradientes por card e badge numérico.
+- **Hash routing**: `#/contas`, `#/cupons`, `#/piloto`, `#/monitor` (default), `#/numeros`, `#/clientes`;
+  `hashchange` + `aria-current`, título do documento, scroll ao topo. Links são deep-linkáveis.
+- **Views separadas**: Cupons saiu de Contas; Números saiu de Monitor. Todos os IDs e funções JS existentes
+  foram preservados (nenhum endpoint alterado).
+- **KPIs por view**: Monitor 8 (recebidas, encaminhadas, origens, destinos, duplicadas, revisão, erros,
+  fila); Piloto 3 (loops, enviadas, último envio); Contas 2; Cupons 2 (registrados, cupons ML da categoria);
+  Números 2 (números, conectados); Clientes 3 (contatos, listas, fila). Badges da sidebar atualizados nos
+  loaders (`carregarContas`, `carregarCupons`, `atualizarPiloto`, `carregarMonitorStatus`,
+  `carregarInstancias`, `carregarClientes`).
+- **Responsivo**: ≤980px sidebar vira barra superior com nav horizontal; ≤700px ícones de 32px (os 6 cabem
+  em 390px), KPIs auto-fit. Status online/offline no dot da sidebar + chip do topbar.
+
+**Incidente de implementação**: o regex `/^#\/?/` do router foi interpolado pelo template literal TS e virou
+`/^#/?/` no HTML → `SyntaxError` derrubava todo o script e todas as views ficavam `display:none`. Corrigido
+com `split('/')` no hash (sem regex). Detecção: página servida com sidebar/topbar e conteúdo vazio.
+
+**Validação**: `npm run typecheck` limpo; `npm run build`; `npm test` **15/15**; deploy
+`promo_radar_manager` (8099→8091, HTTP 200). Playwright (Chromium 1248): default `#/monitor`; clique nos 6
+links ativa a view certa, atualiza hash e título; badges `contas=1 cupons=0 piloto=0 monitor=1 numeros=2
+clientes=6147`; KPIs monitor 157/70/6/6/53/26/0/0, cupons 0/6, clientes 6147/1/0; **sem erros JS**.
+Screenshots desktop 1440×900 e mobile 390×844 conferidos. Obs.: screenshots headless às vezes saem com
+"fantasma" (paint durante font swap) — HTML conferido (1 ocorrência por bloco) e `innerText` limpo, é
+artefato de captura, não da UI.
+
+**Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
+usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
