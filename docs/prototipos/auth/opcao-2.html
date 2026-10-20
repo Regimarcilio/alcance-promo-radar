@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-paleta="verde">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Alcance · Login · Opção 2 — Esteira de ofertas</title>
+<script>
+/* Aplica a paleta salva antes da pintura para evitar "flash" de tema. */
+try {
+  var p = localStorage.getItem('alcance-auth-paleta');
+  if (['verde', 'laranja', 'marrom', 'cacau'].indexOf(p) >= 0) {
+    document.documentElement.setAttribute('data-paleta', p);
+  }
+} catch (e) {}
+</script>
+<style>
+/* ============================================================
+   TOKENS — paleta VERDE (default) + variantes do painel Alcance
+   ============================================================ */
+:root{
+  --primary:#047857; --primary-hover:#03624a; --primary-soft:#e0f3ea;
+  --primary-border:#b0dcca; --primary-contrast:#fff; --ring:rgba(4,120,87,.26);
+  --grad-a:#0f766e; --grad-b:#047857;
+  --bg:#e8f4ee; --bg-2:#d7ecdf;
+  --surface:#fbfefc; --surface-2:#eff7f2;
+  --card:#f2faf6; --card-2:#e3f1e9;
+  --border:#d4e7dd;
+  --text:#15212a; --muted:#54636f; --faint:#7d8b96;
+  --shadow-tint:rgba(4,120,87,.20);
+}
+[data-paleta="laranja"]{
+  --primary:#c2410c; --primary-hover:#9a3412; --primary-soft:#fbe4d4;
+  --primary-border:#f0bf9e; --primary-contrast:#fff; --ring:rgba(194,65,12,.24);
+  --grad-a:#b45309; --grad-b:#c2410c;
+  --bg:#fbf0e5; --bg-2:#f7e2cd;
+  --surface:#fffdfa; --surface-2:#fdf4ea;
+  --card:#fff8f0; --card-2:#fbe8d6;
+  --border:#efdac3; --shadow-tint:rgba(194,65,12,.20);
+}
+[data-paleta="marrom"]{
+  --primary:#7c4a2d; --primary-hover:#613720; --primary-soft:#f3e6db;
+  --primary-border:#ddc3ae; --primary-contrast:#fff; --ring:rgba(124,74,45,.24);
+  --grad-a:#7c4a2d; --grad-b:#a97153;
+  --bg:#f6ede5; --bg-2:#eddfd2;
+  --surface:#fefbf8; --surface-2:#f8f0e9;
+  --card:#fcf4ec; --card-2:#f2e4d6;
+  --border:#e9d9cb; --shadow-tint:rgba(124,74,45,.20);
+}
+[data-paleta="cacau"]{
+  --primary:#4a2c1d; --primary-hover:#351e13; --primary-soft:#efe2d8;
+  --primary-border:#d6bcaa; --primary-contrast:#fff; --ring:rgba(74,44,29,.24);
+  --grad-a:#4a2c1d; --grad-b:#7a4a30;
+  --bg:#f1e7de; --bg-2:#e6d6c7;
+  --surface:#fdfaf7; --surface-2:#f7efe7;
+  --card:#faf2e9; --card-2:#f0e1d2;
+  --border:#e3d2c2; --shadow-tint:rgba(74,44,29,.22);
+}
+
+/* ============================ BASE ============================ */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;
+  min-height:100vh;min-height:100svh;display:flex;flex-direction:column;overflow-x:hidden;
+}
+button,input{font:inherit}
+svg{display:block}
+a{color:inherit}
+[hidden]{display:none !important}
+:focus-visible{outline:3px solid var(--primary);outline-offset:3px;border-radius:8px}
+.skip{
+  position:fixed;left:16px;top:-90px;z-index:100;padding:11px 15px;border-radius:10px;
+  background:var(--surface);color:var(--text);font-size:13px;font-weight:700;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);transition:top .2s ease;
+}
+.skip:focus{top:16px}
+
+/* ================= FUNDO: ESTEIRA DE OFERTAS ================= */
+.fundo{
+  position:fixed;inset:-17% -14%;z-index:0;display:flex;flex-direction:column;
+  justify-content:center;gap:15px;pointer-events:none;
+  transform:rotate(-7deg) scale(1.1);will-change:transform;
+}
+.linha{overflow:hidden}
+.trilho{
+  display:flex;width:max-content;
+  animation:desliza 54s linear infinite;will-change:transform;
+}
+.linha:nth-child(2) .trilho{animation-duration:66s;animation-direction:reverse}
+.linha:nth-child(3) .trilho{animation-duration:59s}
+@keyframes desliza{to{transform:translate3d(-50%,0,0)}}
+.grupo{display:flex;gap:14px;padding-right:14px}
+
+/* mini-card de oferta fictícia */
+.mcard{
+  flex:0 0 214px;display:flex;align-items:center;gap:10px;padding:11px;
+  border-radius:15px;background:var(--surface);
+  border:1px solid var(--border);
+  box-shadow:0 14px 34px -28px var(--shadow-tint);
+}
+.mthumb{
+  width:46px;height:46px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--primary-soft),var(--card-2));
+  border:1px solid var(--primary-border);color:var(--primary-hover);
+  font-size:17px;font-weight:800;
+}
+.mtxt{min-width:0;display:grid;gap:1px}
+.mtag{font-size:8px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.mcard strong{
+  max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:11.5px;font-weight:750;
+}
+.mpreco{display:flex;align-items:baseline;gap:5px;font-size:11.5px}
+.mpreco s{font-size:9px;color:var(--faint)}
+.mpreco b{font-weight:800;color:var(--primary-hover)}
+.mdesc{
+  margin-left:auto;align-self:flex-start;padding:3px 6px;border-radius:6px;
+  background:var(--primary);color:var(--primary-contrast);
+  font-size:9px;font-weight:800;white-space:nowrap;
+}
+
+/* véu para dar leitura ao centro */
+.veu{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 48%,
+    rgba(232,244,238,.22) 0%,
+    rgba(232,244,238,.5) 38%,
+    rgba(232,244,238,.88) 76%,
+    rgba(232,244,238,.97) 100%);
+}
+[data-paleta="laranja"] .veu{
+  background:radial-gradient(ellipse at 50% 48%,rgba(251,240,229,.22),rgba(251,240,229,.52) 38%,rgba(251,240,229,.9) 76%,rgba(251,240,229,.97));
+}
+[data-paleta="marrom"] .veu{
+  background:radial-gradient(ellipse at 50% 48%,rgba(246,237,229,.22),rgba(246,237,229,.52) 38%,rgba(246,237,229,.9) 76%,rgba(246,237,229,.97));
+}
+[data-paleta="cacau"] .veu{
+  background:radial-gradient(ellipse at 50% 48%,rgba(241,231,222,.22),rgba(241,231,222,.52) 38%,rgba(241,231,222,.9) 76%,rgba(241,231,222,.97));
+}
+
+/* ========================= TOPO ============================= */
+.tela-login{
+  position:relative;z-index:3;display:flex;flex-direction:column;
+  flex:1;min-height:100vh;min-height:100svh;
+}
+.topo{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:16px clamp(14px,4vw,38px);
+}
+.topo-esq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.hub-link{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;
+  text-decoration:none;font-size:12.5px;font-weight:700;color:var(--text);
+  background:rgba(251,254,252,.72);border:1px solid var(--border);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:background .2s ease,transform .2s ease,border-color .2s ease;
+}
+.hub-link:hover{background:var(--surface);border-color:var(--primary-border);transform:translateX(-2px)}
+.hub-link svg{width:14px;height:14px}
+.selo{
+  display:inline-flex;align-items:center;padding:7px 11px;border-radius:999px;
+  background:rgba(251,254,252,.55);border:1px solid var(--border);
+  font-size:10px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.paleta{
+  display:flex;align-items:center;gap:3px;padding:4px;border-radius:999px;
+  background:rgba(251,254,252,.68);border:1px solid var(--border);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.paleta-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:0;
+  border-radius:999px;background:transparent;color:var(--muted);
+  font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;
+  transition:background .2s ease,color .2s ease;
+}
+.paleta-btn:hover{background:var(--card);color:var(--text)}
+.paleta-btn[aria-pressed="true"]{background:var(--primary);color:var(--primary-contrast)}
+.dot{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.14);flex:0 0 auto}
+.dot-verde{background:#047857}
+.dot-laranja{background:#c2410c}
+.dot-marrom{background:#7c4a2d}
+.dot-cacau{background:#4a2c1d}
+
+/* ========================= LOGIN ============================ */
+.palco{
+  flex:1;display:grid;place-items:center;
+  padding:14px clamp(16px,4vw,40px) clamp(34px,6vh,60px);
+}
+.login-card{
+  position:relative;width:min(436px,100%);min-width:0;
+  padding:clamp(26px,4vw,38px);border-radius:28px;
+  background:var(--surface); /* fallback */
+  background:color-mix(in srgb,var(--surface) 80%,transparent);
+  border:1px solid color-mix(in srgb,var(--surface) 58%,var(--border));
+  box-shadow:0 38px 90px -34px var(--shadow-tint),inset 0 1px 0 rgba(255,255,255,.75);
+  backdrop-filter:blur(22px) saturate(1.1);
+  -webkit-backdrop-filter:blur(22px) saturate(1.1);
+  animation:cardIn .82s cubic-bezier(.2,.8,.2,1) both;
+}
+@supports not ((backdrop-filter:blur(2px)) or (-webkit-backdrop-filter:blur(2px))){
+  .login-card{background:var(--surface)}
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:none}}
+.login-card.volta{animation:cardIn .6s cubic-bezier(.2,.8,.2,1) both}
+.reveal{animation:rise .68s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:none}}
+
+.marca{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+.marca-id{display:flex;align-items:center;gap:10px;min-width:0}
+.marca-mark{
+  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;
+  box-shadow:0 10px 22px var(--shadow-tint);
+}
+.marca-mark svg{width:22px;height:22px}
+.marca-id b{display:block;font-size:17px;letter-spacing:-.025em}
+.marca-id span{display:block;font-size:9.5px;font-weight:750;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.live{
+  display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:6px 9px;
+  border-radius:999px;background:var(--primary-soft);border:1px solid var(--primary-border);
+  color:var(--primary-hover);font-size:9px;font-weight:800;
+  letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;
+}
+.live i{
+  width:6px;height:6px;border-radius:50%;background:var(--primary);
+  animation:pisca 2.2s ease-in-out infinite;
+}
+@keyframes pisca{50%{opacity:.35;transform:scale(.8)}}
+
+.card-title{margin:0 0 8px;font-size:clamp(1.65rem,3vw,2.05rem);line-height:1.1;letter-spacing:-.035em}
+.card-sub{margin:0 0 22px;color:var(--muted);font-size:13.5px;line-height:1.58}
+.form{display:grid;gap:15px}
+.field{display:grid;gap:7px}
+.field label{font-size:12.5px;font-weight:750}
+.input-wrap{position:relative}
+.input{
+  width:100%;height:51px;padding:0 14px;border-radius:14px;
+  border:1px solid var(--border);background:color-mix(in srgb,var(--card) 76%,transparent);
+  color:var(--text);font-size:14.5px;
+  transition:border-color .2s ease,box-shadow .2s ease,background .2s ease;
+}
+.input::placeholder{color:var(--faint)}
+.input:hover{border-color:var(--primary-border)}
+.input:focus{outline:none;border-color:var(--primary);background:var(--surface);box-shadow:0 0 0 4px var(--ring)}
+.input:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.input[aria-invalid="true"]{border-color:#b42318;background:#fff7f7}
+.senha .input{padding-right:54px}
+.toggle{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:10px;
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:background .18s ease,color .18s ease;
+}
+.toggle:hover{background:var(--card-2);color:var(--text)}
+.toggle svg{width:19px;height:19px}
+.toggle .ico-eye-off{display:none}
+.toggle.is-visible .ico-eye{display:none}
+.toggle.is-visible .ico-eye-off{display:block}
+
+.form-erro{
+  display:none;align-items:flex-start;gap:9px;padding:11px 13px;border-radius:12px;
+  background:#fdecec;border:1px solid #f2b8b8;color:#8f1d1d;
+  font-size:12.5px;font-weight:650;line-height:1.45;
+}
+.form-erro.show{display:flex;animation:erroIn .3s ease both}
+.form-erro svg{width:16px;height:16px;flex:0 0 auto;margin-top:1px}
+@keyframes erroIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.btn{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  height:51px;margin-top:2px;border:0;border-radius:14px;cursor:pointer;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+  color:var(--primary-contrast);font-size:14.5px;font-weight:800;
+  box-shadow:0 16px 30px -14px var(--shadow-tint),inset 0 1px 0 rgba(255,255,255,.18);
+  transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;
+}
+.btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 20px 36px -14px var(--shadow-tint),inset 0 1px 0 rgba(255,255,255,.18)}
+.btn:active:not(:disabled){transform:translateY(0) scale(.995)}
+.btn:disabled{cursor:progress;opacity:.94}
+.btn svg{width:17px;height:17px}
+.spinner{
+  display:none;width:17px;height:17px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
+  animation:gira .7s linear infinite;
+}
+.btn.is-loading .spinner{display:block}
+.btn.is-loading .btn-arrow{display:none}
+@keyframes gira{to{transform:rotate(360deg)}}
+
+.demo{
+  display:flex;align-items:flex-start;gap:9px;margin-top:17px;padding:11px 12px;
+  border-radius:12px;border:1px dashed var(--primary-border);background:var(--primary-soft);
+  color:var(--primary-hover);font-size:12px;line-height:1.55;
+}
+.demo svg{width:15px;height:15px;flex:0 0 auto;margin-top:2px}
+.demo code{
+  padding:1px 5px;border-radius:5px;border:1px solid var(--primary-border);
+  background:rgba(255,255,255,.62);color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:750;
+}
+.card-foot{margin:15px 0 0;text-align:center;font-size:11px;color:var(--faint)}
+
+.shake{animation:shake .46s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes shake{
+  10%,90%{transform:translate3d(-2px,0,0)}
+  20%,80%{transform:translate3d(5px,0,0)}
+  30%,50%,70%{transform:translate3d(-8px,0,0)}
+  40%,60%{transform:translate3d(8px,0,0)}
+}
+
+/* ===================== WIPE / TRANSIÇÃO ===================== */
+.wipe{
+  position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+  transform:scale(.045);transform-origin:50% 54%;border-radius:44px;
+  will-change:transform,opacity;
+}
+.wipe.on{
+  opacity:1;transform:scale(1);border-radius:0;
+  transition:transform .72s cubic-bezier(.65,0,.2,1),border-radius .72s ease,opacity .16s ease;
+}
+.wipe.fade{opacity:0;transition:opacity .42s ease}
+
+/* ===================== PAINEL SIMULADO ===================== */
+.painel{
+  position:relative;z-index:50;display:grid;grid-template-columns:256px minmax(0,1fr);
+  min-height:100vh;min-height:100svh;background:var(--bg);
+}
+.painel.is-in{animation:painelIn .55s cubic-bezier(.2,.8,.2,1) both}
+.painel.is-out{opacity:0;transform:scale(.993);transition:opacity .3s ease,transform .3s ease}
+@keyframes painelIn{from{opacity:0;transform:scale(.988)}to{opacity:1;transform:none}}
+.side{
+  display:flex;flex-direction:column;gap:22px;padding:22px 15px;min-height:100%;
+  background:var(--surface);border-right:1px solid var(--border);
+}
+.side-brand{display:flex;align-items:center;gap:10px;padding:4px 8px}
+.side-mark{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+  box-shadow:0 8px 18px var(--shadow-tint);
+}
+.side-mark svg{width:21px;height:21px}
+.side-brand b{display:block;font-size:16.5px;letter-spacing:-.02em}
+.side-brand span{display:block;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.nav{list-style:none;display:grid;gap:5px;margin:0;padding:0}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:11px;
+  color:var(--muted);font-size:13.5px;font-weight:650;border:1px solid transparent;
+}
+.nav-item svg{width:18px;height:18px;flex:0 0 auto}
+.nav-item[aria-current="page"]{background:var(--primary-soft);border-color:var(--primary-border);color:var(--primary-hover)}
+.side-foot{
+  margin-top:auto;display:flex;align-items:center;gap:9px;padding:10px 11px;
+  border-radius:13px;background:var(--card);border:1px solid var(--border);
+}
+.avatar{
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  background:var(--primary-soft);border:1px solid var(--primary-border);
+  color:var(--primary-hover);font-size:12px;font-weight:800;
+}
+.side-foot b{display:block;font-size:12px}
+.side-foot span{display:block;font-size:10.5px;color:var(--faint)}
+.conteudo{padding:clamp(18px,3vw,36px);min-width:0}
+.topo-painel{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.kicker{
+  margin:0;font-size:10.5px;font-weight:800;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--primary-hover);
+}
+.topo-painel h2{margin:3px 0 0;font-size:clamp(1.5rem,2.4vw,2rem);letter-spacing:-.03em}
+.acoes{display:flex;align-items:center;gap:9px}
+.pill{
+  padding:6px 10px;border-radius:999px;background:var(--primary-soft);
+  border:1px solid var(--primary-border);color:var(--primary-hover);
+  font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+}
+.btn-sair{
+  display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;
+  border-radius:10px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text);font-size:12.5px;font-weight:750;cursor:pointer;
+  transition:background .18s ease,border-color .18s ease,transform .18s ease;
+}
+.btn-sair:hover{background:var(--card);border-color:var(--primary-border);transform:translateY(-1px)}
+.btn-sair svg{width:15px;height:15px}
+.metricas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.metrica{
+  position:relative;overflow:hidden;padding:20px;border-radius:20px;
+  background:var(--surface);border:1px solid var(--border);
+  box-shadow:0 16px 34px -28px var(--shadow-tint);
+  animation:rise .55s cubic-bezier(.2,.8,.2,1) both;
+  animation-delay:calc(.08s + var(--i,0) * .08s);
+}
+.metrica-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.metrica-label{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.metrica-icon{
+  width:36px;height:36px;border-radius:11px;display:grid;place-items:center;
+  background:var(--primary-soft);border:1px solid var(--primary-border);color:var(--primary-hover);
+}
+.metrica-icon svg{width:18px;height:18px}
+.metrica strong{
+  display:block;margin:14px 0 4px;font-size:clamp(2rem,3.2vw,2.5rem);
+  line-height:1.05;letter-spacing:-.045em;font-variant-numeric:tabular-nums;
+}
+.metrica small{font-size:12.5px;color:var(--muted)}
+.fila{
+  margin-top:17px;padding:18px;border-radius:20px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:0 16px 34px -28px var(--shadow-tint);
+  animation:rise .55s cubic-bezier(.2,.8,.2,1) .28s both;
+}
+.fila h3{margin:0 0 12px;font-size:13.5px}
+.fila-lista{list-style:none;display:grid;gap:8px;margin:0;padding:0}
+.fila-lista li{
+  display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;
+  background:var(--card);border:1px solid var(--border);
+}
+.mini-thumb{
+  width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;
+  background:var(--primary-soft);border:1px solid var(--primary-border);
+  color:var(--primary-hover);font-size:13px;font-weight:800;
+}
+.fila-info{min-width:0}
+.fila-info b{display:block;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fila-info span{display:block;font-size:11px;color:var(--faint)}
+.estado{
+  margin-left:auto;padding:4px 8px;border-radius:999px;white-space:nowrap;
+  font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+}
+.estado.ok{background:var(--primary-soft);border:1px solid var(--primary-border);color:var(--primary-hover)}
+.estado.fila{background:var(--card-2);border:1px solid var(--border);color:var(--muted)}
+
+/* ======================= RESPONSIVO ======================== */
+@media (max-width:900px){
+  .painel{grid-template-columns:1fr}
+  .side{
+    position:sticky;top:0;z-index:6;flex-direction:row;flex-wrap:wrap;align-items:center;
+    gap:10px 12px;padding:12px 15px;border-right:0;border-bottom:1px solid var(--border);
+  }
+  .side-brand{padding:0}
+  .side-brand div{display:none}
+  .side-mark{width:34px;height:34px}
+  .side-foot{margin:0 0 0 auto;padding:5px;border:0;background:none}
+  .side-foot div{display:none}
+  .nav{order:3;display:flex;width:100%;overflow-x:auto;gap:5px;padding-bottom:1px;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav-item{white-space:nowrap;padding:8px 10px;font-size:12.5px}
+  .nav-item svg{display:none}
+  .conteudo{padding:20px 16px 34px}
+}
+@media (max-width:640px){
+  .topo{align-items:flex-start}
+  .topo-esq .selo{display:none}
+  .paleta{width:100%;justify-content:space-between;gap:2px}
+  .paleta-btn{flex:1;justify-content:center;padding:7px 6px}
+  .palco{padding:12px 14px 40px}
+  .login-card{padding:24px 19px;border-radius:22px}
+  .metricas{grid-template-columns:1fr}
+  .acoes{width:100%;justify-content:space-between}
+  .mcard{flex-basis:188px}
+  .mcard strong{max-width:92px}
+  /* deixa a esteira mais perceptível no celular sem perder leitura */
+  .veu{opacity:.78}
+}
+@media (max-width:390px){
+  .topo{padding:12px 12px}
+  .hub-link,.selo{font-size:11.5px}
+  .paleta-btn{font-size:10px;padding:7px 4px}
+  .paleta-btn .dot{display:none}
+  .palco{padding:10px 12px 34px}
+  .login-card{padding:22px 17px}
+  .marca-mark{width:38px;height:38px;border-radius:12px}
+  .marca-id b{font-size:16px}
+}
+
+/* ==================== MOVIMENTO REDUZIDO =================== */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  .trilho{animation:none !important}
+  .live i{animation:none !important;opacity:1 !important}
+  .fundo{transform:rotate(-7deg) scale(1.1) !important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#loginForm">Pular para o formulário de login</a>
+
+<!-- fundo com a esteira de ofertas -->
+<div class="fundo" id="fundo" aria-hidden="true">
+  <div class="linha"><div class="trilho"></div></div>
+  <div class="linha"><div class="trilho"></div></div>
+  <div class="linha"><div class="trilho"></div></div>
+</div>
+<div class="veu" aria-hidden="true"></div>
+
+<!-- ===================== TELA DE LOGIN ===================== -->
+<div class="tela-login" id="auth">
+  <header class="topo">
+    <div class="topo-esq">
+      <a class="hub-link" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Hub
+      </a>
+      <span class="selo">Opção 2 · Esteira de ofertas</span>
+    </div>
+    <div class="paleta" role="group" aria-label="Paleta de cores">
+      <button type="button" class="paleta-btn" data-paleta-btn="verde" aria-pressed="true"><span class="dot dot-verde" aria-hidden="true"></span>Verde</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="laranja" aria-pressed="false"><span class="dot dot-laranja" aria-hidden="true"></span>Laranja</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="marrom" aria-pressed="false"><span class="dot dot-marrom" aria-hidden="true"></span>Marrom</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="cacau" aria-pressed="false"><span class="dot dot-cacau" aria-hidden="true"></span>Cacau</button>
+    </div>
+  </header>
+
+  <main class="palco">
+    <div class="login-card" id="loginCard">
+      <div class="marca reveal" style="--d:.06s">
+        <div class="marca-id">
+          <span class="marca-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3.4 7.2h17.2M3.4 12h17.2M3.4 16.8h17.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".45"/><path d="M7 5.2l3.1 13.6M14 5.2l3.1 13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/></svg>
+          </span>
+          <div><b>Alcance</b><span>esteira de ofertas</span></div>
+        </div>
+        <span class="live"><i aria-hidden="true"></i>Ativa</span>
+      </div>
+
+      <h1 class="card-title reveal" style="--d:.13s">Entre na esteira.</h1>
+      <p class="card-sub reveal" style="--d:.19s">As melhores ofertas já estão circulando. Acesse para acompanhar, filtrar e enviar.</p>
+
+      <form class="form" id="loginForm" novalidate>
+        <div class="field reveal" style="--d:.26s">
+          <label for="usuario">Usuário</label>
+          <input class="input" id="usuario" name="usuario" type="text" placeholder="ex.: admin"
+                 autocomplete="username" autocapitalize="none" spellcheck="false"
+                 aria-describedby="erroLogin" required>
+        </div>
+
+        <div class="field reveal" style="--d:.32s">
+          <label for="senha">Senha</label>
+          <div class="input-wrap senha">
+            <input class="input" id="senha" name="senha" type="password" placeholder="Sua senha"
+                   autocomplete="current-password" aria-describedby="erroLogin" required>
+            <button type="button" class="toggle" id="toggleSenha" aria-label="Mostrar senha" aria-pressed="false" aria-controls="senha">
+              <svg class="ico-eye" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.6 12S6 6.4 12 6.4 21.4 12 21.4 12 18 17.6 12 17.6 2.6 12 2.6 12z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.9" stroke="currentColor" stroke-width="1.7"/></svg>
+              <svg class="ico-eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3l18 18M10.6 6.7A9.9 9.9 0 0112 6.6c6 0 9.4 5.4 9.4 5.4a17.7 17.7 0 01-3.2 3.7M6.3 8.2A17.3 17.3 0 002.6 12S6 17.4 12 17.4c1.3 0 2.5-.3 3.6-.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.8 10a3 3 0 004.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-erro" id="erroLogin" role="alert" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1.1" fill="currentColor"/></svg>
+          <span id="erroTexto"></span>
+        </div>
+
+        <button class="btn reveal" id="entrar" type="submit" style="--d:.38s">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="btn-label">Entrar no painel</span>
+          <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+
+      <div class="demo reveal" style="--d:.44s">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 11v5.2M12 7.8v.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Demonstração: usuário <code>admin</code> e senha <code>alcance</code>. Outras combinações exibem erro.</span>
+      </div>
+      <p class="card-foot">Protótipo navegável · ofertas fictícias</p>
+    </div>
+  </main>
+</div>
+
+<div class="wipe" id="wipe" aria-hidden="true"></div>
+
+<!-- ===================== PAINEL SIMULADO ===================== -->
+<section class="painel" id="painel" aria-labelledby="tituloPainel" hidden>
+  <aside class="side" aria-label="Menu simulado">
+    <div class="side-brand">
+      <span class="side-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3.4 7.2h17.2M3.4 12h17.2M3.4 16.8h17.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".45"/><path d="M7 5.2l3.1 13.6M14 5.2l3.1 13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/></svg>
+      </span>
+      <div><b>Alcance</b><span>esteira</span></div>
+    </div>
+    <nav aria-label="Navegação simulada">
+      <ul class="nav">
+        <li><span class="nav-item" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Esteira</span></li>
+        <li><span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16l-1.4 12H5.4L4 7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.5 7a3.5 3.5 0 017 0" stroke="currentColor" stroke-width="1.7"/></svg>
+          Ofertas</span></li>
+        <li><span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 01-9 8.4L4 21l1.2-6.2A8.4 8.4 0 1121 11.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          Envios</span></li>
+        <li><span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6v.2h-4V21a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 00.3-1.9A1.7 1.7 0 003 14H2.8v-4H3a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 009 4.3 1.7 1.7 0 0010 3v-.2h4V3a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.6 1h.2v4H21a1.7 1.7 0 00-1.6 1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          Ajustes</span></li>
+      </ul>
+    </nav>
+    <div class="side-foot">
+      <span class="avatar" aria-hidden="true">AD</span>
+      <div><b>admin</b><span>conta demo</span></div>
+    </div>
+  </aside>
+
+  <div class="conteudo">
+    <header class="topo-painel">
+      <div>
+        <p class="kicker">Esteira de ofertas</p>
+        <h2 id="tituloPainel" tabindex="-1">Fila de envios</h2>
+      </div>
+      <div class="acoes">
+        <span class="pill">modo demo</span>
+        <button class="btn-sair" id="sair" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 17l5-5-5-5M20 12H9M12 3H5a2 2 0 00-2 2v14a2 2 0 002 2h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sair
+        </button>
+      </div>
+    </header>
+
+    <div class="metricas">
+      <article class="metrica" style="--i:0">
+        <div class="metrica-top">
+          <span class="metrica-label">Ofertas na esteira</span>
+          <span class="metrica-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          </span>
+        </div>
+        <strong>128</strong>
+        <small>capturadas nas últimas 24h</small>
+      </article>
+
+      <article class="metrica" style="--i:1">
+        <div class="metrica-top">
+          <span class="metrica-label">Mensagens entregues</span>
+          <span class="metrica-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.4 8.4 0 01-9 8.4L4 21l1.2-6.2A8.4 8.4 0 1121 11.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 11.8l2 2 4-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+        <strong>94,8%</strong>
+        <small>dos envios confirmados</small>
+      </article>
+    </div>
+
+    <section class="fila" aria-labelledby="filaTitulo">
+      <h3 id="filaTitulo">Circulando agora</h3>
+      <ul class="fila-lista">
+        <li><span class="mini-thumb" aria-hidden="true">F</span><div class="fila-info"><b>Fone Bluetooth Pro</b><span>R$ 189,90 · -37%</span></div><span class="estado ok">enviado</span></li>
+        <li><span class="mini-thumb" aria-hidden="true">C</span><div class="fila-info"><b>Cafeteira Italiana 6 xícaras</b><span>R$ 79,90 · -22%</span></div><span class="estado ok">enviado</span></li>
+        <li><span class="mini-thumb" aria-hidden="true">T</span><div class="fila-info"><b>Tênis Runner Vent</b><span>R$ 219,00 · -31%</span></div><span class="estado fila">na esteira</span></li>
+      </ul>
+    </section>
+  </div>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  var reduzirMovimento = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var timers = [];
+  function depois(ms, fn) {
+    var t = setTimeout(fn, reduzirMovimento.matches ? Math.min(ms, 160) : ms);
+    timers.push(t);
+    return t;
+  }
+  function limparTimers() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
+
+  /* ---------------- paleta ---------------- */
+  var CHAVE_PALETA = 'alcance-auth-paleta';
+  var paletasValidas = ['verde', 'laranja', 'marrom', 'cacau'];
+
+  function aplicarPaleta(nome, persistir) {
+    if (paletasValidas.indexOf(nome) < 0) nome = 'verde';
+    document.documentElement.setAttribute('data-paleta', nome);
+    document.querySelectorAll('[data-paleta-btn]').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', String(btn.getAttribute('data-paleta-btn') === nome));
+    });
+    if (persistir) {
+      try { localStorage.setItem(CHAVE_PALETA, nome); } catch (e) {}
+    }
+  }
+  var paletaInicial = 'verde';
+  try { paletaInicial = localStorage.getItem(CHAVE_PALETA) || 'verde'; } catch (e) {}
+  aplicarPaleta(paletaInicial, false);
+  document.querySelectorAll('[data-paleta-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      aplicarPaleta(btn.getAttribute('data-paleta-btn'), true);
+    });
+  });
+
+  /* ---------------- esteira de ofertas ---------------- */
+  var ofertas = [
+    { nome: 'Fone BT Pro', antigo: 'R$ 299', atual: 'R$ 189', desconto: '-37%', tag: 'Áudio', letra: 'F' },
+    { nome: 'Cafeteira Italiana', antigo: 'R$ 102', atual: 'R$ 79', desconto: '-22%', tag: 'Cozinha', letra: 'C' },
+    { nome: 'Tênis Runner Vent', antigo: 'R$ 319', atual: 'R$ 219', desconto: '-31%', tag: 'Esporte', letra: 'T' },
+    { nome: 'Smartwatch Fit 2', antigo: 'R$ 449', atual: 'R$ 289', desconto: '-36%', tag: 'Wearable', letra: 'S' },
+    { nome: 'Air Fryer 4L', antigo: 'R$ 429', atual: 'R$ 299', desconto: '-30%', tag: 'Cozinha', letra: 'A' },
+    { nome: 'Teclado Mecânico K2', antigo: 'R$ 389', atual: 'R$ 259', desconto: '-33%', tag: 'Setup', letra: 'K' },
+    { nome: 'Mochila Urban 25L', antigo: 'R$ 249', atual: 'R$ 169', desconto: '-32%', tag: 'Acessório', letra: 'M' },
+    { nome: 'Caixa de Som Mini', antigo: 'R$ 199', atual: 'R$ 139', desconto: '-30%', tag: 'Áudio', letra: 'B' },
+    { nome: 'Luminária de Mesa', antigo: 'R$ 119', atual: 'R$ 84', desconto: '-29%', tag: 'Casa', letra: 'L' }
+  ];
+
+  function cartaoOferta(o) {
+    return '<article class="mcard">' +
+      '<span class="mthumb" aria-hidden="true">' + o.letra + '</span>' +
+      '<div class="mtxt"><span class="mtag">' + o.tag + '</span>' +
+      '<strong>' + o.nome + '</strong>' +
+      '<span class="mpreco"><s>' + o.antigo + '</s> <b>' + o.atual + '</b></span></div>' +
+      '<span class="mdesc">' + o.desconto + '</span>' +
+      '</article>';
+  }
+
+  document.querySelectorAll('.trilho').forEach(function (trilho, indice) {
+    var deslocamento = indice * 3;
+    var lista = ofertas.slice(deslocamento).concat(ofertas.slice(0, deslocamento));
+    var html = lista.map(cartaoOferta).join('');
+    var grupoA = document.createElement('div');
+    grupoA.className = 'grupo';
+    grupoA.innerHTML = html;
+    var grupoB = grupoA.cloneNode(true);
+    grupoB.setAttribute('aria-hidden', 'true');
+    trilho.appendChild(grupoA);
+    trilho.appendChild(grupoB);
+  });
+
+  /* ---------------- parallax suave ---------------- */
+  var fundo = document.getElementById('fundo');
+  if (!reduzirMovimento.matches && window.matchMedia('(pointer: fine)').matches) {
+    var alvoX = 0, alvoY = 0, atualX = 0, atualY = 0, raf = null;
+
+    function animarFundo() {
+      atualX += (alvoX - atualX) * 0.07;
+      atualY += (alvoY - atualY) * 0.07;
+      fundo.style.transform =
+        'rotate(-7deg) scale(1.1) translate3d(' + atualX.toFixed(2) + 'px,' + atualY.toFixed(2) + 'px,0)';
+      if (Math.abs(alvoX - atualX) > 0.08 || Math.abs(alvoY - atualY) > 0.08) {
+        raf = requestAnimationFrame(animarFundo);
+      } else {
+        raf = null;
+      }
+    }
+
+    window.addEventListener('pointermove', function (evento) {
+      alvoX = (evento.clientX / window.innerWidth - 0.5) * 22;
+      alvoY = (evento.clientY / window.innerHeight - 0.5) * 14;
+      if (!raf) raf = requestAnimationFrame(animarFundo);
+    }, { passive: true });
+  }
+
+  /* ---------------- referências do login ---------------- */
+  var form = document.getElementById('loginForm');
+  var usuario = document.getElementById('usuario');
+  var senha = document.getElementById('senha');
+  var toggleSenha = document.getElementById('toggleSenha');
+  var entrar = document.getElementById('entrar');
+  var rotuloBtn = entrar.querySelector('.btn-label');
+  var erro = document.getElementById('erroLogin');
+  var erroTexto = document.getElementById('erroTexto');
+  var card = document.getElementById('loginCard');
+  var auth = document.getElementById('auth');
+  var painel = document.getElementById('painel');
+  var tituloPainel = document.getElementById('tituloPainel');
+  var sair = document.getElementById('sair');
+  var wipe = document.getElementById('wipe');
+  var ocupado = false;
+
+  function senhaOculta() {
+    senha.type = 'password';
+    toggleSenha.classList.remove('is-visible');
+    toggleSenha.setAttribute('aria-pressed', 'false');
+    toggleSenha.setAttribute('aria-label', 'Mostrar senha');
+  }
+
+  toggleSenha.addEventListener('click', function () {
+    var visivel = senha.type === 'text';
+    senha.type = visivel ? 'password' : 'text';
+    toggleSenha.classList.toggle('is-visible', !visivel);
+    toggleSenha.setAttribute('aria-pressed', String(!visivel));
+    toggleSenha.setAttribute('aria-label', visivel ? 'Mostrar senha' : 'Ocultar senha');
+    senha.focus({ preventScroll: true });
+  });
+
+  function mostrarErro(mensagem) {
+    erroTexto.textContent = mensagem;
+    erro.classList.add('show');
+    usuario.setAttribute('aria-invalid', 'true');
+    senha.setAttribute('aria-invalid', 'true');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+    depois(520, function () { card.classList.remove('shake'); });
+  }
+
+  function limparErro() {
+    erro.classList.remove('show');
+    erroTexto.textContent = '';
+    usuario.removeAttribute('aria-invalid');
+    senha.removeAttribute('aria-invalid');
+  }
+
+  usuario.addEventListener('input', limparErro);
+  senha.addEventListener('input', limparErro);
+
+  form.addEventListener('submit', function (evento) {
+    evento.preventDefault();
+    if (ocupado) return;
+
+    var u = usuario.value.trim().toLowerCase();
+    var s = senha.value;
+
+    if (!u || !s) {
+      mostrarErro('Preencha usuário e senha para continuar.');
+      (!u ? usuario : senha).focus();
+      return;
+    }
+
+    limparErro();
+    ocupado = true;
+    entrar.disabled = true;
+    entrar.classList.add('is-loading');
+    entrar.setAttribute('aria-busy', 'true');
+    rotuloBtn.textContent = 'Buscando sua conta…';
+
+    var credenciaisOk = u === 'admin' && s === 'alcance';
+
+    depois(900, function () {
+      entrar.classList.remove('is-loading');
+      entrar.removeAttribute('aria-busy');
+      entrar.disabled = false;
+
+      if (!credenciaisOk) {
+        ocupado = false;
+        rotuloBtn.textContent = 'Entrar no painel';
+        senha.value = '';
+        senha.focus();
+        mostrarErro('Usuário ou senha inválidos. Confira a conta demo indicada abaixo.');
+        return;
+      }
+
+      rotuloBtn.textContent = 'Abrindo esteira…';
+      entrar.disabled = true;
+      wipe.classList.add('on');
+
+      depois(520, function () {
+        auth.hidden = true;
+        painel.hidden = false;
+        painel.classList.remove('is-out');
+        painel.classList.add('is-in');
+        document.title = 'Alcance · Esteira (demo)';
+        tituloPainel.focus({ preventScroll: true });
+      });
+
+      depois(900, function () { wipe.classList.add('fade'); });
+      depois(1380, function () {
+        wipe.classList.remove('on', 'fade');
+        entrar.disabled = false;
+        rotuloBtn.textContent = 'Entrar no painel';
+        form.reset();
+        senhaOculta();
+        ocupado = false;
+      });
+    });
+  });
+
+  sair.addEventListener('click', function () {
+    limparTimers();
+    painel.classList.remove('is-in');
+    painel.classList.add('is-out');
+
+    depois(320, function () {
+      painel.hidden = true;
+      painel.classList.remove('is-out');
+      auth.hidden = false;
+      document.title = 'Alcance · Login · Opção 2 — Esteira de ofertas';
+      card.classList.remove('volta');
+      void card.offsetWidth;
+      card.classList.add('volta');
+      usuario.focus({ preventScroll: true });
+    });
+  });
+})();
+</script>
+</body>
+</html>

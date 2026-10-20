@@ -864,3 +864,39 @@ areia, grafite, marrom e cacau — cards tingidos, caixas internas com um tom ab
 
 **Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
 usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
+
+---
+
+## 2026-10-20 | E6-AUTH-01 | Protótipos de login (3 opções) + spec de segurança
+
+**Pedido**: implementar tela de autenticação com animação; antes da implantação, entregar **3 protótipos
+navegáveis** para avaliação.
+
+**Consultas a agentes**:
+- **aprendiz**: base do projeto vazia; lições visuais do ecommerce e de segurança do `promo-radar-saas`.
+  Alertas: proto-first; `prefers-reduced-motion` obrigatório; glassy/blur custa GPU no mobile; sem som;
+  auth hardening (rate-limit/lockout, fail-closed, timing-safe) e armadilha de `await` em handler não-async.
+- **kalimaster**: requisitos MUST para a implementação — scrypt assíncrono + `timingSafeEqual`, cookie
+  `HttpOnly/SameSite`, TTL/idle/rotação, Origin/CSRF, rate-limit, default-deny em GETs, headers, auditoria
+  sem PII, TLS em LAN; apontou 15 riscos do `MANAGER_KEY` atual (GETs abertos, chave em `sessionStorage`,
+  fail-open, comparação `!==`, sem logout/TTL).
+- **protomaster**: construiu os 3 protótipos autocontidos, sem CDN/build.
+
+**Entregas**:
+- `docs/prototipos/auth/index.html` — hub comparativo com previews e roteiro de teste.
+- `opcao-1.html` — **Sala de controle** (split-screen, orbs, stagger, selo de sucesso).
+- `opcao-2.html` — **Esteira de ofertas** (marquee diagonal, cartão translúcido, parallax, wipe).
+- `opcao-3.html` — **Radar** (tema escuro, sweep, blips, inputs underline, ripple).
+- `README.md` — como abrir, prós/contras, critérios e limitações.
+- `docs/13-auth-spec.md` — escopo, rotas, checklist de segurança, critérios de aceite Gherkin, riscos e
+  decisões abertas.
+
+**Validação**: servidor local em `http://localhost:8100/` (HTTP 200); Playwright 1440×900 e 390×844 —
+login demo `admin`/`alcance` chega ao painel simulado, senha errada exibe erro com shake, toggle de senha,
+paletas, "Sair" e `prefers-reduced-motion`; `scrollWidth=390` sem overflow; **0 erros JS**.
+
+**Próximo passo**: usuário escolhe a opção (1, 2 ou 3) e responde às decisões abertas da spec; só então
+implementar backend de sessão + tela escolhida.
+
+**Pendências inalteradas**: credenciais Creators API, `SHOPEE_SUBID`, rotação das sessões ML, remote git
+(P0), piloto com 0 loops (decisão do usuário).

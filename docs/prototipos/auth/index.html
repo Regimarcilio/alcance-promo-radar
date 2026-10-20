@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-paleta="verde">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Alcance · Protótipos de login</title>
+<script>
+/* Aplica a paleta salva antes da pintura para evitar "flash" de tema. */
+try {
+  var p = localStorage.getItem('alcance-auth-paleta');
+  if (['verde', 'laranja', 'marrom', 'cacau'].indexOf(p) >= 0) {
+    document.documentElement.setAttribute('data-paleta', p);
+  }
+} catch (e) {}
+</script>
+<style>
+/* ============================================================
+   TOKENS — mesmas paletas do painel Alcance
+   ============================================================ */
+:root{
+  --primary:#047857; --primary-hover:#03624a; --primary-soft:#e0f3ea;
+  --primary-border:#b0dcca; --primary-contrast:#fff; --ring:rgba(4,120,87,.26);
+  --grad-a:#0f766e; --grad-b:#047857;
+  --bg:#e8f4ee; --bg-2:#d7ecdf;
+  --surface:#fbfefc; --surface-2:#eff7f2;
+  --card:#f2faf6; --card-2:#e3f1e9;
+  --border:#d4e7dd;
+  --text:#15212a; --muted:#54636f; --faint:#7d8b96;
+  --shadow-tint:rgba(4,120,87,.20);
+  --radar:#6ee7b7; --radar-soft:rgba(110,231,183,.16); --radar-glow:rgba(110,231,183,.48);
+}
+[data-paleta="laranja"]{
+  --primary:#c2410c; --primary-hover:#9a3412; --primary-soft:#fbe4d4;
+  --primary-border:#f0bf9e; --primary-contrast:#fff; --ring:rgba(194,65,12,.24);
+  --grad-a:#b45309; --grad-b:#c2410c;
+  --bg:#fbf0e5; --bg-2:#f7e2cd;
+  --surface:#fffdfa; --surface-2:#fdf4ea;
+  --card:#fff8f0; --card-2:#fbe8d6;
+  --border:#efdac3; --shadow-tint:rgba(194,65,12,.20);
+  --radar:#fdba74; --radar-soft:rgba(253,186,116,.16); --radar-glow:rgba(253,186,116,.44);
+}
+[data-paleta="marrom"]{
+  --primary:#7c4a2d; --primary-hover:#613720; --primary-soft:#f3e6db;
+  --primary-border:#ddc3ae; --primary-contrast:#fff; --ring:rgba(124,74,45,.24);
+  --grad-a:#7c4a2d; --grad-b:#a97153;
+  --bg:#f6ede5; --bg-2:#eddfd2;
+  --surface:#fefbf8; --surface-2:#f8f0e9;
+  --card:#fcf4ec; --card-2:#f2e4d6;
+  --border:#e9d9cb; --shadow-tint:rgba(124,74,45,.20);
+  --radar:#e7c4a3; --radar-soft:rgba(231,196,163,.16); --radar-glow:rgba(231,196,163,.42);
+}
+[data-paleta="cacau"]{
+  --primary:#4a2c1d; --primary-hover:#351e13; --primary-soft:#efe2d8;
+  --primary-border:#d6bcaa; --primary-contrast:#fff; --ring:rgba(74,44,29,.24);
+  --grad-a:#4a2c1d; --grad-b:#7a4a30;
+  --bg:#f1e7de; --bg-2:#e6d6c7;
+  --surface:#fdfaf7; --surface-2:#f7efe7;
+  --card:#faf2e9; --card-2:#f0e1d2;
+  --border:#e3d2c2; --shadow-tint:rgba(74,44,29,.22);
+  --radar:#d8b79d; --radar-soft:rgba(216,183,157,.16); --radar-glow:rgba(216,183,157,.4);
+}
+
+/* ============================ BASE ============================ */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{
+  margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  color:var(--text);background:
+    radial-gradient(1000px 640px at 88% -8%,var(--primary-soft),transparent 62%),
+    radial-gradient(820px 600px at -6% 22%,var(--bg-2),transparent 58%),
+    var(--bg);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit}
+svg{display:block}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--primary);outline-offset:3px;border-radius:10px}
+.skip{
+  position:fixed;left:16px;top:-90px;z-index:100;padding:11px 15px;border-radius:10px;
+  background:var(--surface);color:var(--text);font-size:13px;font-weight:700;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);transition:top .2s ease;
+}
+.skip:focus{top:16px}
+.wrap{width:min(1180px,calc(100% - 44px));margin:0 auto}
+
+/* ========================= TOPO ============================= */
+.topo{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:22px 0 8px;
+}
+.marca{display:flex;align-items:center;gap:11px;text-decoration:none}
+.marca-mark{
+  width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+  box-shadow:0 10px 24px var(--shadow-tint);
+}
+.marca-mark svg{width:24px;height:24px}
+.marca-txt b{display:block;font-size:18px;letter-spacing:-.03em;line-height:1.1}
+.marca-txt>span{display:block;font-size:9.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.paleta{
+  display:flex;align-items:center;gap:3px;padding:4px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);
+  box-shadow:0 6px 18px -14px var(--shadow-tint);
+}
+.paleta-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:0;
+  border-radius:999px;background:transparent;color:var(--muted);
+  font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;
+  transition:background .2s ease,color .2s ease;
+}
+.paleta-btn:hover{background:var(--card);color:var(--text)}
+.paleta-btn[aria-pressed="true"]{background:var(--primary);color:var(--primary-contrast)}
+.dot{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.14);flex:0 0 auto}
+.dot-verde{background:#047857}
+.dot-laranja{background:#c2410c}
+.dot-marrom{background:#7c4a2d}
+.dot-cacau{background:#4a2c1d}
+
+/* ========================= HERO ============================= */
+.hero{
+  display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);
+  gap:clamp(24px,4vw,54px);align-items:end;
+  padding:clamp(38px,7vw,84px) 0 clamp(34px,5vw,56px);
+}
+.kicker{
+  display:inline-flex;align-items:center;gap:8px;margin:0 0 16px;padding:6px 10px;
+  border-radius:999px;background:var(--primary-soft);border:1px solid var(--primary-border);
+  color:var(--primary-hover);font-size:10px;font-weight:800;
+  letter-spacing:.15em;text-transform:uppercase;
+}
+.kicker i{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:pisca 2.4s ease-in-out infinite}
+@keyframes pisca{50%{opacity:.4;transform:scale(.8)}}
+h1{
+  margin:0 0 16px;max-width:14ch;
+  font-size:clamp(2.5rem,5.8vw,4.35rem);line-height:.99;letter-spacing:-.05em;font-weight:800;
+}
+h1 em{font-style:normal;color:var(--primary)}
+.lead{margin:0;max-width:54ch;color:var(--muted);font-size:clamp(14.5px,1.35vw,17px);line-height:1.65}
+.hero-card{
+  position:relative;padding:20px;border-radius:22px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:0 24px 50px -34px var(--shadow-tint);
+}
+.hero-card::before{
+  content:"";position:absolute;inset:0 0 auto;height:3px;border-radius:22px 22px 0 0;
+  background:linear-gradient(90deg,var(--grad-a),var(--grad-b));
+}
+.hero-card h2{margin:2px 0 6px;font-size:13px;letter-spacing:-.01em}
+.hero-card p{margin:0 0 13px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.credenciais{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.credenciais code{
+  padding:5px 8px;border-radius:7px;border:1px solid var(--primary-border);
+  background:var(--primary-soft);color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;font-weight:750;
+}
+.credenciais span{font-size:10.5px;color:var(--faint);font-weight:700}
+.checks{list-style:none;display:grid;gap:8px;margin:0;padding:0}
+.checks li{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;line-height:1.4;color:var(--muted)}
+.checks svg{width:15px;height:15px;flex:0 0 auto;color:var(--primary);margin-top:1px}
+
+/* ======================== OPÇÕES ============================ */
+.secao{padding:clamp(20px,4vw,34px) 0}
+.secao-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:20px}
+.secao-head h2{margin:0;font-size:clamp(1.5rem,2.8vw,2rem);letter-spacing:-.035em}
+.secao-head p{margin:0;max-width:48ch;color:var(--muted);font-size:12.5px;line-height:1.55}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.opcao{
+  display:flex;flex-direction:column;text-decoration:none;overflow:hidden;
+  border-radius:22px;background:var(--surface);border:1px solid var(--border);
+  box-shadow:0 18px 44px -34px var(--shadow-tint);
+  transition:transform .24s ease,box-shadow .24s ease,border-color .24s ease;
+  animation:sobe .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0s);
+}
+.opcao:hover{transform:translateY(-5px);border-color:var(--primary-border);box-shadow:0 28px 58px -34px var(--shadow-tint)}
+@keyframes sobe{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+.corpo{display:flex;flex-direction:column;flex:1;padding:18px 18px 16px}
+.meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.num{font-size:11px;font-weight:800;letter-spacing:.16em;color:var(--faint);font-variant-numeric:tabular-nums}
+.tag{
+  padding:4px 8px;border-radius:999px;background:var(--card);border:1px solid var(--border);
+  color:var(--muted);font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+}
+.corpo h3{margin:0 0 6px;font-size:18px;letter-spacing:-.025em}
+.corpo p{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.55;flex:1}
+.carac{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 16px;padding:0;list-style:none}
+.carac li{
+  padding:4px 7px;border-radius:6px;background:var(--surface-2);
+  border:1px solid var(--border);font-size:9.5px;font-weight:700;color:var(--muted);
+}
+.cta{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding-top:12px;border-top:1px solid var(--border);
+  font-size:12px;font-weight:800;color:var(--primary-hover);
+}
+.cta svg{width:16px;height:16px;transition:transform .2s ease}
+.opcao:hover .cta svg{transform:translateX(4px)}
+
+/* ---- miniaturas CSS ---- */
+.thumb{position:relative;height:176px;overflow:hidden;background:var(--card);border-bottom:1px solid var(--border)}
+/* opção 1: split */
+.t1{display:grid;grid-template-columns:1.05fr .95fr}
+.t1 .pleft{
+  position:relative;overflow:hidden;padding:14px 12px;color:#fff;
+  background:linear-gradient(150deg,var(--grad-a),var(--grad-b));
+}
+.t1 .pleft::before{
+  content:"";position:absolute;width:120px;height:120px;border-radius:50%;
+  top:-40px;right:-38px;background:rgba(255,255,255,.2);filter:blur(18px);
+}
+.t1 .pmarca{display:flex;align-items:center;gap:5px;position:relative}
+.t1 .pdot{width:13px;height:13px;border-radius:4px;background:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.4)}
+.t1 .pnome{font-size:7px;font-weight:800;letter-spacing:.08em}
+.t1 .ptit{position:relative;margin-top:22px;display:grid;gap:4px}
+.t1 .ptit i{display:block;height:6px;border-radius:3px;background:rgba(255,255,255,.8)}
+.t1 .ptit i:nth-child(1){width:82%}
+.t1 .ptit i:nth-child(2){width:64%}
+.t1 .ptit i:nth-child(3){width:40%;background:rgba(255,255,255,.45);margin-top:4px}
+.t1 .pright{display:grid;place-items:center;padding:12px;background:var(--bg)}
+.t1 .pcard{
+  width:100%;padding:11px;border-radius:10px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:0 10px 22px -16px var(--shadow-tint);display:grid;gap:5px;
+}
+.t1 .pline{height:5px;border-radius:3px;background:var(--card-2)}
+.t1 .pline.w60{width:60%;background:var(--text);opacity:.75}
+.t1 .pline.w40{width:40%}
+.t1 .pinput{height:14px;border-radius:4px;background:var(--surface);border:1px solid var(--border)}
+.t1 .pbtn{height:15px;border-radius:4px;margin-top:2px;background:linear-gradient(135deg,var(--grad-a),var(--grad-b))}
+
+/* opção 2: esteira */
+.t2{background:linear-gradient(160deg,var(--bg-2),var(--bg))}
+.t2 .prows{position:absolute;inset:-18% -20%;transform:rotate(-7deg);display:grid;gap:7px;align-content:center}
+.t2 .prow{display:flex;gap:7px;width:max-content;animation:corre 18s linear infinite}
+.t2 .prow:nth-child(2){animation-direction:reverse;animation-duration:22s;margin-left:-28px}
+.t2 .prow:nth-child(3){animation-duration:20s;margin-left:-10px}
+@keyframes corre{to{transform:translate3d(-50%,0,0)}}
+.t2 .pmini{
+  flex:0 0 auto;display:flex;align-items:center;gap:5px;padding:5px 7px;border-radius:7px;
+  background:var(--surface);border:1px solid var(--border);
+}
+.t2 .pmini b{display:block;width:24px;height:5px;border-radius:2px;background:var(--card-2)}
+.t2 .pmini i{display:block;width:11px;height:11px;border-radius:3px;background:var(--primary-soft);border:1px solid var(--primary-border)}
+.t2 .pcard2{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:56%;padding:11px;border-radius:11px;display:grid;gap:5px;
+  background:rgba(251,254,252,.82);border:1px solid rgba(255,255,255,.8);
+  box-shadow:0 12px 28px -16px var(--shadow-tint);backdrop-filter:blur(8px);
+}
+.t2 .pcard2 .pline{height:5px;border-radius:3px;background:var(--card-2)}
+.t2 .pcard2 .pline.w55{width:55%;background:var(--text);opacity:.75}
+.t2 .pcard2 .pinput{height:12px;border-radius:4px;background:var(--surface);border:1px solid var(--border)}
+.t2 .pcard2 .pbtn{height:14px;border-radius:4px;background:linear-gradient(135deg,var(--grad-a),var(--grad-b))}
+
+/* opção 3: radar */
+.t3{background:#06110d;display:grid;place-items:center}
+.t3 .pradar{
+  position:absolute;width:190px;height:190px;border-radius:50%;
+  border:1px solid rgba(167,243,208,.18);
+}
+.t3 .pradar::before,.t3 .pradar::after{
+  content:"";position:absolute;border-radius:50%;border:1px solid rgba(167,243,208,.13);
+}
+.t3 .pradar::before{inset:26px}
+.t3 .pradar::after{inset:58px}
+.t3 .psweep{
+  position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,transparent 0deg,transparent 300deg,var(--radar-soft) 336deg,var(--radar-glow) 356deg,transparent 360deg);
+  animation:gira 8s linear infinite;
+}
+@keyframes gira{to{transform:rotate(360deg)}}
+.t3 .pblip{position:absolute;left:64%;top:32%;width:4px;height:4px;border-radius:50%;background:var(--radar);box-shadow:0 0 10px var(--radar-glow)}
+.t3 .pblip.b2{left:34%;top:62%;width:3px;height:3px}
+.t3 .pform{position:relative;z-index:2;width:52%;display:grid;gap:7px}
+.t3 .pform .pmarca{display:flex;align-items:center;gap:5px;margin-bottom:6px}
+.t3 .pform .pdot{width:12px;height:12px;border-radius:50%;background:var(--radar-soft);border:1px solid var(--radar);box-shadow:0 0 12px var(--radar-glow)}
+.t3 .pform .pline{height:5px;border-radius:3px;background:rgba(255,255,255,.6)}
+.t3 .pform .pline.w50{width:50%}
+.t3 .pform .punderline{height:11px;border-bottom:1px solid rgba(255,255,255,.24)}
+.t3 .pform .pbtn{height:14px;border-radius:4px;margin-top:3px;background:linear-gradient(135deg,var(--grad-a),var(--grad-b));box-shadow:0 0 14px var(--radar-soft)}
+
+/* ==================== AVALIAR / TESTAR ====================== */
+.duplo{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;padding:clamp(20px,4vw,34px) 0}
+.painel-avaliar,.painel-testar{
+  padding:clamp(20px,3vw,28px);border-radius:22px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:0 18px 44px -38px var(--shadow-tint);
+}
+.painel-avaliar h2,.painel-testar h2{margin:0 0 6px;font-size:clamp(1.25rem,2.2vw,1.55rem);letter-spacing:-.03em}
+.painel-avaliar>p,.painel-testar>p{margin:0 0 16px;color:var(--muted);font-size:11.5px;line-height:1.55}
+.criterios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.criterio{
+  display:flex;gap:9px;padding:11px;border-radius:12px;
+  background:var(--card);border:1px solid var(--border);
+}
+.criterio svg{width:17px;height:17px;flex:0 0 auto;color:var(--primary);margin-top:1px}
+.criterio b{display:block;font-size:11.5px;margin-bottom:1px}
+.criterio span{display:block;font-size:10.5px;line-height:1.4;color:var(--muted)}
+.passos{list-style:none;counter-reset:passo;display:grid;gap:9px;margin:0;padding:0}
+.passos li{
+  counter-increment:passo;display:flex;gap:10px;align-items:flex-start;
+  font-size:11.5px;line-height:1.45;color:var(--muted);
+}
+.passos li::before{
+  content:counter(passo,decimal-leading-zero);flex:0 0 auto;
+  width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--primary-soft);border:1px solid var(--primary-border);
+  color:var(--primary-hover);font-size:9px;font-weight:800;
+}
+.passos code{
+  padding:1px 5px;border-radius:4px;background:var(--card-2);
+  border:1px solid var(--border);color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;font-weight:700;
+}
+
+/* ========================= RODAPÉ =========================== */
+.rodape{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:24px 0 34px;margin-top:6px;border-top:1px solid var(--border);
+  color:var(--faint);font-size:11px;
+}
+.rodape b{color:var(--muted);font-weight:700}
+.rodape code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10.5px;background:var(--card);border:1px solid var(--border);
+  padding:2px 6px;border-radius:5px;color:var(--muted);
+}
+
+/* ======================= RESPONSIVO ======================== */
+@media (max-width:1000px){
+  .grid{grid-template-columns:1fr 1fr}
+  .grid .opcao:last-child{grid-column:1 / -1}
+  .grid .opcao:last-child .thumb{height:150px}
+  .grid .opcao:last-child .corpo{max-width:none}
+  .hero{grid-template-columns:1fr;align-items:start;gap:26px}
+  .hero-card{max-width:520px}
+  h1{max-width:16ch}
+}
+@media (max-width:760px){
+  .duplo{grid-template-columns:1fr}
+  .wrap{width:min(1180px,calc(100% - 34px))}
+}
+@media (max-width:640px){
+  .topo{padding-top:16px}
+  .paleta{width:100%;justify-content:space-between}
+  .paleta-btn{flex:1;justify-content:center;padding:7px 5px}
+  .hero{padding-top:32px}
+  .grid{grid-template-columns:1fr}
+  .grid .opcao:last-child{grid-column:auto}
+  .thumb{height:158px}
+  .secao-head{align-items:flex-start}
+  .criterios{grid-template-columns:1fr}
+}
+@media (max-width:390px){
+  .wrap{width:calc(100% - 26px)}
+  .paleta-btn{font-size:10px;padding:7px 3px}
+  .paleta-btn .dot{display:none}
+  h1{font-size:2.35rem}
+  .lead{font-size:13.5px}
+  .hero-card{padding:17px}
+  .corpo{padding:16px}
+  .thumb{height:150px}
+  .rodape{font-size:10.5px}
+}
+
+/* ==================== MOVIMENTO REDUZIDO =================== */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  .t2 .prow,.t3 .psweep,.kicker i{animation:none !important}
+  .opcao:hover{transform:none}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#opcoes">Pular para as opções</a>
+
+<div class="wrap">
+  <header class="topo">
+    <a class="marca" href="index.html" aria-label="Alcance — protótipos de login">
+      <span class="marca-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.5" opacity=".55"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.4" opacity=".8"/><path d="M12 12l6.1-3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+      </span>
+      <span class="marca-txt"><b>Alcance</b><span>protótipos de autenticação</span></span>
+    </a>
+
+    <div class="paleta" role="group" aria-label="Paleta de cores">
+      <button type="button" class="paleta-btn" data-paleta-btn="verde" aria-pressed="true"><span class="dot dot-verde" aria-hidden="true"></span>Verde</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="laranja" aria-pressed="false"><span class="dot dot-laranja" aria-hidden="true"></span>Laranja</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="marrom" aria-pressed="false"><span class="dot dot-marrom" aria-hidden="true"></span>Marrom</button>
+      <button type="button" class="paleta-btn" data-paleta-btn="cacau" aria-pressed="false"><span class="dot dot-cacau" aria-hidden="true"></span>Cacau</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ========================= HERO ========================= -->
+    <section class="hero" aria-labelledby="tituloHub">
+      <div>
+        <p class="kicker"><i aria-hidden="true"></i>3 caminhos · mesmo painel</p>
+        <h1 id="tituloHub">Três entradas para o <em>mesmo radar</em>.</h1>
+        <p class="lead">Protótipos navegáveis da tela de login do Alcance. Cada opção tem identidade, animação e transição próprias para o painel simulado. Teste com a conta demo, troque a paleta e compare no desktop e no celular.</p>
+      </div>
+
+      <aside class="hero-card" aria-label="Acesso de demonstração">
+        <h2>Conta demo</h2>
+        <p>As três opções usam a mesma regra de autenticação simulada.</p>
+        <div class="credenciais">
+          <code>admin</code><span>+</span><code>alcance</code>
+        </div>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Sucesso animado até o painel mock</li>
+          <li><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Erro com shake e mensagem acessível</li>
+          <li><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Paleta verde, laranja, marrom ou cacau</li>
+        </ul>
+      </aside>
+    </section>
+
+    <!-- ======================== OPÇÕES ======================== -->
+    <section class="secao" id="opcoes" aria-labelledby="opcoesTitulo">
+      <div class="secao-head">
+        <div>
+          <h2 id="opcoesTitulo">Escolha uma opção</h2>
+          <p>Abra cada protótipo, faça login e teste o erro. A opção vencedora vira a base do front.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- OPÇÃO 1 -->
+        <a class="opcao" href="opcao-1.html" style="--d:.04s">
+          <div class="thumb t1" aria-hidden="true">
+            <div class="pleft">
+              <div class="pmarca"><span class="pdot"></span><span class="pnome">ALCANCE</span></div>
+              <div class="ptit"><i></i><i></i><i></i></div>
+            </div>
+            <div class="pright">
+              <div class="pcard">
+                <span class="pline w60"></span>
+                <span class="pline w40"></span>
+                <span class="pinput"></span>
+                <span class="pinput"></span>
+                <span class="pbtn"></span>
+              </div>
+            </div>
+          </div>
+          <div class="corpo">
+            <div class="meta"><span class="num">OPÇÃO 01</span><span class="tag">split-screen</span></div>
+            <h3>Sala de controle</h3>
+            <p>Metade marca com gradiente vivo e orbs em movimento; metade cartão de login. Entrada em stagger e selo de check desenhado no sucesso.</p>
+            <ul class="carac"><li>gradiente animado</li><li>stagger</li><li>selo desenhado</li></ul>
+            <span class="cta">Abrir protótipo
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </div>
+        </a>
+
+        <!-- OPÇÃO 2 -->
+        <a class="opcao" href="opcao-2.html" style="--d:.12s">
+          <div class="thumb t2" aria-hidden="true">
+            <div class="prows">
+              <div class="prow"><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span></div>
+              <div class="prow"><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span></div>
+              <div class="prow"><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span><span class="pmini"><i></i><b></b></span></div>
+            </div>
+            <div class="pcard2">
+              <span class="pline w55"></span>
+              <span class="pinput"></span>
+              <span class="pinput"></span>
+              <span class="pbtn"></span>
+            </div>
+          </div>
+          <div class="corpo">
+            <div class="meta"><span class="num">OPÇÃO 02</span><span class="tag">marquee</span></div>
+            <h3>Esteira de ofertas</h3>
+            <p>Mini-cards de ofertas circulam em diagonal ao fundo. Cartão de vidro central, parallax suave no mouse e wipe que expande para o painel.</p>
+            <ul class="carac"><li>marquee infinito</li><li>vidro + parallax</li><li>wipe</li></ul>
+            <span class="cta">Abrir protótipo
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </div>
+        </a>
+
+        <!-- OPÇÃO 3 -->
+        <a class="opcao" href="opcao-3.html" style="--d:.2s">
+          <div class="thumb t3" aria-hidden="true">
+            <div class="pradar"><span class="psweep"></span><span class="pblip"></span><span class="pblip b2"></span></div>
+            <div class="pform">
+              <div class="pmarca"><span class="pdot"></span><span class="pline w50"></span></div>
+              <span class="punderline"></span>
+              <span class="punderline"></span>
+              <span class="pbtn"></span>
+            </div>
+          </div>
+          <div class="corpo">
+            <div class="meta"><span class="num">OPÇÃO 03</span><span class="tag">dark / radar</span></div>
+            <h3>Radar</h3>
+            <p>Fundo escuro com varredura, círculos e blips piscando. Inputs em linha, botão com glow e ripple de sucesso que “escaneia” a tela.</p>
+            <ul class="carac"><li>radar sweep</li><li>underline + glow</li><li>ripple</li></ul>
+            <span class="cta">Abrir protótipo
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m0 0l-5-5m5 5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ================== AVALIAR + TESTAR =================== -->
+    <div class="duplo">
+      <section class="painel-avaliar" aria-labelledby="avaliarTitulo">
+        <h2 id="avaliarTitulo">O que avaliar</h2>
+        <p>Compare as três com o mesmo olhar. O objetivo é decidir rápido, não escolher a mais bonita.</p>
+        <div class="criterios">
+          <div class="criterio">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.3l6-.8L12 3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            <div><b>Identidade</b><span>Parece o Alcance? Conversa com o painel atual?</span></div>
+          </div>
+          <div class="criterio">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17l5-6 3.4 3.4L20 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 6h5v5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><b>Animação</b><span>Tem propósito, roda fluida e não atrapalha?</span></div>
+          </div>
+          <div class="criterio">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" opacity=".45"/></svg>
+            <div><b>Clareza</b><span>Login e erro são compreendidos em poucos segundos?</span></div>
+          </div>
+          <div class="criterio">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6v.2h-4V21a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 00.3-1.9A1.7 1.7 0 003 14H2.8v-4H3a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 009 4.3 1.7 1.7 0 0010 3v-.2h4V3a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.6 1h.2v4H21a1.7 1.7 0 00-1.6 1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <div><b>Acessibilidade</b><span>Teclado, foco visível, contraste e leitor de tela?</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="painel-testar" aria-labelledby="testarTitulo">
+        <h2 id="testarTitulo">Como testar</h2>
+        <p>Roteiro de 2 minutos por opção.</p>
+        <ol class="passos">
+          <li>Abra uma opção e tente entrar com <code>admin</code> / <code>alcance</code>.</li>
+          <li>Saia pelo botão <code>Sair</code> e depois erre a senha de propósito.</li>
+          <li>Use o seletor de paleta no topo e avalie os quatro temas.</li>
+          <li>Repita no celular (390&nbsp;px) e navegue só com <code>Tab</code>.</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+
+  <footer class="rodape">
+    <span><b>docs/prototipos/auth/</b> · protótipos sem build, sem CDN e sem backend</span>
+    <span>Demo local · credenciais fixas <code>admin</code> / <code>alcance</code></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var CHAVE_PALETA = 'alcance-auth-paleta';
+  var paletasValidas = ['verde', 'laranja', 'marrom', 'cacau'];
+
+  function aplicarPaleta(nome, persistir) {
+    if (paletasValidas.indexOf(nome) < 0) nome = 'verde';
+    document.documentElement.setAttribute('data-paleta', nome);
+    document.querySelectorAll('[data-paleta-btn]').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', String(btn.getAttribute('data-paleta-btn') === nome));
+    });
+    if (persistir) {
+      try { localStorage.setItem(CHAVE_PALETA, nome); } catch (e) {}
+    }
+  }
+
+  var paletaInicial = 'verde';
+  try { paletaInicial = localStorage.getItem(CHAVE_PALETA) || 'verde'; } catch (e) {}
+  aplicarPaleta(paletaInicial, false);
+
+  document.querySelectorAll('[data-paleta-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      aplicarPaleta(btn.getAttribute('data-paleta-btn'), true);
+    });
+  });
+})();
+</script>
+</body>
+</html>
