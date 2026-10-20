@@ -840,3 +840,27 @@ mobile 390×844 abre alinhado à direita com as 6 opções. Screenshots dos 6 te
 
 **Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
 usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
+
+---
+
+## 2026-10-20 | E6-MONITOR-24 | UI: fundo dos cards com a paleta do tema
+
+**Pedido**: as variações de tema ficaram boas, mas trabalhar a paleta também nos **backgrounds dos cards**
+(antes quase brancos, destoando do fundo tingido).
+
+**Implementação** (`src/manager/server.ts`):
+- Nova camada de cor por tema: `--card` (superfície do card) e `--card-2` (caixas aninhadas/hover), com tom
+  tirado da própria paleta em vez do branco:
+  - verde `#f2faf6`/`#e3f1e9`; areia `#f9f2e9`/`#efe3d4`; grafite `#f8f5f2`/`#ece7e2`;
+    laranja `#fff8f0`/`#fbe8d6`; marrom `#fcf4ec`/`#f2e4d6`; cacau `#faf2e9`/`#f0e1d2`.
+- Aplicado em `.panel`, `.kpi`, `.card` (ofertas), `.regra`, `.tema summary`/`.tema-menu` e no degradê da
+  sidebar; caixas internas (`.mbox`, `.mrow`, `.regra.off`) usam `--card-2`. Inputs/selects seguem em
+  `--surface` (mais claros) para manter hierarquia de formulário.
+- Cards deixam de ser brancos e passam a "pertencer" ao tema, mantendo contraste de texto e sombras.
+
+**Validação**: `typecheck`/`build` limpos, `npm test` **15/15**, deploy `promo_radar_manager` (8099→8091,
+HTTP 200). Playwright nos 6 temas: aplicação/persistência ok; screenshots conferidos em verde, laranja,
+areia, grafite, marrom e cacau — cards tingidos, caixas internas com um tom abaixo e sidebar em degradê.
+
+**Pendências inalteradas**: credenciais Creators API (Amazon), `SHOPEE_SUBID`, rotação das sessões ML pelo
+usuário, remote git (P0). Piloto segue com 0 loops (decisão do usuário).
