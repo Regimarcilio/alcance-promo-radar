@@ -751,3 +751,24 @@ o container, os envios voltam (recomendo limpar/arquivar o projeto antigo); (2) 
 guarda cookies de sessão do ML em texto puro (P1 — rotacionar/limpar); (3) grupo
 `120363000000000004@g.us` não aparece na lista das duas instâncias (é de outra conta) — os envios, porém,
 partiam do piloto legado, agora parado.
+
+---
+
+## 2026-10-20 | E6-MONITOR-21 | Higiene do legado: loops zerados e cookies removidos
+
+**Pedido**: resolver os 2 pontos de atenção do E6-MONITOR-20.
+
+**1) Loops do piloto antigo** (`autoMensagemWhats/data/piloto.json`): `loops` 5 → **0** (histórico de logs
+preservado). Mesmo que alguém rode `docker start automensagem_manager`, o piloto não tem mais o que enviar.
+Container segue parado (`Exited 137`, `restart=no`); sem unit systemd e sem cron que o religue.
+
+**2) Cookies de sessão do ML em texto puro**:
+- `data/contas.json`: campo `cookie` zerado nas 3 contas (principal, superofertas, manodaspromo) — arquivo
+  caiu de 11,8KB para 1,7KB; permissão `600`.
+- `.env` antigo: `COOKIE_ML=` zerado; `.env` já era `600` e está no `.gitignore`.
+- `data/` está no `.gitignore` e `git ls-files data/` não retorna nada → **cookies nunca foram versionados**.
+- `GRUPO_TESTE` antigo = `120363000000000002@g.us` ("Radar Teste") — não era o Perfumes.
+
+**Ação pendente do usuário (rotação)**: os cookies eram credenciais vivas de sessão do ML — recomendo entrar
+nas 3 contas e encerrar todas as sessões (ou trocar a senha), para invalidar qualquer cópia que tenha
+circulado. O sistema novo não usa esses cookies (usa link de afiliado + cupons).
