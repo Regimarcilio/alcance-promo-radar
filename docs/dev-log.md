@@ -703,3 +703,26 @@ Falta apenas o post real do Epipe para confirmar visualmente no grupo (mesmo cam
 
 **Ressalva**: ASIN com padrão de CDN diferente (raro) segue "sem foto" até a Creators API; detectável pelos
 eventos (detalhe "sem foto"). Título na mensagem Amazon só com a API liberada.
+
+---
+
+## 2026-10-20 | E6-MONITOR-19 | Grupo destino: mensagens temporárias de 7 dias
+
+**Pedido**: encaminhamentos "durarrem 5 dias no chat e depois serem deletados".
+**Restrição do WhatsApp**: apagar-para-todos só funciona até ~2 dias e 12h após o envio (depois disso a
+mensagem fica para sempre); mensagens temporárias só existem em 24h / 7 dias / 90 dias — **não há 5 dias**.
+**Decisão do usuário**: ativar **temporárias de 7 dias** no grupo destino (some sem rastro, sem aviso de
+"mensagem apagada").
+
+**Execução** (sem mudança de código — configuração do grupo fica nos servidores do WhatsApp):
+- Bot `radar-piloto` (`5500000000001`) é **superadmin** do grupo "Mano dos Achadinhos"
+  (`120363000000000001@g.us`) — verificado via `findGroupInfos`.
+- `POST /group/toggleEphemeral/radar-piloto` `{groupJid: "120363000000000001@g.us", expiration: 604800}`
+  → `201 {"success":true}`.
+- `findGroupInfos` desta versão da Evolution não expõe `ephemeralDuration` e a instância não guarda
+  mensagens no banco (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`) — confirmação visual no aparelho:
+  grupo → info → "Mensagens temporárias: 7 dias".
+
+**Efeito**: encaminhamentos (e demais mensagens) **enviados a partir de agora** somem após 7 dias para
+todos; mensagens anteriores à ativação permanecem. Vale para todas as mensagens do grupo, inclusive de
+membros. Para desligar: mesmo endpoint com `expiration: 0` (ou 86400 / 7776000 para 24h / 90 dias).
