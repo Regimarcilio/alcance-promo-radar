@@ -1798,6 +1798,11 @@ async function atualizarPiloto(){
     const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
     kp('kpi-loops',n+'/5');kp('kpi-piloto-env',env);kp('kpi-piloto-ult',ult?horaLocal(ult):'—');kp('badge-piloto',n);
     let html=n? '' : '⚪ nenhum loop — monte acima e aperte START.';
+    // loops que existiam mas estão parados (ex.: pausa de segurança no reinício)
+    const parados=(s.loops||[]).filter(function(l){return !l.rodando;});
+    if(parados.length){
+      html+='<div class="malerta warn" style="margin:8px 0">⏸ <b>'+parados.length+' loop(s) parados</b> — nada está sendo publicado por eles. Clique em <b>▶ START</b> (ou <b>▶ LIGA TUDO</b>) para religar. Se o container reiniciou, o piloto pausa tudo por segurança (defina <b>PILOTO_AUTORELIGA=1</b> para religar sozinho).</div>';
+    }
     (s.loops||[]).forEach(function(l){
       html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px">'
         +'<b>#'+l.id+'</b> '+l.conta+' → '+l.category+' → '+String(l.grupo).slice(0,20)+'… '

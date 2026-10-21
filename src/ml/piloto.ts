@@ -174,15 +174,23 @@ function store(): Store {
   if (mem) return mem;
   let s: Store = { loops: [], logs: [] };
   let pausados = 0;
+  // PILOTO_AUTORELIGA=1: retoma os loops após reinício. Padrão (0) é pausar
+  // tudo por segurança — o painel avisa e o operador clica em START.
+  const autoreliga = process.env.PILOTO_AUTORELIGA === "1";
   try {
     if (existsSync(pilotoFile)) {
       const raw = JSON.parse(readFileSync(pilotoFile, "utf8"));
       if (Array.isArray(raw.loops)) {
         // reinício pausa tudo por segurança — e PERSISTE a pausa (antes o arquivo
         // continuava com rodando:true e a grade parecia ligada sem estar).
-        pausados = (raw.loops as LoopState[]).filter((l) => l.rodando).length;
+        const ativos = (raw.loops as LoopState[]).filter((l) => l.rodando);
+        pausados = autoreliga ? 0 : ativos.length;
         s = {
-          loops: (raw.loops as LoopState[]).map((l) => ({ ...blankLoop(), ...l, rodando: false })),
+          loops: (raw.loops as LoopState[]).map((l) => ({
+            ...blankLoop(),
+            ...l,
+            rodando: autoreliga ? l.rodando : false,
+          })),
           logs: Array.isArray(raw.logs) ? raw.logs : [],
         };
       } else if (raw && typeof raw === "object" && ("category" in raw || "conta" in raw)) {
@@ -196,6 +204,13 @@ function store(): Store {
   if (pausados > 0) {
     log(`⏸ ${pausados} loop(s) pausado(s) após reinício — clique em ▶ START (ou ▶ LIGA TUDO) para religar.`);
     salvar();
+  }
+  if (autoreliga) {
+    const ativos = mem.loops.filter((l) => l.rodando);
+    if (ativos.length > 0) {
+      log(`▶ ${ativos.length} loop(s) religados automaticamente (PILOTO_AUTORELIGA=1).`);
+      for (const l of ativos) agendar(l);
+    }
   }
   return mem;
 }
