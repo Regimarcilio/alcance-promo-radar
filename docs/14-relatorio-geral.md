@@ -1,6 +1,7 @@
 # 14 — Relatório Geral do Projeto — Alcance (`promo-radar-novo`)
 
-> Levantamento: 2026-10-21 · Branch `develop` @ `639d92f` · Árvore limpa
+> Levantamento: 2026-10-21 · Branch `develop` · Estado no início do levantamento (pré-publicação)
+> O histórico público foi sanitizado e reescrito; os hashes antigos não existem no remoto.
 > Método: inspeção de código, documentação, Git, runtime (containers/HTTP/logs) e execução de build/testes.
 > Este relatório é um retrato do estado real; nenhuma funcionalidade foi alterada para produzi-lo.
 
@@ -53,8 +54,8 @@ Evolução em relação à auditoria de 2026-10-19 (nota 6,5):
 |---|---|
 | Branch ativa | `develop` |
 | Árvore de trabalho | limpa |
-| Commits | 40 |
-| `develop` à frente de `master` | **39 commits** (master parado no commit inicial `ae336b6`) |
+| Commits | 40 no levantamento (43 após a publicação e sanitização) |
+| `develop` à frente de `master` | **39 commits no levantamento** (master permanece no commit inicial) |
 | Remote | ausente antes desta publicação |
 | Tags / releases | nenhuma |
 | Stash | vazio |
