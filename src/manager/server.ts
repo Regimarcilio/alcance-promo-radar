@@ -35,7 +35,7 @@ import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor
 import { expandirLink } from "../monitor/curtos.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
-  adicionarParticipantes,
+  adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo, type AcaoGrupo,
 } from "../monitor/evolution.js";
 import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
@@ -440,6 +440,36 @@ const server = createServer(async (req, res) => {
       json(200, { grupos: dados });
     } catch (e: any) {
       json(200, { grupos: cacheGrupos?.dados ?? [], aviso: `Evolution inacessível: ${e.message}` });
+    }
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/grupos/permissao") {
+    // Permissões atuais do grupo (announce = só admins falam; restrict = só admins editam).
+    const grupoJid = String(url.searchParams.get("grupoJid") ?? "");
+    const p = await buscarPermissaoGrupo(grupoJid);
+    if (!p) {
+      json(404, { erro: "grupo não encontrado (ou Evolution inacessível)" });
+      return;
+    }
+    json(200, { ok: true, ...p });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/grupos/permissao") {
+    // Aplica permissão no grupo: announcement (só admins falam) / locked (só admins editam) etc.
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const grupoJid = String(b.grupoJid ?? "");
+      const acao = String(b.acao ?? "") as AcaoGrupo;
+      const permitidas: AcaoGrupo[] = ["announcement", "not_announcement", "locked", "unlocked"];
+      if (!permitidas.includes(acao)) {
+        json(400, { erro: `ação inválida (use ${permitidas.join("|")})` });
+        return;
+      }
+      const r = await definirPermissaoGrupo(grupoJid, acao);
+      const p = r.ok ? await buscarPermissaoGrupo(grupoJid) : null;
+      json(r.ok ? 200 : 502, { ok: r.ok, erro: r.erro, permissao: p });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
     }
     return;
   }
@@ -1448,6 +1478,17 @@ body{padding:0;max-width:none;margin:0}
 <span class="mini" id="mgruposinfo" style="align-self:center"></span></div>
 <div class="mini" style="margin-top:6px">Dica: para dar <b>mais de um destino</b> à mesma origem, escolha a mesma origem de novo com outro destino.</div></div>
 
+<div class="mbox">
+<label>🔒 Permissões do grupo — <span class="mini">quem pode falar/comentar</span></label>
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+<select id="mselPermissao" style="flex:1;min-width:170px"><option value="">— carregue os grupos —</option></select>
+<button class="mbtn ok" onclick="permissaoGrupoUI('announcement')">🔒 Só admins falam</button>
+<button class="mbtn" onclick="permissaoGrupoUI('not_announcement')">🔓 Todos falam</button>
+<button class="mbtn" onclick="permissaoGrupoUI('locked')">🛡 Só admins editam</button>
+<button class="mbtn" onclick="permissaoGrupoUI('unlocked')">🔓 Todos editam</button>
+<span class="mini" id="mpermissaoinfo" style="align-self:center"></span></div>
+<div class="mini" style="margin-top:6px">"Só admins falam" bloqueia mensagens e comentários dos participantes (modo anúncio do WhatsApp). A conta pareada precisa ser <b>admin</b> do grupo.</div></div>
+
 <div style="margin-top:12px"><label>🔗 Regras ativas <span class="mini" id="mregrasn"></span></label>
 <div id="mregras"></div></div>
 
@@ -2147,8 +2188,22 @@ async function carregarGruposSelects(forcar){
     const opts=window.__wgrupos.map(function(g){return '<option value="'+esc(g.jid)+'">'+esc(g.nome)+(g.tamanho!=null?' ('+g.tamanho+')':'')+'</option>';}).join('');
     $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
     $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
+    $('mselPermissao').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
     $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados';
   }catch(e){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+e.message+'</span>';}
+}
+async function permissaoGrupoUI(acao){
+  const sel=$('mselPermissao');
+  const jid=sel.value;
+  if(!jid)return alert('escolha o grupo');
+  const nome=sel.options[sel.selectedIndex].textContent;
+  const rotulos={announcement:'só admins podem falar/comentar',not_announcement:'todos podem falar',locked:'só admins editam as informações',unlocked:'todos editam as informações'};
+  if(!confirm('Aplicar em "'+nome+'": '+rotulos[acao]+'?'))return;
+  $('mpermissaoinfo').textContent='aplicando…';
+  const r=await (await fetch('/api/grupos/permissao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupoJid:jid,acao:acao})})).json();
+  if(r.erro){$('mpermissaoinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(r.erro)+'</span>';return;}
+  const p=r.permissao||{};
+  $('mpermissaoinfo').textContent='ok — '+(p.announce?'só admins falam':'todos falam')+' · '+(p.restrict?'só admins editam':'todos editam');
 }
 async function adicionarRegraUI(){
   const o=$('mselOrigem'), dd=$('mselDestino');
