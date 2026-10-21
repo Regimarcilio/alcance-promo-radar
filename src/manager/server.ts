@@ -2042,14 +2042,15 @@ function atualizarCaixaAdicionar(){
   const tem=SELECAO.size>0;
   box.style.display=tem?'flex':'none';
   if(tem && !_gruposAlvoCarregados) carregarGruposAlvo();
-  if(!tem)$('cliaddmsg').textContent='';
+  // Não limpa a mensagem aqui: o texto de sucesso ("N adicionado(s)") precisa
+  // continuar visível depois que a seleção é zerada.
 }
 async function adicionarAoGrupo(){
   const grupo=$('cligrupoalvo').value;
   if(!grupo)return alert('escolha o grupo de destino');
   if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
   const nomeGrupo=$('cligrupoalvo').options[$('cligrupoalvo').selectedIndex].textContent;
-  if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\n\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.'))return;
+  if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\\n\\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.'))return;
   $('cliaddmsg').textContent='adicionando…';
   const r=await (await fetch('/api/clientes/grupo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupoJid:grupo,jids:[...SELECAO]})})).json();
   if(r.erro){$('cliaddmsg').textContent='erro: '+r.erro;return alert('Erro: '+r.erro);}
