@@ -1,0 +1,18 @@
+[
+  { "id": "AMELET", "nome": "Eletrônicos", "keywords": ["fone de ouvido bluetooth", "carregador turbo", "smartwatch", "caixa de som bluetooth"] },
+  { "id": "AMINFO", "nome": "Informática", "keywords": ["mouse gamer", "teclado mecânico", "monitor 24 polegadas", "hd externo ssd"] },
+  { "id": "AMCEL", "nome": "Celulares e Smartphones", "keywords": ["smartphone", "capa de celular", "carregador sem fio"] },
+  { "id": "AMCASA", "nome": "Casa e Cozinha", "keywords": ["airfryer", "cafeteira", "organizador de cozinha"] },
+  { "id": "AMBEL", "nome": "Beleza e Perfumaria", "keywords": ["perfume", "kit de skincare", "secador de cabelo", "aparador de barba"] },
+  { "id": "AMMODA", "nome": "Moda", "keywords": ["tênis", "mochila", "camiseta", "bolsa de couro"] },
+  { "id": "AMJOIA", "nome": "Joias e Relógios", "keywords": ["relógio de ouro", "brinco de prata", "colar de pérola"] },
+  { "id": "AMESP", "nome": "Esportes", "keywords": ["halter ajustável", "corda de pular", "tênis de corrida", "tapete de yoga"] },
+  { "id": "AMBRINQ", "nome": "Brinquedos", "keywords": ["brinquedo educativo", "jogo de tabuleiro", "boneca"] },
+  { "id": "AMPET", "nome": "Pet", "keywords": ["brinquedo para cachorro", "comedouro automático", "coleira para gato"] },
+  { "id": "AMFERR", "nome": "Ferramentas", "keywords": ["furadeira de impacto", "jogo de chaves", "trena"] },
+  { "id": "AMLIV", "nome": "Livros", "keywords": ["livro de ficção", "livro técnico", "bíblia"] },
+  { "id": "AMPAP", "nome": "Papelaria", "keywords": ["caderno pautado", "caneta esferográfica", "mochila escolar"] },
+  { "id": "AMAUTO", "nome": "Automotivo", "keywords": ["dash cam", "carregador veicular", "organizador de porta-malas"] },
+  { "id": "AMINF", "nome": "Bebês e Crianças", "keywords": ["carrinho de bebê", "brinquedo para bebê", "fralda"] },
+  { "id": "AMSAUDE", "nome": "Saúde e Bem-estar", "keywords": ["aparelho de pressão", "suplemento", "massageador"] }
+]

@@ -1127,3 +1127,35 @@ devia `grupos: []` e a aba ficava **sem nenhum grupo**, sem explicar por quê.
 
 **Validação**: `typecheck`/`build` limpos; `npm test` 56/56; `npm run smoke:manager` OK;
 `fetchAllGroups` confirmado em produção (HTTP 200, 32 grupos, 20s).
+
+---
+
+## 2026-10-21 | E6-AMZ-01 | Piloto Amazon (mesmo modelo do ML) + aba Rastreio
+
+**Pedido**: usar o modelo da aba Piloto para categorias da Amazon, e saber se é possível rastrear.
+
+**Resposta**: sim — a Creators API (já integrada para título/foto) tem `SearchItems` (busca por
+palavra-chave e `browseNodeId`) e `GetBrowseNodes` (árvore de categorias), o mesmo formato do
+`hunt()` do Mercado Livre. O rastreio é pela **tracking ID** (`tag`): o link publicado já vai com a
+tag, que é o que credita a comissão no painel da Amazon.
+
+**Entregas**:
+- `src/amazon/categorias.json` — 16 categorias Amazon (id AMxxx + nome + palavras de busca).
+- `src/amazon/amazon.ts` — categorias, `linkAfiliadoAmazon()` (URL com `?tag=`), `tagAmazon()`
+  (tag por categoria: `AMAZON_TAG_AMXXX` > `AMAZON_TAG`) e rotação de palavras por giro.
+- `src/monitor/amazon-api.ts` — `buscarOfertasAmazon()` (SearchItems da Creators API) e
+  `listarBrowseNodes()`; parser tolerante a casing (PascalCase/camelCase).
+- `src/ml/piloto.ts` — `PilotoCfg.programa` (ml|amazon): caça Amazon → mesmo `Candidato`/scorer/
+  formatter; link com tag; sem tag não publica (não paga comissão); cupom ML ignorado.
+- `src/store/publicacoes.ts` — log de publicações (Piloto + Monitor) com filtros, resumo e CSV.
+- `src/manager/server.ts` — aba **🎯 Rastreio** (KPIs, filtros por programa/via/período, export CSV),
+  seletor de programa no Piloto, `/api/categorias?programa=amazon`, `/api/rastreio`, `/api/amazon/status`.
+
+**Estado (honesto)**: `AMAZON_TAG` está configurado (link e rastreio já funcionam), mas
+**faltam `AMAZON_CREATORS_ID`/`SECRET`** — sem eles a caça Amazon fica inerte e o loop aguarda
+(nunca posta oferta inventada). Solicitar em: Portal de Associados → Ferramentas → Creators API.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 65/65 (9 novos: categorias, link, tag,
+keywords, publicações, filtros, resumo, CSV); E2E no navegador: Rastreio com 3 publicações
+(1 ML, 2 Amazon, 2 com tag), filtros por programa e por via, CSV com BOM, 16 categorias no select
+do Piloto, aviso de credenciais ausente — **zero erros JS**.
