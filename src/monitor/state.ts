@@ -14,6 +14,25 @@ const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "monitor-estado.json");
 
 export const DEDUP_DIAS = 7;
+
+/**
+ * Janela do dedup (dias). 7 = padrão; menor = repassa o mesmo produto mais
+ * rápido (mais volume no destino, mais risco de repetição).
+ */
+export function diasDedup(): number {
+  const v = Number(process.env.DEDUP_DIAS ?? DEDUP_DIAS);
+  return Number.isFinite(v) && v > 0 ? v : DEDUP_DIAS;
+}
+
+/**
+ * Dedup por origem: quando ligado, o mesmo produto vindo de ORIGENS
+ * diferentes é reencaminhado (cada grupo publica 1 vez). Desligado (padrão),
+ * o produto é bloqueado noALCANCE inteiro por 7 dias, e um grupo que
+ * republica o mesmo item "zera" a publicação dos outros.
+ */
+export function dedupPorOrigem(): boolean {
+  return process.env.DEDUP_POR_ORIGEM === "1";
+}
 export const LIMITE_EVENTOS = Number(process.env.MONITOR_EVENTOS_LIMITE ?? 500); // 0 = ilimitado
 
 export interface EventoMonitor {
@@ -62,26 +81,29 @@ function salvar(s: Estado): void {
   renameSync(tmp, file);
 }
 
-export function hashMonitor(programa: string, idProduto: string | null, link: string): string {
+export function hashMonitor(programa: string, idProduto: string | null, link: string, origem?: string): string {
   // Com id do produto, o link gerado é descartado (createLink devolve um link
   // NOVO a cada chamada — sem isso, o mesmo produto postado 2x duplicaria).
-  const chave = idProduto ? `${programa}|${idProduto}` : `${programa}|#link|${link}`;
+  // Com DEDUP_POR_ORIGEM=1 a origem entra na chave: o mesmo produto vindo de
+  // grupos diferentes é reencaminhado (mais volume no destino).
+  const escopo = dedupPorOrigem() && origem ? `|${origem}` : "";
+  const chave = idProduto ? `${programa}${escopo}|${idProduto}` : `${programa}${escopo}|#link|${link}`;
   return createHash("sha1").update(chave).digest("hex").slice(0, 16);
 }
 
-/** Já encaminhado nos últimos 7 dias? (RF-035) */
-export function jaMonitorado(programa: string, idProduto: string | null, link: string): boolean {
+/** Já encaminhado nos últimos N dias? (RF-035) */
+export function jaMonitorado(programa: string, idProduto: string | null, link: string, origem?: string): boolean {
   const s = carregar();
-  const h = hashMonitor(programa, idProduto, link);
+  const h = hashMonitor(programa, idProduto, link, origem);
   const quando = s.hashes[h];
   if (!quando) return false;
-  const limite = Date.now() - DEDUP_DIAS * 86400_000;
+  const limite = Date.now() - diasDedup() * 86400_000;
   return new Date(quando).getTime() >= limite;
 }
 
-export function marcarMonitorado(programa: string, idProduto: string | null, link: string): void {
+export function marcarMonitorado(programa: string, idProduto: string | null, link: string, origem?: string): void {
   const s = carregar();
-  s.hashes[hashMonitor(programa, idProduto, link)] = new Date().toISOString();
+  s.hashes[hashMonitor(programa, idProduto, link, origem)] = new Date().toISOString();
   salvar(s);
 }
 

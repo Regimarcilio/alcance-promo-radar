@@ -130,12 +130,16 @@ export async function processar(
     }
   }
   if (!oferta.principal) {
+    // Diagnóstico: quais domínios chegaram e não foram reconhecidos? Sem isso
+    // o operador só vê "link não reconhecido" e não sabe o que adicionar.
+    const doms = [...new Set(oferta.links.map((l) => l.host).filter(Boolean))].slice(0, 3);
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: "desconhecido",
       idProduto: null, linkTransformado: null, destino: null,
-      status: "REVISAO", detalhe: "sem link de afiliado reconhecido",
+      status: "REVISAO",
+      detalhe: doms.length ? `sem link de afiliado reconhecido (${doms.join(", ")})` : "sem link de afiliado reconhecido",
     });
-    return { acao: "REVISAO", motivo: "link não reconhecido" };
+    return { acao: "REVISAO", motivo: doms.length ? `link não reconhecido (${doms.join(", ")})` : "link não reconhecido" };
   }
 
   // 3) Transformar para o link do usuário (RF-032 / RN-012)
@@ -148,7 +152,7 @@ export async function processar(
     (tr.produto?.id ? tr.produto.id.replace(/^MLB-?/i, "MLB") : null);
 
   // 4) Dedup 7d (RF-035)
-  if (jaMonitorado(oferta.principal.programa, idEfetivo, tr.url)) {
+  if (jaMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem)) {
     registrarEvento({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
@@ -237,7 +241,7 @@ export async function processar(
     fonte: fonteFoto,
     destinos: destinos.map((d) => d.jid),
   };
-  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url); // reserva (evita duplicar)
+  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem); // reserva (evita duplicar)
 
   // 9) Rajada? Só da 4ª mensagem da MESMA origem no último minuto em diante
   //    entra na fila (liberada 1 a cada 2 min). Até 3, segue na hora.
