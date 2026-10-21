@@ -1,6 +1,9 @@
 /** Testes da adição de participantes em grupo (Evolution updateParticipant). */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo } from "./evolution.js";
 import { mockFetch, resJson } from "./test-utils.js";
 
@@ -139,5 +142,37 @@ test("permissão: estado atual (announce/restrict) via findGroupInfos", async ()
     assert.equal(p?.nome, "Mano dos Achadinhos");
   } finally {
     m.restaurar();
+  }
+});
+
+test("lista de grupos: cache em disco sobrevive a falha da Evolution", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "alcance-grupos-"));
+  process.env.ALCANCE_DATA_DIR = dir;
+  const mod = await import(`./evolution.js?v=${Math.random()}`);
+
+  // 1) Evolution devolve a lista -> é gravada no cache
+  const ok = mockFetch(async () =>
+    resJson([{ id: "120363@g.us", subject: "Mano dos Achadinhos", size: 5 }]),
+  );
+  try {
+    const grupos = await mod.listarGrupos(true);
+    assert.equal(grupos.length, 1);
+    assert.equal(grupos[0].nome, "Mano dos Achadinhos");
+  } finally {
+    ok.restaurar();
+  }
+
+  // 2) Evolution fora do ar -> o cache em disco ainda devolve os grupos
+  const falha = mockFetch(async () => {
+    throw new Error("Evolution 500");
+  });
+  try {
+    const doCache = mod.gruposDoCache();
+    assert.equal(doCache.grupos.length, 1);
+    assert.equal(doCache.grupos[0].jid, "120363@g.us");
+    assert.ok(doCache.em, "cache deve ter timestamp");
+  } finally {
+    falha.restaurar();
+    rmSync(dir, { recursive: true, force: true });
   }
 });
