@@ -939,3 +939,37 @@ desloga todos).
 **Pendências**: TLS/reverse proxy antes de LAN; container non-root; retenção/rotação do `auth-audit.log`;
 rate-limit do webhook; refatorar `onclick` inline para CSP sem `unsafe-inline`; credenciais Creators API,
 `SHOPEE_SUBID`, rotação das sessões ML, remote git (P0), piloto com 0 loops.
+
+---
+
+## 2026-10-21 | E6-REL-01 | Relatório geral, CI com testes + smoke e publicação pública
+
+**Pedido**: report completo do projeto; depois executar os 3 itens sugeridos (salvar report, fechar P0 de
+remote/CI e abrir o plano de sincronização documental), criando repositório público no GitHub.
+
+**Entregas**:
+- `docs/14-relatorio-geral.md` — retrato do estado real (nota 7,5/10), arquitetura, runtime, dados,
+  qualidade, segurança, riscos P0/P1/P2 e pendências do usuário.
+- `docs/15-plano-sincronizacao-docs.md` — plano de SRS v0.4 (RF-040..RF-047, NFR-009..NFR-013),
+  backlog v0.4 (E7–E10, US-21..US-32), ADRs 005–008 e reescrita de README/CHANGELOG.
+- `scripts/smoke-manager.sh` + `npm run smoke:manager` — sobe o manager com `ALCANCE_DATA_DIR` temporário,
+  `ALCANCE_SMOKE=1` (sem workers) e valida `/login` 200, `/` 302, `/api/contas` 401, webhook 401 e 404.
+- `src/manager/server.ts` e `scripts/auth-user.mjs` — suporte a `ALCANCE_DATA_DIR`; `ALCANCE_SMOKE`
+  desativa os workers de fila no smoke.
+- `.github/workflows/ci.yml` — passou a rodar `npm test`, `npm run smoke:manager` e o smoke do CLI;
+  inclui `master` e `permissions: contents: read`.
+- `README.md` — reescrito para a marca **Alcance**, porta 8099, auth, monitor, clientes, multi-número,
+  testes e aviso de TLS.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 22/22; `npm run smoke:manager` OK;
+`git status` limpo antes da publicação.
+
+**Publicação**: repositório público `Regimarcilio/alcance-promo-radar`. Antes do push, o histórico foi
+sanitizado com `git filter-repo`: telefones, JIDs e convite do WhatsApp substituídos por placeholders e
+`docs/prints/` (capturas com dados reais) removida do histórico. Backup do histórico original em bundle
+local fora do repositório.
+
+**Pendências inalteradas**: TLS/reverse proxy, container non-root + ownership de `data/`, poda do dedup,
+extração da UI de `server.ts`, handlers globais de erro, credenciais Creators API, `SHOPEE_SUBID`,
+rotação das sessões ML, piloto com 0 loops.
+

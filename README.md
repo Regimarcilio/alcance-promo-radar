@@ -1,100 +1,107 @@
-# autoMensagemWhats 🤖📲
+# Alcance
 
-Caçador autônomo de ofertas do Mercado Livre **por categoria + palavra-chave opcional**, com geração de mensagem no padrão WhatsApp e envio ao grupo — tudo automático.
+Monitor de ofertas para WhatsApp: recebe mensagens de grupos de afiliados, identifica o produto
+(Mercado Livre, Amazon, Shopee), troca o link pelo seu link de afiliado e reencaminha para os seus
+grupos — com fila anti-rajada, dedup, rotação de números e painel web autenticado.
 
-- **Entrada:** lista suspensa de categorias ([mercadolivre.com.br/categorias](https://www.mercadolivre.com.br/categorias)) + keyword opcional (vazio = categoria inteira).
-- **Busca:** `GET /sites/MLB/search?category=ID[&q=...]` (com fallback MOCK no piloto).
-- **Saída:** mensagem RN-001 (negrito/itálico/riscado + cupom + `meli.la`) + envio Evolution/Cloud.
-- **Protótipo visual:** abra `docs/prototipo/index.html`.
-- **Planejamento:** `docs/01-visao-e-escopo.md`, `docs/SRS.md`, `docs/02-benchmarks.md`, `docs/03-arquitetura-e-uml.md`, `docs/05-backlog.md`.
+> Nome técnico legado do pacote: `automensagemwhats`. O produto e a interface usam a marca **Alcance**.
+
+## O que faz
+
+- **Monitor**: webhook da Evolution API → parser → transformação de link → template Emipe → envio.
+- **Multi-programa**: Mercado Livre (`meli.la`), Amazon (`amzn.to`/ASIN) e Shopee (`shope.ee`).
+- **Multi-número**: rotação ponderada, limite diário, janela 8h–22h e jitter humano.
+- **Clientes**: sincroniza participantes dos grupos, mantém listas e dispara campanhas.
+- **Painel**: piloto automático, monitor, clientes, contas, cupons e números, com 6 temas.
+- **Segurança**: login com sessão, default-deny, rate-limit, auditoria e headers restritivos.
+
+## Stack
+
+Node.js ≥ 20 · TypeScript ESM · Evolution API v2 (Baileys) · Docker Compose · estado em JSON (`data/`).
 
 ## Quickstart
 
 ```bash
-nvm use 20 2>/dev/null; npm install
-cp .env.example .env  # preencher TAG_ML/COOKIE_ML/EVO_*
+npm ci
+cp .env.example .env         # preencha EVO_KEY, SESSION_SECRET, WEBHOOK_KEY etc.
+npm run auth:user -- admin   # cria a credencial do painel (prompt oculto)
 npm run build
-
-# categorias oficiais
-node dist/cli.js categorias:list
-
-# caçar em toda a categoria (sem keyword)
-node dist/cli.js hunter:buscar --category MLB3937 --limite 3
-
-# caçar categoria + palavra-chave
-node dist/cli.js hunter:buscar --category MLB3937 --q "Orient" --limite 3
-
-# simular envio (dry-run, não manda nada)
-node dist/cli.js hunter:buscar --category MLB3937 --q "Orient" --limite 3 --enviar --dry-run
-
-# passada automática (cron): REVISÃO enfilera, AUTO (MODO=AUTO + AUTO_APROVADO=true) envia
-node dist/cli.js hunter:auto --category MLB3937 --q "Orient" --corte 75
-node dist/cli.js fila:list
-node dist/cli.js fila:approve MLB-4210056475   # adicione --live para enviar de verdade
+npm run manager              # http://localhost:8091
 ```
 
-## Gerenciador web (tela — recomendado)
+Para desenvolvimento com recarga:
 
 ```bash
-npm run manager          # sobe em http://localhost:8091
-# na rede local: http://SEU-IP:8091 (ex.: http://192.168.0.108:8091)
+npm run manager:dev
 ```
 
-Na tela: escolha a **categoria** (31 oficiais) + **palavra-chave opcional** → **Buscar** → cards com foto, preço, score e selo → **Enviar no WhatsApp** (pede confirmação) → volta **messageId + link + prévia da mensagem**. Selo DEMO = busca ML bloqueada nesta rede (MOCK); LIVE = dados reais.
-
-## Automático (cron, a cada 2h na janela 8h–22h)
+## Docker
 
 ```bash
-0 8,10,12,14,16,18,20,22 * * * cd /home/oficina/PROJETOS/autoMensagemWhats && npm start -- hunter:auto --category MLB3937 --corte 75 --live >> data/cron.log 2>&1
+docker compose -f docker-compose.manager-novo.yml up -d --build
+# painel em http://127.0.0.1:8099
 ```
 
-Kill-switch imediato: `touch data/AUTO_OFF` (para) / `rm data/AUTO_OFF` (retoma). Limite diário via `LIMITE_DIA` no `.env`. Enrich real do link afiliado: preencher `TAG_ML`, `COOKIE_ML` e opcional `ML_CONVERSOR_URL`.
+O compose publica a porta apenas em **loopback**. Para acessar de outra máquina, configure
+TLS/reverse proxy antes — veja `docs/13-auth-spec.md`.
 
-## Produção (piloto seguro)
+## Variáveis essenciais
 
-1. `docker compose up -d` (Evolution v2) + parear QR (`npm run dev -- evo:qr`).
-2. Preencher `.env` (`EVO_URL`, `EVO_KEY`, `GRUPO_TESTE`, `AUTO_APROVADO=false` + modo `REVISAO` na 1ª semana).
-3. Ritmo: ≤10 msgs/dia/nº, janela 8h–22h, 1 IP BR por número.
-
-## Engine alternativo: Evolution GO
-
-A GO (Go, alta performance) exige PostgreSQL e tem QR em endpoint próprio
-(`GET /instance/{nome}/qrcode`). Passos:
-
-```bash
-docker compose -f docker-compose.go.yml up -d   # GO na 8081 + postgres
-# .env: EVO_ENGINE=go, EVO_GO_URL=http://localhost:8081, EVO_GO_KEY=<forte>
-curl -X POST http://localhost:8081/instance/create \
-  -H "Content-Type: application/json" -H "apikey: $EVO_GO_KEY" \
-  -d '{"instanceName":"radar-piloto","integration":"WHATSAPP-BAILEYS"}'
-npm run dev -- evo:qr --save qr-go.png   # escanear em <60s
-npm run dev -- evo:status                # connected=true = pareado
-```
-
-O dispatch roteia sozinho via `EVO_ENGINE=v2|go`. Se o envio na GO der 404,
-confirme o path no Swagger (`EVO_GO_URL/swagger/index.html`) e ajuste
-`EVO_GO_SEND_PATH`. Piloto segue na **v2** (mais simples, sem banco).
-
-## Scripts
-
-| script | o que faz |
+| Variável | Para que serve |
 |---|---|
-| `npm run dev` | roda CLI via tsx (dev) |
-| `npm run build` | compila para `dist/` |
-| `npm run typecheck` | valida tipos sem emitir |
-| `npm start` | roda CLI compilado |
+| `EVO_URL`, `EVO_KEY`, `EVO_INSTANCE` | conexão com a Evolution API |
+| `WEBHOOK_KEY` | autentica o webhook (`X-Webhook-Key`, mínimo 16 chars) |
+| `SESSION_SECRET` | assina a sessão do painel (mínimo 32 chars) |
+| `AUTH_TTL_HORAS`, `AUTH_IDLE_MIN` | validade absoluta e por inatividade da sessão |
+| `MANAGER_KEY` | credencial machine opcional para `/api/*` |
+| `AMAZON_TAG`, `AMAZON_CREATORS_ID`, `AMAZON_CREATORS_SECRET` | Amazon |
+| `SHOPEE_SUBID` | conversão de links Shopee |
+| `TAG_ML`, `COOKIE_ML` | enriquecimento Mercado Livre |
+
+O template completo está em `.env.example`.
+
+## Testes e qualidade
+
+```bash
+npm run typecheck
+npm run build
+npm test                 # 22 testes (node:test)
+npm run smoke:manager    # sobe o manager com estado temporário e valida o gate
+```
+
+O CI roda typecheck, build, testes, smoke do manager e smoke do CLI em todo push/PR.
 
 ## Estrutura
 
 ```
-src/categorias.json   # 31 categorias (cache; runtime resolve via /sites/MLB/categories)
-src/hunter/           # schema (filtros + buildSearchUrl) + service (search Top50)
-src/scorer.ts         # score explicável + selo QUEDA REAL/OFERTA BOA
-src/wa/formatter.ts   # template RN-001 (única fonte do formato)
-src/wa/dispatch.ts    # roteia v2 ↔ GO via EVO_ENGINE (Cloud futuro)
-src/wa/evolution-go.ts # provider GO: QR /instance/{nome}/qrcode + status + envio
-src/store/dedup.ts    # anti-duplicidade 7d
-src/cli.ts            # categorias:list | hunter:buscar
-docs/prototipo/       # protótipo HTML do fluxo
-data/envios.json      # log local de envios (git-ignored)
+src/manager/    painel (HTTP), autenticação e login
+src/monitor/    webhook, parser, transformação, fila, dedup
+src/wa/         dispatch, providers Evolution e rotação de números
+src/clientes/   contatos, listas e campanhas
+src/ml/         motor de ofertas Mercado Livre
+src/hunter/     busca por categoria/palavra-chave
+src/jobs/       execução automática
+docs/           SRS, arquitetura, ADRs, backlog e diário de bordo
 ```
+
+## Documentação
+
+- `docs/14-relatorio-geral.md` — estado atual, riscos e roadmap.
+- `docs/SRS.md` — requisitos (v0.3; v0.4 em planejamento).
+- `docs/03-arquitetura-e-uml.md` — arquitetura e diagramas.
+- `docs/04-ADRs/` — decisões arquiteturais.
+- `docs/05-backlog.md` — épicos e user stories.
+- `docs/13-auth-spec.md` — autenticação e checklist de segurança.
+- `docs/15-plano-sincronizacao-docs.md` — plano de atualização da documentação.
+- `docs/dev-log.md` — diário de bordo com evidências por entrega.
+
+## Segurança
+
+- Credenciais nunca vão para o repositório; `.env`, `data/` e `logs/` são ignorados.
+- A senha do painel fica em `data/auth-users.json` (modo 0600), criada por `npm run auth:user`.
+- O webhook exige `WEBHOOK_KEY`; o painel exige sessão (ou `MANAGER_KEY` para machine).
+- **Não exponha em LAN/WAN sem TLS.** O compose atual publica só em `127.0.0.1`.
+
+## Licença
+
+Uso privado. Consulte o responsável pelo projeto antes de redistribuir.
