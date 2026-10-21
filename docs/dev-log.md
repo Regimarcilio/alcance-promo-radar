@@ -1027,3 +1027,32 @@ validado via HTTP (login → `/api/clientes/grupo` → Evolution `updateParticip
 **Limite do WhatsApp**: adicionar participante só funciona se a conta pareada for ADMIN do grupo e
 o grupo tiver o link de convite habilitado; fora disso a API devolve erro, que a UI mostra em
 `cliaddmsg` sem quebrar a tela.
+
+---
+
+## 2026-10-21 | E6-CLI-02 | Corrige painel quebrado por escape em template literal
+
+**Sintoma**: na aba Clientes, o dropdown de grupos não populava e a caixa "➕ Adicionar selecionados
+ao grupo" não aparecia ao marcar contatos. O painel inteiro estava sem JS.
+
+**Causa raiz**: o HTML do painel é um template literal do TypeScript (`const PAGINA = \`...\``). No
+`confirm()` novo eu escrevi `\n\n` (escape simples) — o TypeScript converte para quebras de linha
+REAIS no HTML servido, o que fecha a string JS no meio e derruba **todo** o `<script>` do painel com
+`SyntaxError: Invalid or unexpected token`. O projeto usava `\\n` (escape duplo) nos outros pontos.
+
+**Correções**:
+- `src/manager/server.ts` — `\n\n` → `\\n\\n` no `confirm()`.
+- `atualizarCaixaAdicionar()` não apaga mais a mensagem de sucesso (a seleção é zerada logo após
+  adicionar, o que apagava o "N adicionado(s) ✓").
+- `src/manager/pagina.test.ts` — teste de regressão: renderiza o template e valida a sintaxe de cada
+  bloco `<script>` (com `new Function`, que só parseia) + caça escapes simples no literal. Verificado
+  que o teste FALHA com o código quebrado e PASSA com o corrigido.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 47/47; `npm run smoke:manager` OK; E2E em
+navegador (Playwright/Chromium) contra a build nova: filtro por grupo (4→2→1 contato), caixa aparece
+ao selecionar (`display:none`→`flex`), grupos carregados, Evolution chamada com
+`{"action":"add","participants":["+5511999990001"]}` e mensagem "1 adicionado(s) ✓"; zero erros JS.
+
+**Deploy**: o container `promo_radar_manager` (compose `docker-compose.manager-novo.yml`, porta 8099)
+rodava a imagem `promo-radar-manager:latest` de 20/out — build sem os recursos. Imagem reconstruída
+e container recriado para passar a servir a UI nova.
