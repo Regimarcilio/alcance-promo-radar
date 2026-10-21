@@ -1187,3 +1187,11 @@ API, então ele não tinha nada a postar (comportamento correto: nunca posta ofe
 
 **Estado**: loop ML religado com a mesma config do log (conta=principal, MLB1246/MLB6284,
 grupo 120363411920451567@g.us, 1x/5min, 90s) →-publicação confirmada às 16:50 com foto.
+
+**Correção adicional (achada na validação)**: o store do Piloto é **lazy** — os timers só eram
+agendados quando alguém chamava algo do módulo (tipicamente o navegador aberto). Sem navegador, o
+Piloto ficava muda mesmo com a grade "ligada". Agora o manager chama `retomarLoopsNoBoot()` no boot
+(`server.listen`), que carrega o store e agenda os timers. Log: `piloto: N loop(s) religados no boot`.
+
+**Validação final**: deploy → boot → `▶ 1 loop(s) religados automaticamente` → publicação às 17:14
+(com foto). `npm test` 67/67; smoke OK.

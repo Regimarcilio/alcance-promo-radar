@@ -680,6 +680,25 @@ function agendar(loop: LoopState): void {
 
 // ---------- API ----------
 
+/**
+ * Retoma os loops após o boot do processo.
+ *
+ * O store do piloto é carregado sob demanda (lazy): se ninguém chamar nada
+ * dele, os timers nunca são agendados e o Piloto fica muda mesmo com a
+ * grade "ligada". Por isso o manager chama isto no boot.
+ *
+ * - PILOTO_AUTORELIGA=1 → religa os loops que estavam rodando.
+ * - sem a env → só pausa (comportamento seguro) e nada é agendado.
+ */
+export function retomarLoopsNoBoot(): { religados: number; pausados: number } {
+  const s = store();
+  const autoreliga = process.env.PILOTO_AUTORELIGA === "1";
+  const ativos = s.loops.filter((l) => l.rodando);
+  if (!autoreliga) return { religados: 0, pausados: ativos.length };
+  for (const l of ativos) agendar(l);
+  return { religados: ativos.length, pausados: 0 };
+}
+
 export function status() {
   const s = store();
   const mapa: Record<string, number> = {};

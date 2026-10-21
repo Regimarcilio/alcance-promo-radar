@@ -13,7 +13,7 @@ import type { Oportunidade } from "../hunter/schema.js";
 import { completarCandidato } from "../ml/item-page.js";
 import { converterLink } from "../ml/provider.js";
 import { listarContas, salvarConta, definirPadrao, definirMapa, lerMapa, resolver, grupoPara } from "../ml/contas.js";
-import { status as pilotoStatus, start as pilotoStart, stop as pilotoStop, ligarTudo, lerCesta, salvarCesta, limparCesta } from "../ml/piloto.js";
+import { status as pilotoStatus, start as pilotoStart, stop as pilotoStop, ligarTudo, lerCesta, salvarCesta, limparCesta, retomarLoopsNoBoot } from "../ml/piloto.js";
 import { colher, lerMapaVitrine, definirMapaVitrine, folhasDescobertas } from "../ml/vitrine.js";
 import { subcategoriasDe } from "../ml/hub.js";
 import { gerarHeadline } from "../ai/gateway.js";
@@ -2470,5 +2470,10 @@ server.listen(PORT, "0.0.0.0", () => {
   }
   iniciarFilaWorker();
   iniciarClientesWorker();
+  // Piloto: o store é lazy — sem isto, os timers nunca são agendados no boot
+  // e o Piloto fica muda (mesmo com a grade "ligada" no painel).
+  const rl = retomarLoopsNoBoot();
+  if (rl.religados > 0) console.log(`piloto: ${rl.religados} loop(s) religados no boot`);
+  else if (rl.pausados > 0) console.log(`piloto: ${rl.pausados} loop(s) pausados no boot — clique em START (PILOTO_AUTORELIGA=1 religa sozinho)`);
   console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);
 });
