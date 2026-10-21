@@ -146,6 +146,86 @@ export async function adicionarParticipantes(
   }
 }
 
+/**
+ * Permissões do grupo (quem pode falar/comentar).
+ *
+ * Evolution API v2: POST /group/updateSetting/{instance}?groupJid=...
+ * body: { action }
+ *   announcement     → só administradores enviam mensagens (participantes não comentam)
+ *   not_announcement → todos voltam a enviar mensagens
+ *   locked           → só administradores editam nome/avatar/descrição do grupo
+ *   unlocked         → todos editam as informações do grupo
+ *
+ * Exige que a conta pareada seja ADMIN do grupo.
+ */
+export type AcaoGrupo = "announcement" | "not_announcement" | "locked" | "unlocked";
+
+export interface PermissaoGrupo {
+  /** true = só admins enviam mensagens (participantes não comentam) */
+  announce: boolean;
+  /** true = só admins editam as informações do grupo */
+  restrict: boolean;
+  tamanho: number | null;
+  nome: string;
+}
+
+/** Estado atual das permissões do grupo. */
+export async function buscarPermissaoGrupo(groupJid: string): Promise<PermissaoGrupo | null> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return null;
+  try {
+    const res = await fetch(
+      `${base()}/group/findGroupInfos/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+      { headers: { apikey: key() }, signal: AbortSignal.timeout(30000) },
+    );
+    if (!res.ok) return null;
+    const g = (await res.json()) as {
+      subject?: string;
+      size?: number;
+      announce?: boolean;
+      restrict?: boolean;
+    };
+    return {
+      announce: g.announce === true,
+      restrict: g.restrict === true,
+      tamanho: typeof g.size === "number" ? g.size : null,
+      nome: String(g.subject ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Aplica uma permissão de grupo (announcement/locked). */
+export async function definirPermissaoGrupo(
+  groupJid: string,
+  acao: AcaoGrupo,
+): Promise<{ ok: boolean; erro?: string }> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return { ok: false, erro: "grupo inválido (esperado JID @g.us)" };
+  try {
+    const res = await fetch(
+      `${base()}/group/updateSetting/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+      {
+        method: "POST",
+        headers: { apikey: key(), "Content-Type": "application/json" },
+        body: JSON.stringify({ action: acao }),
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+    if (!res.ok) {
+      const txt = (await res.text()).slice(0, 200);
+      return {
+        ok: false,
+        erro: `Evolution ${res.status}${txt ? `: ${txt}` : ""} (a conta precisa ser admin do grupo)`,
+      };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: String((e as Error)?.message ?? e) };
+  }
+}
+
 /** Garante o webhook messages.upsert apontando para o manager. */
 export async function configurarWebhook(url: string, webhookKey: string): Promise<void> {
   const res = await fetch(`${base()}/webhook/set/${inst()}`, {

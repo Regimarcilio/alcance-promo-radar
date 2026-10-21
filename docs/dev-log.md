@@ -1056,3 +1056,23 @@ ao selecionar (`display:none`→`flex`), grupos carregados, Evolution chamada co
 **Deploy**: o container `promo_radar_manager` (compose `docker-compose.manager-novo.yml`, porta 8099)
 rodava a imagem `promo-radar-manager:latest` de 20/out — build sem os recursos. Imagem reconstruída
 e container recriado para passar a servir a UI nova.
+
+---
+
+## 2026-10-21 | E6-PERM-01 | Permissões de grupo (somente admins falam/comentam)
+
+**Pedido**: bloquear comentários/mensagens dos participantes no grupo "Mano dos Achadinhos" — somente
+administradores podem falar.
+
+**Implementação**:
+- `src/monitor/evolution.ts` — `buscarPermissaoGrupo()` (GET `/group/findGroupInfos`) e
+  `definirPermissaoGrupo()` (POST `/group/updateSetting` com `announcement` / `not_announcement` /
+  `locked` / `unlocked`).
+- `src/manager/server.ts` — `GET`/`POST /api/grupos/permissao` + bloco "🔒 Permissões do grupo" na
+  aba Monitor (escolher grupo + 4 ações: só admins falam / todos falam / só admins editam / todos editam).
+- Testes: 4 novos em `src/monitor/evolution.test.ts` (51/47 no total).
+
+**Aplicado em produção**: grupo `120363412937047408@g.us` ("Mano dos Achadinhos", 5 participantes)
+passou de `announce:false` para `announce:true` (HTTP 201 na Evolution, confirmado via
+`findGroupInfos`). `restrict` ficou `false` — só admins editam nome/avatar é outro ajuste, disponível
+no botão "🛡 Só admins editam" caso o usuário queira.
