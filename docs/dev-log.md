@@ -1159,3 +1159,31 @@ tag, que é o que credita a comissão no painel da Amazon.
 keywords, publicações, filtros, resumo, CSV); E2E no navegador: Rastreio com 3 publicações
 (1 ML, 2 Amazon, 2 com tag), filtros por programa e por via, CSV com BOM, 16 categorias no select
 do Piloto, aviso de credenciais ausente — **zero erros JS**.
+
+---
+
+## 2026-10-21 | E6-PIL-01 | Envio parado: loops do Piloto pausados no reinício
+
+**Sintoma**: "agora parou o sistema de envio de mensagens".
+
+**Diagnóstico (por camadas)**:
+1. Envio na Evolution: **OK** (texto e mídia, HTTP 201) — o `sendMedia 500` era transitório.
+2. Monitor: **OK** — 6 regras ativas, `autoEnviar=true`, eventos ENCAMINHADA chegando.
+3. Piloto: **PARADO** — `data/piloto.json` sem nenhum loop. No log:
+   `16:16 ☕ pausa de 8 min` → `16:23 ⏸ 1 loop(s) pausado(s) após reinício` → `16:37 #2 START
+   programa=amazon` → `caça AMAZON indisponível (credencial ausente)` → `16:46 #2 e #1 parados`.
+
+**Causa raiz**: o Piloto **pausa todos os loops no boot** (segurança: `rodando:false` + persiste a
+pausa). Como o deploy reinicia o container, toda atualização parava a publicação e exigia clique manual
+em ▶ START. Além disso, o loop Amazon que o usuário ligou às 16:37 não tinha credenciais da Creators
+API, então ele não tinha nada a postar (comportamento correto: nunca posta oferta inventada).
+
+**Correções**:
+- `PILOTO_AUTORELIGA=1` (novo, **opt-in**): retoma os loops que estavam rodando após o reinício.
+  Padrão segue sendo pausar tudo por segurança.
+- Aba Piloto: aviso claro "⏸ N loop(s) parados — nada está sendo publicado por eles", com o caminho
+  para religar (e a dica da env).
+- `src/ml/piloto.test.ts` — 2 testes: com a env, o loop religa; sem ela, pausa e persiste a pausa.
+
+**Estado**: loop ML religado com a mesma config do log (conta=principal, MLB1246/MLB6284,
+grupo 120363411920451567@g.us, 1x/5min, 90s) →-publicação confirmada às 16:50 com foto.
