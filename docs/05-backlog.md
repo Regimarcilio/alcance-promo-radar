@@ -42,7 +42,7 @@ Aceite RF-030. Tarefas: CRUD `data/monitor-grupos.json` (lista de origem + desti
 Aceite RF-031 + RN-008/009. Tarefas: parser de URLs em texto livre, allowlist de domínios (ML/`meli.la`, Shopee/`shope.ee`, Kabum, Amazon/`amzn.to`), extração de MLB/ASIN. Teste: 1 link de cada programa reconhecido; domínio fora da lista → `NAO_RECONHECIDO`.
 
 ### US-18 Como SISTEMA quero transformar o link para o meu link de afiliado (5pts, Must)
-Aceite RF-032 + RN-012. Tarefas: reutilizar `src/ml/provider.ts` (`converterLink`) com tag/cookie já configurados; falha de cookie → fila `REVISAO_MONITOR`. Teste: link original vira link com tag do usuário (nunca perfil); link sem transformação válida não é enviado.
+Aceite RF-032 + RN-012. Tarefas: reutilizar `src/ml/provider.ts` (`converterLink`) com tag/cookie já configurados; falha de cookie → fila `REVISAO_MONITOR`. **Shopee:** `src/monitor/shopee-api.ts` com `generateShortLink` (Open API), assinatura SHA-256, cache 6h, `SHOPEE_APP_ID`/`SHOPEE_APP_SECRET`/`SHOPEE_SUB_IDS`; sem credenciais/falha → revisão, `smtt` legado não conta como afiliado. Teste: link original vira link com tag do usuário (nunca perfil); link sem transformação válida não é enviado; Shopee com mock retorna `shope.ee/...` e falha mantém original em revisão.
 
 ### US-19 Como SISTEMA quero aplicar meu template e encaminhar aos meus grupos (5pts, Must)
 Aceite RF-033/034 + RN-011/013. Tarefas: aplicar RN-001 ao texto recebido, encaminhar via `src/wa/dispatch.ts` para o grupo de destino, registrar `messageId`, somar contador diário compartilhado (RN-007/RN-013). Teste: mensagem completa (texto+preço+link) sai no padrão Emipe com link transformado no grupo de destino.
