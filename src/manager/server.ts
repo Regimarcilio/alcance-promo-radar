@@ -875,9 +875,18 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/monitor/status") {
     const s = carregarMonitor();
     const destinos = s.regras.reduce((n, r) => n + r.destinos.length, 0);
+    const { diasDedup, dedupPorOrigem } = await import("../monitor/state.js");
     json(200, {
       ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.regras.length, destinos,
       fila: tamanhoFila(), intervaloFila: intervaloFila(),
+      // volume: por que as ofertas não foram para o grupo?
+      volume: {
+        dedupDias: diasDedup(),
+        dedupPorOrigem: dedupPorOrigem(),
+        taxaEncaminhada: resumoMonitor().recebidas
+          ? Math.round((resumoMonitor().encaminhadas / resumoMonitor().recebidas) * 100)
+          : 0,
+      },
       eventos: eventosMonitor(50),
     });
     return;
@@ -1519,6 +1528,7 @@ body{padding:0;max-width:none;margin:0}
 <div class="kpi danger"><b id="kpi-erros">—</b><span>erros</span></div>
 <div class="kpi"><b id="kpi-fila">—</b><span>na fila</span></div>
 </div>
+<div class="mbox" id="mvolume" style="margin:0 0 10px"></div>
 <div class="panel ac-monitor">
 <div class="panel-head"><span><b id="tit-monitor">📡 Monitor</b> — cada grupo de origem encaminha para os SEUS destinos</span><a class="lk-mini" href="#" onclick="renomearCard('monitor');return false">✏️ renomear</a></div>
 <div class="hint">Oferta publicada numa <b>origem</b> (grupo de achadinhos que você monitora) tem o link trocado pelo <b>seu</b> e é reenviada <b>apenas</b> para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.</div>
@@ -2417,6 +2427,18 @@ async function carregarMonitorStatus(){
     const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
     kp('kpi-origens',d.origens||0);kp('kpi-destinos',d.destinos||0);
     kp('kpi-recebidas',d.recebidas||0);kp('kpi-encaminhadas',d.encaminhadas||0);
+    // Diagnóstico de volume: por que as ofertas não chegam no mesmo volume recebido?
+    const vol=d.volume||{};
+    const box=$('mvolume');
+    if(box){
+      const naoEnviadas=(d.recebidas||0)-(d.encaminhadas||0);
+      box.innerHTML='<label>📊 Volume — '+vol.taxaEncaminhada+'% das ofertas recebidas foram para o grupo</label>'
+        +'<div class="mini" style="margin-top:4px">'
+        +'recebidas <b>'+(d.recebidas||0)+'</b> → encaminhadas <b>'+(d.encaminhadas||0)+'</b> · '
+        +'duplicadas <b>'+(d.duplicadas||0)+'</b> (mesmo produto em 7d) · revisão <b>'+(d.revisao||0)+'</b> (link sem afiliado) · '
+        +'dedup: '+vol.dedupDias+'d'+(vol.dedupPorOrigem?' · <b>por origem</b>':' · <b>global</b> (mesmo produto de outra origem não passa)')
+        +'</div>';
+    }
     kp('kpi-duplicadas',d.duplicadas||0);kp('kpi-revisao',d.revisao||0);
     kp('kpi-erros',d.erros||0);kp('kpi-fila',d.fila||0);
     kp('badge-monitor',d.fila||0);

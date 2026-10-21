@@ -141,10 +141,26 @@ export async function estadoInstancia(instancia: string, forcar = false): Promis
 }
 
 /**
- * Sorteio ponderado entre os números disponíveis.
- * Números com conexão fechada são PULADOS; se todos estiverem fechados,
- * ainda devolve um ativo para que o retry do dispatch tente de novo.
+ * VARIAÇÃO: evita repetir o mesmo número do envio anterior (quando há
+ * alternativa). Sorteio puro pode dar 2 envios seguidos do mesmo celular —
+ * concentration de volume num aparelho só é o que mais derruba número.
+ *
+ * A anti-repetição é PROBABILÍSTICA (padrão 70%) para não anular o peso por
+ * número: com pesos iguais a variação fica ~85%; com peso muito diferente
+ * (ex.: 10 x 1), o número "quente" continua levando mais volume.
  */
+let ultimaUsada: string | null = null;
+
+/** Chance de não repetir o número do envio anterior (0 = nunca, 1 = sempre). */
+function evitaRepeticao(): number {
+  const v = Number(process.env.RODIZIO_EVITA_REPETICAO ?? 0.7);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7;
+}
+
+export function ultimaInstanciaUsada(): string | null {
+  return ultimaUsada;
+}
+
 export async function proximaInstancia(): Promise<string> {
   const s = carregar();
   const ativos = s.itens.filter((i) => i.ativo);
@@ -153,14 +169,26 @@ export async function proximaInstancia(): Promise<string> {
     ativos.map(async (i) => ({ i, e: await estadoInstancia(i.instancia) }))
   );
   const abertos = comEstado.filter((x) => x.e === "open").map((x) => x.i);
-  const candidatos = abertos.length > 0 ? abertos : ativos;
+  let candidatos = abertos.length > 0 ? abertos : ativos;
+
+  // anti-repetição: tira a última usada (com probabilidade) se houver outra
+  if (candidatos.length > 1 && ultimaUsada && Math.random() < evitaRepeticao()) {
+    const outras = candidatos.filter((i) => i.instancia !== ultimaUsada);
+    if (outras.length > 0) candidatos = outras;
+  }
+
   const total = candidatos.reduce((n, i) => n + i.peso, 0);
   let r = Math.random() * total;
   for (const i of candidatos) {
     r -= i.peso;
-    if (r <= 0) return i.instancia;
+    if (r <= 0) {
+      ultimaUsada = i.instancia;
+      return i.instancia;
+    }
   }
-  return candidatos[candidatos.length - 1].instancia;
+  const ultima = candidatos[candidatos.length - 1].instancia;
+  ultimaUsada = ultima;
+  return ultima;
 }
 
 export function registrarEnvio(instancia: string): void {

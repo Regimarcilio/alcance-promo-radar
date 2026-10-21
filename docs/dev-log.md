@@ -1195,3 +1195,35 @@ Piloto ficava muda mesmo com a grade "ligada". Agora o manager chama `retomarLoo
 
 **Validação final**: deploy → boot → `▶ 1 loop(s) religados automaticamente` → publicação às 17:14
 (com foto). `npm test` 67/67; smoke OK.
+
+---
+
+## 2026-10-21 | E6-VOL-01 | Variação de números + volume coerente com o recebido
+
+**Relato**: "não está variando o envio entre os números cadastrados" e "não está enviando a quantidade
+de mensagens consistente com a recebida dos outros grupos".
+
+**Diagnóstico (dados dos últimos 500 eventos)**:
+- ENCAMINHADA 179 · DUPLICADO 229 (46%) · REVISAO 85 (47 Shopee sem credencial + 37 link não
+  reconhecido) · ENFILEIRADA 7 → só **36%** das ofertas recebidas chegaram ao grupo.
+- Rotação: os DOIS números enviam (radar-piloto 739 envios, radar-mano-da-divulgacao 465, ambos
+  `open`), mas o sorteio é puro: pode dar 2 envios seguidos do mesmo celular — e é isso que o
+  operador enxerga como "não está variando".
+
+**Correções**:
+- `src/wa/rotacao.ts` — anti-repetição **probabilística** (padrão 70%, env `RODIZIO_EVITA_REPETICAO`):
+  evita repetir o número do envio anterior quando há outro conectado, sem anular o peso por número
+  (com pesos iguais a variação fica ~85%; com peso muito diferente o número "quente" ainda lidera).
+  `ultimaInstanciaUsada()` expõe a última escolha.
+- `src/monitor/state.ts` — dedup com janela configurável (`DEDUP_DIAS`, padrão 7) e escopo
+  (`DEDUP_POR_ORIGEM=1` → o mesmo produto de origens diferentes é reencaminhado, multiplicando o
+  volume sem repetir dentro da mesma origem).
+- `src/monitor/webhook.ts` — a origem entra no hash do dedup quando o escopo é "por origem"; e o
+  motivo da revisão agora traz **os domínios não reconhecidos** (antes só dizia "link não
+  reconhecido", sem dizer o que faltava na allowlist).
+- `src/manager/server.ts` — aba Monitor ganha o quadro **"📊 Volume"**: % encaminhada, recebidas →
+  encaminhadas, duplicadas, revisão e o modo de dedup em uso.
+- `.env.example` — `DEDUP_DIAS`, `DEDUP_POR_ORIGEM`, `RODIZIO_EVITA_REPETICAO`.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **73/73** (6 novos: rotação com/sem
+anti-repetição, última usada, dedup por origem, dedup global, janela em dias); smoke OK.
