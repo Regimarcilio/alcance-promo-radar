@@ -1,7 +1,7 @@
 /** Testes da expansão de encurtadores Amazon (curtos.ts) — fetch mockado. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { expandirCurtoAmazon } from "./curtos.js";
+import { expandirCurtoAmazon, expandirLink } from "./curtos.js";
 import { mockFetch, resJson, resRedirect } from "./test-utils.js";
 
 test("amzn.to: segue o 301 até o produto e devolve a URL final", async () => {
@@ -35,6 +35,29 @@ test("encurtador sem redirect: null (chamador mantém o original)", async () => 
   });
   try {
     assert.equal(await expandirCurtoAmazon("https://amzn.to/3XYZabc"), null);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("encurtador genérico (tidd.ly): segue o redirect e classifica", async () => {
+  const m = mockFetch(async (url) => {
+    assert.match(url, /tidd\.ly/);
+    return resRedirect("https://www.mercadolivre.com.br/produto/MLB-123456789");
+  });
+  try {
+    const r = await expandirLink("https://tidd.ly/abc123");
+    assert.equal(r?.programa, "mercadolivre");
+    assert.equal(r?.idProduto, "MLB123456789");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("encurtador genérico: destino sem programa conhecido devolve null", async () => {
+  const m = mockFetch(async () => resRedirect("https://exemplo-qualquer.com/pagina"));
+  try {
+    assert.equal(await expandirLink("https://tidd.ly/abc123"), null);
   } finally {
     m.restaurar();
   }

@@ -33,8 +33,35 @@ async function viaEpipe(url: string): Promise<string | null> {
   return /^https?:\/\//i.test(destino) ? destino : null;
 }
 
+/**
+ * Encurtador genérico: segue UM redirect (301/302/303/307) e devolve o
+ * destino. Vários grupos de achadinhos postam link curto (tidd.ly, bit.ly,
+ * cutt.ly, encurtador.com.br…) — sem resolver, a oferta morre em revisão
+ * "link não reconhecido" e o volume some.
+ */
+async function viaRedirect(url: string): Promise<string | null> {
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      redirect: "manual",
+      headers: { "user-agent": UA_REDIRECT, accept: "text/html,*/*" },
+      signal: AbortSignal.timeout(6000),
+    });
+    const loc = r.headers.get("location");
+    if (loc && /^https?:\/\//i.test(loc)) return loc;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Hosts de encurtador conhecidos (resolvidos por 1 salto de redirect). */
+const ENCURTADORES =
+  /(^|\.)(tidd\.ly|bit\.ly|cutt\.ly|tinyurl\.com|shorturl\.at|is\.gd|rebrand\.ly|short\.gy|vk\.cc|rb\.gy|qrco\.de|lnkd\.in|t\.co|t\.me|encurtador\.com\.br|meulink\.com\.br|linkr\.com\.br|shorturl\.com|0x0\.st|clck\.ru|tr\.ee|shrinkme\.io|shorturl\.br)$/i;
+
 const RESOLVEDORES: Resolvedor[] = [
   { host: /(^|\.)emipefps\.com$/i, resolver: viaEpipe },
+  { host: ENCURTADORES, resolver: viaRedirect },
 ];
 
 /**
