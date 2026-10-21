@@ -13,7 +13,7 @@ import { enviarParaGrupo } from "../wa/dispatch.js";
 import catsJson from "../categorias.json" with { type: "json" };
 
 const CATS = catsJson as { id: string; name: string }[];
-const dataDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
 const filaFile = join(dataDir, "fila.json");
 const KILL = join(dataDir, "AUTO_OFF");
 

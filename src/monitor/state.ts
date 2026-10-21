@@ -10,10 +10,11 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "monitor-estado.json");
 
 export const DEDUP_DIAS = 7;
+export const LIMITE_EVENTOS = Number(process.env.MONITOR_EVENTOS_LIMITE ?? 500); // 0 = ilimitado
 
 export interface EventoMonitor {
   em: string;
@@ -53,7 +54,7 @@ function carregar(): Estado {
 
 function salvar(s: Estado): void {
   mkdirSync(dataDir, { recursive: true });
-  s.eventos = s.eventos.slice(-500); // mantém os 500 últimos eventos
+  s.eventos = s.eventos.slice(-LIMITE_EVENTOS); // usa limite configurável
   cache = s;
   // Escrita atômica (tmp + rename): nunca deixa o arquivo meio-escrito.
   const tmp = `${file}.tmp`;

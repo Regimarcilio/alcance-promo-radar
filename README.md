@@ -56,6 +56,7 @@ TLS/reverse proxy antes — veja `docs/13-auth-spec.md`.
 | `MANAGER_KEY` | credencial machine opcional para `/api/*` |
 | `AMAZON_TAG`, `AMAZON_CREATORS_ID`, `AMAZON_CREATORS_SECRET` | Amazon |
 | `SHOPEE_APP_ID`, `SHOPEE_APP_SECRET`, `SHOPEE_SUB_IDS` | link curto de afiliado Shopee via Open API (`generateShortLink`) |
+| `MONITOR_EVENTOS_LIMITE` | quantos eventos o estado do monitor guarda (`0` = ilimitado, padrão `500`) |
 | `TAG_ML`, `COOKIE_ML` | enriquecimento Mercado Livre |
 
 O template completo está em `.env.example`.

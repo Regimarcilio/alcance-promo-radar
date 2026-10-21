@@ -27,7 +27,7 @@ interface Store {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "contas.json");
 
 function envCreds(): { tag: string | null; cookie: string | null } {

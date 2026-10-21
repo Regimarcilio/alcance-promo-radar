@@ -35,6 +35,7 @@ import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor
 import { expandirLink } from "../monitor/curtos.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
+  adicionarParticipantes,
 } from "../monitor/evolution.js";
 import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
@@ -688,6 +689,40 @@ const server = createServer(async (req, res) => {
     try {
       const b = JSON.parse(await lerCorpo(req));
       json(200, { ok: removerLista(String(b.id ?? "")) });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/grupo") {
+    // Adiciona os contatos selecionados como participantes de um grupo
+    // (Evolution updateParticipant action=add). Exige conta ADMIN + link de
+    // convite habilitado no grupo; erro da API é devolvido sem quebrar a UI.
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const grupoJid = String(b.grupoJid ?? "");
+      const jids = Array.isArray(b.jids) ? b.jids.map((j: unknown) => String(j)) : [];
+      if (!grupoJid.endsWith("@g.us")) {
+        json(400, { erro: "grupo inválido" });
+        return;
+      }
+      if (!jids.length) {
+        json(400, { erro: "nenhum contato selecionado" });
+        return;
+      }
+      const escolhidos = listarContatos().filter((c) => jids.includes(c.jid));
+      const numeros = escolhidos.map((c) => c.jid.split("@")[0]);
+      if (!numeros.length) {
+        json(400, { erro: "contatos não encontrados (rode 'Puxar contatos' de novo)" });
+        return;
+      }
+      const r = await adicionarParticipantes(grupoJid, numeros);
+      json(r.ok ? 200 : 502, {
+        ok: r.ok,
+        adicionados: r.adicionados,
+        requested: numeros.length,
+        erro: r.erro,
+      });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -1461,13 +1496,25 @@ body{padding:0;max-width:none;margin:0}
 <input id="clinome" placeholder="nome (ex.: João)" style="flex:1;min-width:130px;">
 <input id="clifone" placeholder="telefone com DDD" style="flex:1;min-width:130px;">
 <button class="mbtn" onclick="addContato()">➕ Contato</button></div>
-<div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
+<select id="cligrupo" onchange="renderContatos()" style="flex:1;min-width:150px">
+  <option value="">👥 Todos os grupos</option>
+</select>
 <input id="clibusca" placeholder="buscar por nome ou telefone" oninput="renderContatos()" style="flex:1;">
 <span class="mini" id="clicount" style="white-space:nowrap"></span></div>
 <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
 <button class="mbtn" onclick="marcarTodos(true)">☑ Todos</button>
 <button class="mbtn" onclick="marcarTodos(false)">☐ Limpar</button>
 <button class="mbtn ok" onclick="salvarLista()">💾 Salvar selecionados como lista</button></div>
+<div id="cliaddbox" style="margin-top:8px;display:none;gap:6px;align-items:center;flex-wrap:wrap;
+  border:1px solid var(--border-strong);border-radius:10px;padding:8px">
+  <label style="margin:0">➕ Adicionar selecionados ao grupo:</label>
+  <select id="cligrupoalvo" style="flex:1;min-width:150px">
+    <option value="">— escolha o grupo —</option>
+  </select>
+  <button class="mbtn ok" onclick="adicionarAoGrupo()">✔ Adicionar</button>
+  <span class="mini" id="cliaddmsg"></span>
+</div>
 <div id="clilist" style="max-height:240px;overflow:auto;border:1px solid var(--border-strong);border-radius:10px;padding:4px;margin-top:8px"></div>
 <div id="clilistas" style="margin-top:10px;font-size:13px"></div>
 <div class="mbox" style="margin-top:10px">
@@ -1875,12 +1922,28 @@ async function carregarClientes(){
     const f=d.fila||{};
     $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s';
     kp('kpi-clifila',f.pendentes||0);
+    // Dropdown de grupos: nomes dos grupos em que os contatos foram capturados.
+    const nomesGrupos=[];
+    (CLIENTES.contatos||[]).forEach(function(c){
+      const o=String(c.origem||'').trim();
+      if(o && o!=='manual' && nomesGrupos.indexOf(o)<0) nomesGrupos.push(o);
+    });
+    nomesGrupos.sort(function(a,b){return a.localeCompare(b,'pt-BR');});
+    const grupoSel=$('cligrupo');
+    const grupoAtual=grupoSel.value;
+    grupoSel.innerHTML='<option value="">👥 Todos os grupos ('+(CLIENTES.contatos||[]).length+')</option>'
+      +nomesGrupos.map(function(g){return '<option value="'+esc(g)+'">📍 '+esc(g)+'</option>';}).join('');
+    if(nomesGrupos.indexOf(grupoAtual)>=0) grupoSel.value=grupoAtual;
     renderContatos(); renderListas();
   }catch(e){}
 }
 function filtroContatos(){
   const q=($('clibusca').value||'').toLowerCase().trim();
+  const g=($('cligrupo').value||'');
   return (CLIENTES.contatos||[]).filter(function(c){
+    // Filtro por grupo de origem (nicho): quando há grupo escolhido, só passa
+    // quem foi capturado naquele grupo.
+    if(g && String(c.origem||'')!==g) return false;
     if(!q)return true;
     return (c.nome||'').toLowerCase().includes(q)||String(c.telefone||'').includes(q);
   });
@@ -1931,6 +1994,7 @@ function marcarTodos(on){
   if(on)arr.forEach(function(c){SELECAO.add(c.jid);});
   else SELECAO.clear();
   renderContatos();
+  atualizarCaixaAdicionar();
 }
 async function salvarLista(){
   if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
@@ -1956,12 +2020,51 @@ async function limparFilaClientesUI(){
   if(r.erro)return alert(r.erro);
   carregarClientes();
 }
+// ===== Adicionar contatos selecionados a um grupo =====
+let _gruposAlvoCarregados=false;
+async function carregarGruposAlvo(){
+  const sel=$('cligrupoalvo');
+  sel.innerHTML='<option value="">— carregando grupos…</option>';
+  try{
+    const g=await (await fetch('/api/grupos')).json();
+    const opts=(g.grupos||[]).map(function(x){
+      return '<option value="'+esc(x.id)+'">'+esc(x.nome)+' ('+(x.tamanho!=null?x.tamanho+'participantes':esc(String(x.id).slice(0,12))+'…')+')</option>';
+    }).join('');
+    sel.innerHTML='<option value="">— escolha o grupo —</option>'+opts;
+    _gruposAlvoCarregados=true;
+    if(g.aviso)$('cliaddmsg').textContent=g.aviso;
+  }catch(e){
+    sel.innerHTML='<option value="">⚠️ erro ao carregar grupos</option>';
+  }
+}
+function atualizarCaixaAdicionar(){
+  const box=$('cliaddbox');
+  const tem=SELECAO.size>0;
+  box.style.display=tem?'flex':'none';
+  if(tem && !_gruposAlvoCarregados) carregarGruposAlvo();
+  if(!tem)$('cliaddmsg').textContent='';
+}
+async function adicionarAoGrupo(){
+  const grupo=$('cligrupoalvo').value;
+  if(!grupo)return alert('escolha o grupo de destino');
+  if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
+  const nomeGrupo=$('cligrupoalvo').options[$('cligrupoalvo').selectedIndex].textContent;
+  if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\n\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.'))return;
+  $('cliaddmsg').textContent='adicionando…';
+  const r=await (await fetch('/api/clientes/grupo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupoJid:grupo,jids:[...SELECAO]})})).json();
+  if(r.erro){$('cliaddmsg').textContent='erro: '+r.erro;return alert('Erro: '+r.erro);}
+  $('cliaddmsg').textContent=(r.adicionados||0)+' adicionado(s) ✓';
+  SELECAO.clear();
+  renderContatos();
+  atualizarCaixaAdicionar();
+}
 $('clilist').addEventListener('change',function(ev){
   const el=ev.target;
   if(el && el.getAttribute && el.getAttribute('data-sel')){
     const jid=el.getAttribute('data-sel');
     if(el.checked)SELECAO.add(jid); else SELECAO.delete(jid);
     $('clicount').textContent=SELECAO.size+' sel.';
+    atualizarCaixaAdicionar();
   }
 });
 $('clilist').addEventListener('click',async function(ev){

@@ -24,7 +24,7 @@ import { completarCandidato, tituloDoSlug } from "./item-page.js";
 
 const CATS = catsJson as { id: string; name: string }[];
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const pilotoFile = join(dataDir, "piloto.json");
 const cestaFile = join(dataDir, "cestas.json");
 

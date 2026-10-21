@@ -30,7 +30,7 @@ interface Store {
 export const MAX_INSTANCIAS = 5;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "instancias.json");
 
 let cache: Store | null = null;

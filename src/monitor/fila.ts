@@ -17,7 +17,7 @@ import { limparMidiaAntiga } from "./midia.js";
 import { registrarEvento } from "./state.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "monitor-fila.json");
 
 export interface ItemFila {
