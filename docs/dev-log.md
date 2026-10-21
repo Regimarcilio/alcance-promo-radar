@@ -1076,3 +1076,28 @@ administradores podem falar.
 passou de `announce:false` para `announce:true` (HTTP 201 na Evolution, confirmado via
 `findGroupInfos`). `restrict` ficou `false` — só admins editam nome/avatar é outro ajuste, disponível
 no botão "🛡 Só admins editam" caso o usuário queira.
+
+---
+
+## 2026-10-21 | E6-SYNC-01 | Sync de contatos volta a puxar todos os grupos
+
+**Sintoma**: "parou de carregar os contatos de todos os grupos". Último sync bem-sucedido: 19/out.
+Log da Evolution: **1.794 erros `rate-overlimit`** (HTTP 500 do Evolution, 429 do WhatsApp via Baileys
+na `groupMetadata`) e 1,17 milhão de linhas de log.
+
+**Causa raiz**: `sincronizar()` disparava uma consulta de participantes por grupo **sem pausa**.
+Cada consulta vira uma `groupMetadata` no WhatsApp; 32 grupos em rajada estouram o rate limit e o
+sync terminava quase sem capturar nada — e o erro era engolido em `catch {}` (sem nenhuma visibilidade
+na UI).
+
+**Correções**:
+- `src/clientes/clientes.ts` — pausa entre grupos (`SYNC_PAUSA_MS`, padrão 4s), backoff + 1 retry
+  quando o WhatsApp limita (`SYNC_BACKOFF_MS`, padrão 45s), 403 (grupo sem permissão) não conta como
+  erro, e `estadoSync()` passou a expor `erros` e `ultimoErro`.
+- `src/manager/server.ts` — a linha de status da aba Clientes mostra o progresso e os erros
+  ("⚠️ N grupo(s) falharam: …"), e o botão de sync avisa que leva alguns minutos.
+- `.env.example` — `SYNC_PAUSA_MS` e `SYNC_BACKOFF_MS`.
+- `src/clientes/clientes.test.ts` — 4 testes: importa de todos os grupos, erro de rate limit conta e
+  não trava o sync, 403 não conta como erro, retry no mesmo grupo.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 55/55; `npm run smoke:manager` OK.
