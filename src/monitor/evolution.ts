@@ -99,6 +99,53 @@ export async function desconectar(): Promise<void> {
   if (!res.ok) throw new Error(`Evolution logout ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
 
+/**
+ * Adiciona participantes a um grupo do WhatsApp (aba Clientes → "adicionar ao grupo").
+ *
+ * Evolution API v2: POST /group/updateParticipant/{instance}?groupJid=...
+ * body: { action: "add", participants: ["+5511999999999", ...] }
+ *
+ * Observações do WhatsApp: só funciona se a conta pareada for ADMIN do grupo e
+ * o grupo tiver o "link de convite" habilitado. Fora dessas condições a API
+ * devolve erro — o chamador deve reportar sem quebrar a interface.
+ */
+export async function adicionarParticipantes(
+  groupJid: string,
+  numeros: string[],
+): Promise<{ ok: boolean; erro?: string; adicionados: number }> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return { ok: false, erro: "grupo inválido (esperado JID @g.us)", adicionados: 0 };
+  // Só dígitos com código do país, prefixo "+" (formato exigido pela API).
+  const participantes = [
+    ...new Set(
+      numeros
+        .map((n) => String(n ?? "").replace(/\D/g, ""))
+        .filter((n) => n.length >= 10)
+        .map((n) => `+${n}`),
+    ),
+  ];
+  if (!participantes.length) return { ok: false, erro: "nenhum número válido para adicionar", adicionados: 0 };
+
+  try {
+    const res = await fetch(
+      `${base()}/group/updateParticipant/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+      {
+        method: "POST",
+        headers: { apikey: key(), "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", participants: participantes }),
+        signal: AbortSignal.timeout(60000),
+      },
+    );
+    if (!res.ok) {
+      const txt = (await res.text()).slice(0, 200);
+      return { ok: false, erro: `Evolution ${res.status}${txt ? `: ${txt}` : ""}`, adicionados: 0 };
+    }
+    return { ok: true, adicionados: participantes.length };
+  } catch (e) {
+    return { ok: false, erro: String((e as Error)?.message ?? e), adicionados: 0 };
+  }
+}
+
 /** Garante o webhook messages.upsert apontando para o manager. */
 export async function configurarWebhook(url: string, webhookKey: string): Promise<void> {
   const res = await fetch(`${base()}/webhook/set/${inst()}`, {

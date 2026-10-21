@@ -16,7 +16,8 @@ import { enviarParaGrupo } from "../wa/dispatch.js";
 import { listarInstancias } from "../wa/rotacao.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+// ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "clientes.json");
 const filaFile = join(dataDir, "clientes-fila.json");
 

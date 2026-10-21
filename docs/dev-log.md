@@ -996,3 +996,34 @@ rastreio do app, não atribuição de afiliado; o link saía sem comissão e pul
 
 **Pendência**: App ID/Secret da Shopee (`affiliate.shopee.com.br/open_api`, até ~2 semanas) para validar
 o fluxo live; até lá, o módulo fica inerte e links Shopee vão para revisão.
+
+---
+
+## 2026-10-21 | E6-CLI-01 | Limite de eventos configurável, filtro por grupo e "adicionar ao grupo"
+
+**Pedido**: contador do monitor travava em 500 mensagens; filtro por grupo na aba Clientes; ação
+"adicionar ao grupo" ao selecionar contatos.
+
+**Entregas**:
+- `src/monitor/state.ts` — `LIMITE_EVENTOS` vem de `MONITOR_EVENTOS_LIMITE` (padrão 500, `0` = ilimitado).
+  Era a causa do contador travado: `s.eventos.slice(-500)` truncava o array e `resumo().recebidas`
+  é o tamanho dele.
+- `src/manager/server.ts` — dropdown "👥 Todos os grupos" na aba Clientes (filtra por `origem` do
+  contato) e caixa "➕ Adicionar selecionados ao grupo" (aparece quando há seleção, com os grupos
+  pareados vindos de `/api/grupos`).
+- `POST /api/clientes/grupo` — novo endpoint: resolve os JIDs em telefones e chama a Evolution.
+- `src/monitor/evolution.ts` — `adicionarParticipantes()` usa `POST /group/updateParticipant/{inst}`
+  com `action: "add"` e participantes no formato `+código` (Evolution v2.3.7).
+- `ALCANCE_DATA_DIR` agora é respeitado por **todos** os módulos de estado (antes só o manager e o
+  `auth-user.mjs` usavam) — o smoke/teste não encostava mais no `data/` real. Bug encontrado durante
+  a validação: `src/clientes/clientes.ts` lia o diretório real mesmo com a env setada.
+- Testes: `src/monitor/state.test.ts` (limite 3 / 0 / padrão) e `src/monitor/evolution.test.ts`
+  (normalização de números, grupo inválido, erro 403).
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 44/44; `npm run smoke:manager` OK; fluxo real
+validado via HTTP (login → `/api/clientes/grupo` → Evolution `updateParticipant` com
+`{"action":"add","participants":["+5511999990001","+5511999990002"]}`), com mock da Evolution.
+
+**Limite do WhatsApp**: adicionar participante só funciona se a conta pareada for ADMIN do grupo e
+o grupo tiver o link de convite habilitado; fora disso a API devolve erro, que a UI mostra em
+`cliaddmsg` sem quebrar a tela.

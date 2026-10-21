@@ -39,7 +39,7 @@ export interface MonitorStore {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "monitor.json");
 
 function blank(): MonitorStore {
