@@ -47,7 +47,8 @@ import {
 } from "./auth.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = join(root, "data");
+// ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const cacheFile = join(dataDir, "ultima-busca.json");
 const CATS = catsJson as { id: string; name: string }[];
 const PORT = Number(process.env.MANAGER_PORT ?? 8091);
@@ -2139,6 +2140,11 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`gerenciador em http://localhost:${PORT} (porta publicada só em 127.0.0.1; LAN exige TLS)`);
+  if (process.env.ALCANCE_SMOKE === "1") {
+    // Smoke test: não inicia workers (evita tocar em fila/estado real).
+    console.log("smoke mode: workers de fila desativados");
+    return;
+  }
   iniciarFilaWorker();
   iniciarClientesWorker();
   console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);

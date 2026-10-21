@@ -10,6 +10,7 @@
     "manager": "node dist/manager/server.js",
     "manager:dev": "tsx src/manager/server.ts",
     "auth:user": "node scripts/auth-user.mjs",
+    "smoke:manager": "bash scripts/smoke-manager.sh",
     "typecheck": "tsc --noEmit",
     "test": "node --test dist/**/*.test.js"
   },

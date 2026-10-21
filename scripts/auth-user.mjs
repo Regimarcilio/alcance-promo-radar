@@ -112,7 +112,8 @@ async function principal() {
   }
 
   const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const dataDir = join(raiz, "data");
+  // ALCANCE_DATA_DIR permite criar credencial em diretório temporário (smoke/CI).
+  const dataDir = process.env.ALCANCE_DATA_DIR || join(raiz, "data");
   const arquivo = join(dataDir, "auth-users.json");
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 

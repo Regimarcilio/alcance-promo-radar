@@ -1,8 +1,10 @@
 name: ci
 on:
   push:
-    branches: [develop, main, "release/*"]
+    branches: [develop, main, master, "release/*"]
   pull_request:
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,5 +17,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
+      - run: npm test
+      - run: npm run smoke:manager
       - run: node dist/cli.js categorias:list
       - run: node dist/cli.js hunter:buscar --category MLB3937 --q "Orient" --limite 1
