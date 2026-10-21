@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import catsJson from "../categorias.json" with { type: "json" };
 import { hunt } from "../hunter/service.js";
 import { rankear } from "../scorer.js";
-import type { Oportunidade } from "../hunter/schema.js";
+import type { Candidato, Oportunidade } from "../hunter/schema.js";
 import { converterLink } from "./provider.js";
 import { resolver, lerMapa, grupoPara } from "./contas.js";
 import { gerarHeadline } from "../ai/gateway.js";
@@ -29,6 +29,24 @@ const pilotoFile = join(dataDir, "piloto.json");
 const cestaFile = join(dataDir, "cestas.json");
 
 export const MAX_LOOPS = 5;
+
+/** Oferta Amazon (Creators API) → Candidato do ML (mesmo scorer/formatador). */
+function paraCandidatoAmazon(o: {
+  asin: string; titulo: string; imagem: string | null; preco: number;
+  precoDe: number | null; avaliacao: number; vendasProxy: number; link: string;
+}): Candidato {
+  return {
+    mlbId: o.asin, // o id do produto na Amazon (ASIN)
+    titulo: o.titulo,
+    imagem: o.imagem ?? "",
+    precoDe: o.precoDe,
+    precoAtual: o.preco,
+    cupom: null,
+    vendidos: o.vendasProxy,
+    avaliacao: o.avaliacao,
+    link: o.link,
+  };
+}
 // Ritmo humano: 2 ofertas aleatórias a cada 5 min; a cada 55 min de
 // trabalho, pausa 8 min e recomeça (respiro anti-padrão-robô).
 export const CICLO_MIN = 5;
@@ -51,6 +69,8 @@ export interface PilotoCfg {
   intervaloS?: number; // segundos entre elas: 45–90 (default 60, ±10s humano)
   /** Palavra(s) que o título PRECISA conter (ex.: "perfume"). Vazio = sem filtro. */
   filtro?: string;
+  /** Programa de origem: ml (padrão) | amazon. Mesmo modelo, fonte diferente. */
+  programa?: "ml" | "amazon";
 }
 
 export interface LoopState extends PilotoCfg {
@@ -346,58 +366,96 @@ async function tick(id: number): Promise<void> {
     loop.giro = (loop.giro ?? 0) + 1;
     const sorts = ["relevance", "lowest_price", "highest_price"];
     const sort = sorts[(loop.giro ?? 1) % 3];
-    const { candidatos, mock } = await hunt({
-      category: loop.category, q: (loop.filtro ?? "").trim(), descontoMin: 0, soComCupom: false, teto: 1e9, limite: 20,
-      sub: loop.sub ?? "", offset: giro * 18, sort,
-    });
+    const programa = (loop.programa ?? "ml") as "ml" | "amazon";
+
     let fonte = "";
     let lista: Oportunidade[];
-    if (!mock && candidatos.length > 0) {
-      lista = rankear(candidatos, 0, 0);
-      fonte = "caça LIVE";
-    } else {
-      // VITRINE (perfil social): produtos reais com preço+foto, sem bloqueio
-      const { colher, lerMapaVitrine } = await import("./vitrine.js");
-      const mapaV = lerMapaVitrine();
-      let vit: Oportunidade[] = [];
-      try {
-        const itens = await colher();
-        vit = itens
-          .filter((v) => mapaV[v.catLeaf] === loop.category && !jaEnviado(v.mlbId, v.preco, null))
-          .map((v, i) => ({
-            mlbId: v.mlbId,
-            titulo: v.titulo,
-            imagem: v.foto,
-            precoDe: null as number | null,
-            precoAtual: v.preco,
-            cupom: null as string | null,
-            vendidos: 0,
-            avaliacao: 0,
-            link: v.url,
-            descontoPct: 0,
-            score: 70 - i,
-            motivo: "vitrine ML",
-            selo: "OFERTA BOA" as const,
-            catLeaf: v.catLeaf,
-          }) as Oportunidade & { catLeaf: string });
-      } catch (e: any) {
-        log(`${tag} vitrine indisponível (${e.message?.split(".")[0] ?? "?"}).`);
+
+    if (programa === "amazon") {
+      // AMAZON: caça pela Creators API (searchItems). Sem credencial ou sem
+      // resultado → aguarda (nunca posta oferta inventada).
+      const { keywordsDaCategoria, categoriaAmazon, tagAmazon } = await import("../amazon/amazon.js");
+      const { buscarOfertasAmazon } = await import("../monitor/amazon-api.js");
+      const cat = categoriaAmazon(loop.category);
+      const kws = keywordsDaCategoria(loop.category, loop.giro ?? 0);
+      const filtroTxt = (loop.filtro ?? "").trim();
+      const keywords = filtroTxt || kws[0] || cat?.nome || "";
+      const tagAfil = tagAmazon(loop.category);
+      if (!tag) {
+        log(`${tag} sem AMAZON_TAG — link de afiliado não paga comissão; não posto.`);
+        agendar(loop);
+        return;
       }
-      if (vit.length > 0) {
-        lista = vit;
-        fonte = "vitrine";
+      const ofertas = await buscarOfertasAmazon({
+        keywords,
+        limite: 20,
+        pagina: Math.min(10, 1 + Math.floor((loop.giro ?? 0) % 10)),
+        tag: tagAfil,
+      });
+      if (!ofertas) {
+        log(`${tag} caça AMAZON indisponível (credencial AMAZON_CREATORS_ID/SECRET ausente ou API fora) — aguardando.`);
+        agendar(loop);
+        return;
+      }
+      if (!ofertas.length) {
+        log(`${tag} caça AMAZON sem resultado para "${keywords}" — aguardando.`);
+        agendar(loop);
+        return;
+      }
+      lista = rankear(ofertas.map((o) => paraCandidatoAmazon(o)), 0, 0);
+      fonte = "caça AMAZON";
+    } else {
+      const { candidatos, mock } = await hunt({
+        category: loop.category, q: (loop.filtro ?? "").trim(), descontoMin: 0, soComCupom: false, teto: 1e9, limite: 20,
+        sub: loop.sub ?? "", offset: giro * 18, sort,
+      });
+      if (!mock && candidatos.length > 0) {
+        lista = rankear(candidatos, 0, 0);
+        fonte = "caça LIVE";
       } else {
-        // mesma chave do registrarEnvio (mlbId+preço+cupom) — sem ela, reenvia!
-        const cesta = daCesta(loop.category).filter((o) => !jaEnviado(o.mlbId, o.precoAtual, o.cupom));
-        if (cesta.length === 0) {
-          log(mock
-            ? `${tag} sem novidades: busca bloqueada + cesta vazia — aguardando (nada fake enviado).`
-            : `${tag} cesta esgotada por 7 dias — cole mais links ou aguarde.`);
-          agendar(loop);
-          return;
+        // VITRINE (perfil social): produtos reais com preço+foto, sem bloqueio
+        const { colher, lerMapaVitrine } = await import("./vitrine.js");
+        const mapaV = lerMapaVitrine();
+        let vit: Oportunidade[] = [];
+        try {
+          const itens = await colher();
+          vit = itens
+            .filter((v) => mapaV[v.catLeaf] === loop.category && !jaEnviado(v.mlbId, v.preco, null))
+            .map((v, i) => ({
+              mlbId: v.mlbId,
+              titulo: v.titulo,
+              imagem: v.foto,
+              precoDe: null as number | null,
+              precoAtual: v.preco,
+              cupom: null as string | null,
+              vendidos: 0,
+              avaliacao: 0,
+              link: v.url,
+              descontoPct: 0,
+              score: 70 - i,
+              motivo: "vitrine ML",
+              selo: "OFERTA BOA" as const,
+              catLeaf: v.catLeaf,
+            }) as Oportunidade & { catLeaf: string });
+        } catch (e: any) {
+          log(`${tag} vitrine indisponível (${e.message?.split(".")[0] ?? "?"}).`);
         }
-        lista = cesta;
-        fonte = "cesta";
+        if (vit.length > 0) {
+          lista = vit;
+          fonte = "vitrine";
+        } else {
+          // mesma chave do registrarEnvio (mlbId+preço+cupom) — sem ela, reenvia!
+          const cesta = daCesta(loop.category).filter((o) => !jaEnviado(o.mlbId, o.precoAtual, o.cupom));
+          if (cesta.length === 0) {
+            log(mock
+              ? `${tag} sem novidades: busca bloqueada + cesta vazia — aguardando (nada fake enviado).`
+              : `${tag} cesta esgotada por 7 dias — cole mais links ou aguarde.`);
+            agendar(loop);
+            return;
+          }
+          lista = cesta;
+          fonte = "cesta";
+        }
       }
     }
     // Quarentena como PREFERÊNCIA (nunca trava 8h–23h): frescos primeiro;
@@ -468,16 +526,29 @@ async function tick(id: number): Promise<void> {
         continue;
       }
       try {
-        const enrich = await converterLink(op.link, { conta: loop.conta || undefined, category: loop.category });
-        if (enrich.fonte !== "conversor") {
-          log(`${tag} pulado ${op.mlbId}: sem link real (${enrich.aviso?.split(".")[0] ?? "?"}).`);
-          continue;
+        // Link de afiliado: ML usa o conversor (tag/cookie); Amazon usa a
+        // tracking ID (tag) direto na URL do produto.
+        let linkAfiliado = "";
+        if (programa === "amazon") {
+          const { linkAfiliadoAmazon, tagAmazon } = await import("../amazon/amazon.js");
+          linkAfiliado = linkAfiliadoAmazon(op.mlbId, tagAmazon(loop.category));
+          if (!linkAfiliado) {
+            log(`${tag} pulado ${op.mlbId}: ASIN inválido ou sem AMAZON_TAG.`);
+            continue;
+          }
+        } else {
+          const enrich = await converterLink(op.link, { conta: loop.conta || undefined, category: loop.category });
+          if (enrich.fonte !== "conversor") {
+            log(`${tag} pulado ${op.mlbId}: sem link real (${enrich.aviso?.split(".")[0] ?? "?"}).`);
+            continue;
+          }
+          linkAfiliado = enrich.linkAfiliado;
         }
         let titulo = op.titulo;
         let imagem = op.imagem;
         let precoDe = op.precoDe;
         let precoPix = op.precoAtual;
-        if (fonte === "cesta" || !op.precoAtual) {
+        if (programa !== "amazon" && (fonte === "cesta" || !op.precoAtual)) {
           const real = await completarCandidato({ ...op, link: op.link });
           if (real.titulo && real.titulo !== op.link) titulo = real.titulo;
           if (real.imagem) imagem = real.imagem;
@@ -495,10 +566,11 @@ async function tick(id: number): Promise<void> {
           log(`${tag} pulado ${op.mlbId}: já enviado (DUPLICADO_7D).`);
           continue;
         }
-        const conta = resolver(loop.category, loop.conta || undefined).nome;
+        const conta = programa === "amazon" ? "amazon" : resolver(loop.category, loop.conta || undefined).nome;
         // Cupom (ordem): manual do item > código registrado > cupom ML da categoria
+        // (cupons são conceito do ML — Amazon não usa o mesmo mecanismo)
         let cupom = op.cupom;
-        if (!cupom) {
+        if (!cupom && programa !== "amazon") {
           const { codigoPara, nomeCodigo, cupomPara } = await import("./cupons.js");
           const code = codigoPara(loop.category, conta);
           if (code) {
@@ -516,11 +588,28 @@ async function tick(id: number): Promise<void> {
         const { headline, subtitulo } = gerarHeadline({ ...op, titulo });
         const mensagem = formatar({
           headline, subtitulo, nome: titulo, precoDe, precoPix,
-          cupom, link: enrich.linkAfiliado,
+          cupom, link: linkAfiliado,
           categoria: `${catName} • auto`, score: op.score,
         });
       const r = await enviarParaGrupo({ grupo: loop.grupo, imagem, legenda: mensagem, dryRun: false });
       registrarEnvio(op.mlbId, precoPix, cupom);
+      // RASTREIO: guarda o link EXATO publicado (com a tag) para reconciliar
+      // com o painel de comissão do programa de afiliados.
+      try {
+        const { registrarPublicacao } = await import("../store/publicacoes.js");
+        registrarPublicacao({
+          em: new Date().toISOString(),
+          programa: programa === "amazon" ? "amazon" : "ml",
+          categoria: loop.category,
+          grupo: loop.grupo,
+          id: op.mlbId,
+          titulo,
+          preco: precoPix,
+          link: linkAfiliado,
+          tag: programa === "amazon" ? linkAfiliado.split("tag=")[1] ?? "" : undefined,
+          via: "piloto",
+        });
+      } catch {}
       marcarTipo(loop.category, tipoDe({ ...op, titulo }));
         loop.enviadas++;
         loop.ultimaMsg = new Date().toISOString();
@@ -596,7 +685,8 @@ export function start(cfg: PilotoCfg, agora = false): LoopState {
   // conta pode vir vazia: o tick resolve pelo mapa da categoria → padrão
   if (!cfg.category) throw new Error("Escolha a categoria.");
   if (!cfg.grupo) throw new Error("Escolha o grupo.");
-  if (cfg.conta) resolver(cfg.category, cfg.conta); // valida conta existente
+  const programa = cfg.programa === "amazon" ? "amazon" : "ml";
+  if (cfg.conta && programa === "ml") resolver(cfg.category, cfg.conta); // valida conta existente
   const s = store();
   const ativos = s.loops.filter((l) => l.rodando);
   if (ativos.length >= MAX_LOOPS) throw new Error(`Limite de ${MAX_LOOPS} loops simultâneos — pare um antes.`);
@@ -606,13 +696,14 @@ export function start(cfg: PilotoCfg, agora = false): LoopState {
     conta: cfg.conta, category: cfg.category, grupo: cfg.grupo,
     sub: cfg.sub ?? "",
     filtro: (cfg.filtro ?? "").trim(),
+    programa,
     qtd: cfg.qtd === 1 ? 1 : 2,
     intervaloS: Math.min(90, Math.max(45, cfg.intervaloS ?? 60)),
     minMin: cfg.minMin || 2, maxMin: cfg.maxMin || 2,
     rodando: true, iniciadaEm: new Date().toISOString(),
   };
   s.loops.push(loop);
-  log(`#${id} ▶️ START etiqueta=${loop.conta || "(mapa)"} categoria=${loop.category}${loop.sub ? `/${loop.sub}` : ""} grupo=${loop.grupo} ${loop.qtd}x a cada 5min / ${loop.intervaloS}s entre elas${loop.filtro ? ` · filtro "${loop.filtro}"` : ""} (${ativos.length + 1}/${MAX_LOOPS})`);
+  log(`#${id} ▶️ START programa=${programa} etiqueta=${loop.conta || "(mapa)"} categoria=${loop.category}${loop.sub ? `/${loop.sub}` : ""} grupo=${loop.grupo} ${loop.qtd}x a cada 5min / ${loop.intervaloS}s entre elas${loop.filtro ? ` · filtro "${loop.filtro}"` : ""} (${ativos.length + 1}/${MAX_LOOPS})`);
   const esperaMs = agora ? 2000 : entre(loop.minMin, loop.maxMin) * 60000;
   loop.proximaEm = new Date(Date.now() + esperaMs).toISOString();
   salvar();

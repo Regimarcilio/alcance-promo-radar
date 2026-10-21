@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enviarParaGrupo } from "../wa/dispatch.js";
+import { registrarPublicacao } from "../store/publicacoes.js";
 import { carregarMonitor } from "./grupos.js";
 import { limparMidiaAntiga } from "./midia.js";
 import { registrarEvento } from "./state.js";
@@ -139,6 +140,28 @@ export async function entregarItem(
         status: "ENCAMINHADA", messageId: r.messageId,
         detalhe: dry ? `${item.fonte ?? ""} (dry)`.trim() : item.fonte,
       });
+      // RASTREIO: link publicado (com a tag de afiliado) para cruzar com o
+      // painel de comissão do programa.
+      if (!dry) {
+        try {
+          registrarPublicacao({
+            em: new Date().toISOString(),
+            programa: (item.programa === "shopee" || item.programa === "amazon" || item.programa === "kabum"
+              ? item.programa
+              : "desconhecido") as "shopee" | "amazon" | "kabum" | "desconhecido",
+            categoria: item.origem,
+            grupo: jid,
+            id: item.idProduto ?? "",
+            titulo: "",
+            preco: 0,
+            link: item.link,
+            tag: item.link.includes("tag=") ? item.link.split("tag=")[1].split("&")[0] : undefined,
+            via: "monitor",
+          });
+        } catch {
+          /* rastreio é acessório */
+        }
+      }
     } catch (e: any) {
       registrarEvento({
         em: new Date().toISOString(), origem: item.origem, programa: item.programa,

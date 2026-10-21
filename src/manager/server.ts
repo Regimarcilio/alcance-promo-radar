@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import catsJson from "../categorias.json" with { type: "json" };
+import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
+import { listarPublicacoes, resumoRastreio, publicacoesCsv } from "../store/publicacoes.js";
 import { FiltrosSchema } from "../hunter/schema.js";
 import { hunt } from "../hunter/service.js";
 import { rankear } from "../scorer.js";
@@ -53,6 +55,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const cacheFile = join(dataDir, "ultima-busca.json");
 const CATS = catsJson as { id: string; name: string }[];
+const CATS_AMAZON = CATEGORIAS_AMAZON;
 const PORT = Number(process.env.MANAGER_PORT ?? 8091);
 
 configurarAuth(dataDir);
@@ -247,7 +250,46 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/categorias") {
+    // ?programa=amazon devolve as categorias da Amazon (mesmo formato).
+    const prog = url.searchParams.get("programa") ?? "ml";
+    if (prog === "amazon") {
+      json(200, CATS_AMAZON.map((c) => ({ id: c.id, name: c.nome })));
+      return;
+    }
     json(200, CATS);
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/amazon/status") {
+    // O que falta para a caça Amazon funcionar (credenciais + tag de comissão).
+    const { credenciaisAmazon } = await import("../monitor/amazon-api.js");
+    const { tagAmazon } = await import("../amazon/amazon.js");
+    json(200, {
+      credenciais: !!credenciaisAmazon(),
+      tag: !!tagAmazon(),
+      categorias: CATS_AMAZON.length,
+    });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/rastreio") {
+    // Publicações registradas (Piloto + Monitor) com filtros e CSV.
+    const dias = Number(url.searchParams.get("dias") ?? 0);
+    const f = {
+      programa: url.searchParams.get("programa") || undefined,
+      categoria: url.searchParams.get("categoria") || undefined,
+      grupo: url.searchParams.get("grupo") || undefined,
+      via: url.searchParams.get("via") || undefined,
+      dias: dias > 0 ? dias : undefined,
+    };
+    if (url.searchParams.get("csv") === "1") {
+      const csv = publicacoesCsv(f);
+      res.writeHead(200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="rastreio-${new Date().toISOString().slice(0, 10)}.csv"`,
+      });
+      res.end("﻿" + csv); // BOM: Excel pt-BR abre acentos certo
+      return;
+    }
+    json(200, { ...resumoRastreio(f), publicacoes: listarPublicacoes(f).slice(0, 300) });
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/piloto") {
@@ -258,7 +300,7 @@ const server = createServer(async (req, res) => {
     try {
       const b = JSON.parse(await lerCorpo(req));
       const loop = pilotoStart(
-        { conta: b.conta ?? "", category: b.category ?? "", grupo: b.grupo ?? "", sub: b.sub ?? "", qtd: b.qtd ?? 2, intervaloS: b.intervaloS ?? 60, filtro: String(b.filtro ?? "").trim(), minMin: 5, maxMin: 5 },
+        { conta: b.conta ?? "", category: b.category ?? "", grupo: b.grupo ?? "", sub: b.sub ?? "", qtd: b.qtd ?? 2, intervaloS: b.intervaloS ?? 60, filtro: String(b.filtro ?? "").trim(), minMin: 5, maxMin: 5, programa: b.programa === "amazon" ? "amazon" : "ml" },
         true
       );
       json(200, { ok: true, loop, ...pilotoStatus() });
@@ -1363,6 +1405,11 @@ body{padding:0;max-width:none;margin:0}
 <span class="side-txt"><b>Números</b><small>envio rotativo</small></span>
 <span class="side-badge" id="badge-numeros">—</span>
 </a>
+<a class="side-card" data-view="rastreio" href="#/rastreio">
+<span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg></span>
+<span class="side-txt"><b>Rastreio</b><small>o que foi publicado</small></span>
+<span class="side-badge" id="badge-rastreio">—</span>
+</a>
 <a class="side-card" data-view="clientes" href="#/clientes">
 <span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3"/><path d="M3.4 19.2c.7-3 2.8-4.9 5.6-4.9s4.9 1.9 5.6 4.9"/><circle cx="17.2" cy="9.3" r="2.3"/><path d="M15.9 14.5c2.2.4 3.8 2.1 4.4 4.7"/></svg></span>
 <span class="side-txt"><b>Clientes</b><small>disparo individual</small></span>
@@ -1437,10 +1484,15 @@ body{padding:0;max-width:none;margin:0}
 <div class="hint">Aperte <b>LIGA TUDO</b> e esqueça: liga 1 loop por categoria amarrada (conta+grupo do mapa, até 5). Ou monte 1 loop manual abaixo.</div>
 <div style="display:flex;gap:8px;margin-bottom:10px"><button class="buscar" style="margin-top:0;flex:1;font-size:16px" onclick="ligaTudo()">▶ LIGA TUDO (automático)</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ DESLIGA TUDO</button></div>
 <div class="grid4">
+<div><label>Programa</label><select id="paprograma" onchange="trocarProgramaPiloto()">
+  <option value="ml">Mercado Livre</option>
+  <option value="amazon">Amazon</option></select></div>
 <div><label>Etiqueta rastreada</label><select id="paconta"></select></div>
 <div><label>Categoria</label><select id="pacat"></select></div>
-<div><label>Subcategoria (filtro)</label><select id="pasub"><option value="">Categoria inteira</option></select></div>
 <div><label>Grupo de destino</label><select id="pagrupo"></select></div></div>
+<div class="grid4" style="margin-top:8px">
+<div id="pmlsubbox"><label>Subcategoria (filtro)</label><select id="pasub"><option value="">Categoria inteira</option></select></div>
+<div id="pamazoninfo" style="grid-column:span 3;align-self:end;font-size:13px" class="mini"></div></div>
 <div class="grid4" style="margin-top:8px">
 <div><label>Postagens por ciclo</label><select id="paqtd"><option value="2">2 por ciclo</option><option value="1">1 por ciclo</option></select></div>
 <div><label>Intervalo entre elas</label><select id="pagap"><option value="45">45s</option><option value="60" selected>1 min</option><option value="90">1:30 min</option></select></div>
@@ -1540,6 +1592,31 @@ body{padding:0;max-width:none;margin:0}
 <div id="minstqr" style="margin-top:10px"></div>
 </div>
 </section>
+<section class="view" id="view-rastreio" data-view="rastreio">
+<div class="kpis">
+<div class="kpi"><b id="kpi-rt-total">—</b><span>publicações</span></div>
+<div class="kpi"><b id="kpi-rt-ml">—</b><span>Mercado Livre</span></div>
+<div class="kpi ok"><b id="kpi-rt-amz">—</b><span>Amazon</span></div>
+<div class="kpi"><b id="kpi-rt-tag">—</b><span>com tag</span></div>
+</div>
+<div class="panel">
+<div class="panel-head"><span><b id="tit-rastreio">🎯 Rastreio</b> — tudo que foi publicado, com o link de afiliado</span><a class="lk-mini" href="#" onclick="renomearCard('rastreio');return false">✏️ renomear</a></div>
+<div class="hint">Cada linha é uma oferta que o Alcance publicou (Piloto ou Monitor) com o <b>link exato</b> publicado. Use para conferir o que saiu e cruzar com o painel de comissão do programa (na Amazon, a <b>tag</b> é o que credita a venda).</div>
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
+<select id="rtprograma" onchange="carregarRastreio()"><option value="">Todos os programas</option>
+<option value="ml">Mercado Livre</option><option value="amazon">Amazon</option>
+<option value="shopee">Shopee</option><option value="kabum">KaBuM</option></select>
+<select id="rtvia" onchange="carregarRastreio()"><option value="">Piloto + Monitor</option>
+<option value="piloto">Piloto</option><option value="monitor">Monitor</option></select>
+<select id="rtdias" onchange="carregarRastreio()"><option value="">Todo o histórico</option>
+<option value="1">Últimas 24h</option><option value="7">Últimos 7 dias</option>
+<option value="30">Últimos 30 dias</option></select>
+<button class="mbtn" onclick="carregarRastreio()">🔄</button>
+<button class="mbtn ok" onclick="exportarRastreio()">⬇️ Exportar CSV</button>
+<span class="mini" id="rtinfo"></span></div>
+<div id="rtlista" style="margin-top:10px;font-size:13px"></div>
+</div>
+</section>
 <section class="view" id="view-clientes" data-view="clientes">
 <div class="kpis">
 <div class="kpi"><b id="kpi-contatos">—</b><span>contatos</span></div>
@@ -1598,7 +1675,8 @@ const VIEW_META={
   piloto:{k:'operação',t:'Piloto automático',s:'Caça ofertas por categoria e publica sozinho no grupo amarrado, com rodízio de links.'},
   monitor:{k:'operação',t:'Monitor',s:'Cada grupo de origem encaminha para os seus destinos, com troca de link e anti-rajada.'},
   numeros:{k:'infraestrutura',t:'Números',s:'Celulares de envio rotativo — sorteio ponderado entre ativos e conectados.'},
-  clientes:{k:'crescimento',t:'Clientes',s:'Contatos dos grupos + disparo individual com fila anti-bloqueio.'}
+  clientes:{k:'crescimento',t:'Clientes',s:'Contatos dos grupos + disparo individual com fila anti-bloqueio.'},
+  rastreio:{k:'operação',t:'Rastreio',s:'Tudo que o Alcance publicou (Piloto + Monitor) com o link de afiliado — para cruzar com o painel de comissão.'}
 };
 function viewAtual(){
   const partes=(location.hash||'').replace('#','').split('/');
@@ -1619,6 +1697,8 @@ function navegar(){
   $('top-sub').textContent=m.s;
   document.title='Alcance — '+m.t;
   window.scrollTo(0,0);
+  if(v==='rastreio')carregarRastreio();
+  if(v==='piloto'&&$('paprograma')&&$('paprograma').value==='amazon')trocarProgramaPiloto();
 }
 window.addEventListener('hashchange',navegar);
 navegar();
@@ -1732,7 +1812,7 @@ async function atualizarPiloto(){
   }catch(e){/* api acordando */}
 }
 async function pilotoStart(){
-  const r=await (await fetch('/api/piloto/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:$('paconta').value,category:$('pacat').value,grupo:$('pagrupo').value,sub:$('pasub').value,qtd:Number($('paqtd').value),intervaloS:Number($('pagap').value),filtro:($('pafiltro')?$('pafiltro').value:'')})})).json();
+  const r=await (await fetch('/api/piloto/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:$('paconta').value,category:$('pacat').value,grupo:$('pagrupo').value,sub:$('pasub').value,qtd:Number($('paqtd').value),intervaloS:Number($('pagap').value),filtro:($('pafiltro')?$('pafiltro').value:''),programa:$('paprograma')?$('paprograma').value:'ml'})})).json();
   if(r.erro)return alert(r.erro);
   alert('Loop #'+r.loop.id+' ligado! Primeiras mensagens em segundos, depois 2 a cada 5 min (pausa 8 min/hora).');
   atualizarPiloto();carregarCesta();
@@ -2036,6 +2116,63 @@ function renderListas(){
       +'<button class="mbtn" data-act="sell" data-jid="'+l.id+'">selecionar</button>'
       +'<button class="mbtn" data-act="dell" data-jid="'+l.id+'">🗑</button></div>';
   }).join('');
+}
+// ===== Rastreio (publicações) =====
+async function carregarRastreio(){
+  const q=[];
+  if($('rtprograma').value)q.push('programa='+encodeURIComponent($('rtprograma').value));
+  if($('rtvia').value)q.push('via='+encodeURIComponent($('rtvia').value));
+  if($('rtdias').value)q.push('dias='+$('rtdias').value);
+  const url='/api/rastreio'+(q.length?('?'+q.join('&')):'');
+  try{
+    const d=await (await fetch(url)).json();
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    kp('kpi-rt-total',d.total||0);
+    kp('kpi-rt-ml',(d.porPrograma&&d.porPrograma.ml)||0);
+    kp('kpi-rt-amz',(d.porPrograma&&d.porPrograma.amazon)||0);
+    kp('kpi-rt-tag',d.comTag||0);
+    kp('badge-rastreio',d.total||0);
+    const ps=d.publicacoes||[];
+    $('rtinfo').textContent=ps.length+' publicação(ões) listada(s)';
+    if(!ps.length){$('rtlista').innerHTML='<div class="mini">Nada publicado ainda neste filtro.</div>';return;}
+    $('rtlista').innerHTML='<div style="display:flex;flex-direction:column;gap:4px">'+ps.map(function(p){
+      return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'
+        +'<span class="mini" style="white-space:nowrap">'+esc(new Date(p.em).toLocaleString('pt-BR'))+'</span>'
+        +'<span class="mini" style="min-width:58px">'+esc(p.programa)+'</span>'
+        +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.titulo||p.id)+'</span>'
+        +'<span class="mini">'+esc(p.categoria)+'</span>'
+        +(p.tag?('<span class="mini">tag: '+esc(p.tag)+'</span>'):'')
+        +'<a class="lk-mini" href="'+esc(p.link)+'" target="_blank" rel="noopener">abrir</a></div>';
+    }).join('')+'</div>';
+  }catch(e){$('rtinfo').textContent='erro: '+e.message;}
+}
+function exportarRastreio(){
+  const q=[];
+  if($('rtprograma').value)q.push('programa='+encodeURIComponent($('rtprograma').value));
+  if($('rtvia').value)q.push('via='+encodeURIComponent($('rtvia').value));
+  if($('rtdias').value)q.push('dias='+$('rtdias').value);
+  q.push('csv=1');
+  window.location='/api/rastreio?'+q.join('&');
+}
+// ===== Piloto: troca de programa (ML <-> Amazon) =====
+async function trocarProgramaPiloto(){
+  const prog=$('paprograma').value;
+  const box=$('pamazoninfo');
+  const selCat=$('pacat');
+  const resp=await (await fetch('/api/categorias?programa='+encodeURIComponent(prog))).json();
+  selCat.innerHTML=resp.map(function(c){return '<option value="'+c.id+'">'+c.name+' ('+c.id+')</option>';}).join('');
+  const subBox=$('pmlsubbox');
+  if(subBox)subBox.style.display=prog==='amazon'?'none':'block';
+  if(prog==='amazon'){
+    box.style.display='block';
+    const st=await (await fetch('/api/amazon/status')).json();
+    box.innerHTML='Amazon: a caça usa a <b>Creators API</b> (searchItems).'
+      +(st.credenciais?'<span style="color:var(--ok-tx)">✓ credenciais OK</span>':' <b>⚠️ faltam AMAZON_CREATORS_ID/SECRET</b> — sem isso a caça fica inerte')
+      +(st.tag?'<span style="color:var(--ok-tx)">✓ tag de comissão</span>':' <b>⚠️ sem AMAZON_TAG o link não paga comissão</b>')
+      +' · '+st.categorias+' categorias.';
+  }else{
+    box.style.display='none';
+  }
 }
 async function syncClientes(){
   $('clisync').textContent='iniciando… (leva alguns minutos: o WhatsApp limita consultas em rajada)';
