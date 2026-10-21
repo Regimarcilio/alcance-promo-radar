@@ -1227,3 +1227,13 @@ de mensagens consistente com a recebida dos outros grupos".
 
 **Validação**: `typecheck`/`build` limpos; `npm test` **73/73** (6 novos: rotação com/sem
 anti-repetição, última usada, dedup por origem, dedup global, janela em dias); smoke OK.
+
+**Achado do diagnóstico de volume**: com o dedup por origem a taxa de encaminhamento subiu de
+**36% → 50%** nos últimos 80 eventos. O motivo das revisões ficou visível: `tidd.ly` (encurtador) —
+os grupos postam link curto, que o parser não reconhece. Adicionado **resolvedor de encurtadores**
+(`src/monitor/curtos.ts`): segue 1 redirect de hosts conhecidos (tidd.ly, bit.ly, cutt.ly,
+encurtador.com.br, linkr.com.br, meulink.com.br, is.gd, tinyurl, vk.cc, rebrand.ly, short.gy,
+shrinkme, clck.ru, 0x0.st, lnkd.in, t.co…) e reclassifica o destino.
+
+**Medição**: último bloco de 80 eventos após `DEDUP_POR_ORIGEM=1`: ENCAMINHADA 40 · DUPLICADO 33 ·
+REVISÃO 7 → **50%** encaminhada (antes 36%).
