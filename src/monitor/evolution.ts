@@ -3,11 +3,19 @@
  * Lista os grupos da instância pareada, expõe o estado e permite trocar a conta
  * (logout) para reparear outro celular.
  */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export interface GrupoWhats {
   jid: string;
   nome: string;
   tamanho: number | null;
 }
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 
 function base(): string {
   return (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
@@ -55,9 +63,39 @@ export async function contaPareada(): Promise<{ jid: string | null; nome: string
  * Lista os grupos da conta pareada (RF-030: origem dos grupos reais).
  * A Evolution demora ~15-30s nesse endpoint; cacheia por 10 min e aceita
  * `forcar=true` para refazer a busca.
+ *
+ * RESILIÊNCIA: o WhatsApp limita consultas de metadados (429 rate-overlimit).
+ * Quando isso acontece a aba Monitor ficaria SEM lista de grupos. Por isso a
+ * última lista boa é gravada em data/grupos-cache.json e serve de fallback:
+ * a UI sempre mostra os grupos (marcando que veio do cache).
  */
 let cacheGrupos: { em: number; dados: GrupoWhats[] } | null = null;
 const TTL_GRUPOS_MS = 10 * 60 * 1000;
+
+const CACHE_ARQ = join(dataDir, "grupos-cache.json");
+
+/** Última lista de grupos salva em disco (para fallback quando a Evolution falha). */
+export function gruposDoCache(): { grupos: GrupoWhats[]; em: string | null } {
+  try {
+    if (!existsSync(CACHE_ARQ)) return { grupos: [], em: null };
+    const raw = JSON.parse(readFileSync(CACHE_ARQ, "utf8")) as { grupos?: GrupoWhats[]; em?: string };
+    return { grupos: Array.isArray(raw.grupos) ? raw.grupos : [], em: raw.em ?? null };
+  } catch {
+    return { grupos: [], em: null };
+  }
+}
+
+function salvarCacheGrupos(dados: GrupoWhats[]): void {
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(
+      CACHE_ARQ,
+      JSON.stringify({ grupos: dados, em: new Date().toISOString() }, null, 2),
+    );
+  } catch {
+    /* cache é acessório: falhar aqui não pode derrubar a listagem */
+  }
+}
 
 export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
   if (!forcar && cacheGrupos && Date.now() - cacheGrupos.em < TTL_GRUPOS_MS) {
@@ -74,6 +112,7 @@ export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
     .filter((g) => g.jid.endsWith("@g.us"))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   cacheGrupos = { em: Date.now(), dados };
+  salvarCacheGrupos(dados);
   return dados;
 }
 

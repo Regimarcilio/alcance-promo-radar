@@ -173,8 +173,8 @@ function instanciaPadrao(): string {
 }
 
 // Ritmo do sync (ver sintaticar()).
-const PAUSA_GRUPOS_MS = Number(process.env.SYNC_PAUSA_MS ?? 4000); // respiro entre grupos
-const BACKOFF_MS = Number(process.env.SYNC_BACKOFF_MS ?? 45000); // espera quando o WhatsApp limita
+const PAUSA_GRUPOS_MS = Number(process.env.SYNC_PAUSA_MS ?? 8000); // respiro entre grupos
+const BACKOFF_MS = Number(process.env.SYNC_BACKOFF_MS ?? 90000); // espera quando o WhatsApp limita
 
 function dormir(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));

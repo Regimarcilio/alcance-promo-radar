@@ -1101,3 +1101,29 @@ na UI).
   não trava o sync, 403 não conta como erro, retry no mesmo grupo.
 
 **Validação**: `typecheck`/`build` limpos; `npm test` 55/55; `npm run smoke:manager` OK.
+
+---
+
+## 2026-10-21 | E6-MON-01 | Aba Monitor: grupos param de carregar (cache de fallback)
+
+**Sintoma (corrigido)**: "os grupos não estão sendo carregados na aba monitor".
+
+**Diagnóstico**: os selects Origem/Destino da aba Monitor vêm de `GET /api/monitor/whats-grupos` →
+Evolution `GET /group/fetchAllGroups`. Esse endpoint está sujeito ao **rate limit do WhatsApp**
+(429 rate-overlimit → HTTP 500 na Evolution) e é lento (9-20s). Quando o WhatsApp limita, a rota
+devia `grupos: []` e a aba ficava **sem nenhum grupo**, sem explicar por quê.
+
+**Correções**:
+- `src/monitor/evolution.ts` — a última lista boa é gravada em `data/grupos-cache.json`
+  (`gruposDoCache()`), e `listarGrupos()` passa a persistir todo sucesso.
+- `src/manager/server.ts` — `/api/monitor/whats-grupos` e `/api/grupos` caem para o cache salvo
+  quando a Evolution falha, devolvendo `deCache: true` + `aviso` explicativo; a UI mostra
+  "(lista salva — Evolution limitada)".
+- `src/manager/server.ts` (UI) — a mensagem de carregamento avisa que leva 10-30s e que, se o
+  WhatsApp limitar, a última lista salva será usada.
+- `src/clientes/clientes.ts` — ritmo do sync mais conservative: `SYNC_PAUSA_MS` 4s → **8s** e
+  `SYNC_BACKOFF_MS` 45s → **90s** (o sync de 32 grupos era o que saturava a conta).
+- Teste: cache de grupos sobrevive à falha da Evolution (`evolution.test.ts`).
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 56/56; `npm run smoke:manager` OK;
+`fetchAllGroups` confirmado em produção (HTTP 200, 32 grupos, 20s).

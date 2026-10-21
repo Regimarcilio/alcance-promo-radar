@@ -35,7 +35,8 @@ import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor
 import { expandirLink } from "../monitor/curtos.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
-  adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo, type AcaoGrupo,
+  adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo, gruposDoCache,
+  type AcaoGrupo,
 } from "../monitor/evolution.js";
 import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
@@ -439,7 +440,13 @@ const server = createServer(async (req, res) => {
       cacheGrupos = { em: Date.now(), dados };
       json(200, { grupos: dados });
     } catch (e: any) {
-      json(200, { grupos: cacheGrupos?.dados ?? [], aviso: `Evolution inacessível: ${e.message}` });
+      // Fallback: última lista salva em disco (Evolution limitada/fora).
+      const salvo = gruposDoCache();
+      const lista = cacheGrupos?.dados ?? salvo.grupos;
+      json(200, {
+        grupos: lista,
+        aviso: `Evolution inacessível: ${e.message}${lista.length ? " — mostrando a última lista salva" : ""}`,
+      });
     }
     return;
   }
@@ -869,7 +876,19 @@ const server = createServer(async (req, res) => {
       const grupos = await listarGrupos(forcar);
       json(200, { ok: true, total: grupos.length, grupos });
     } catch (e: any) {
-      json(200, { ok: false, erro: String(e?.message ?? e), grupos: [] });
+      // Evolution limitada/fora do ar: serve a última lista salva em disco para
+      // a aba Monitor não ficar sem grupos.
+      const salvo = gruposDoCache();
+      json(200, {
+        ok: salvo.grupos.length > 0,
+        erro: String(e?.message ?? e),
+        aviso: salvo.grupos.length
+          ? `Evolution indisponível (${String(e?.message ?? e)}) — mostrando a última lista salva${salvo.em ? " (" + new Date(salvo.em).toLocaleString("pt-BR") + ")" : ""}`
+          : undefined,
+        deCache: salvo.grupos.length > 0,
+        total: salvo.grupos.length,
+        grupos: salvo.grupos,
+      });
     }
     return;
   }
@@ -2182,16 +2201,17 @@ async function carregarContaMonitor(){
   }catch(e){}
 }
 async function carregarGruposSelects(forcar){
-  $('mgruposinfo').textContent='buscando grupos…';
+  $('mgruposinfo').textContent='buscando grupos… (a Evolution leva 10-30s; se o WhatsApp limitar, mostramos a última lista salva)';
   try{
     const d=await (await fetch('/api/monitor/whats-grupos'+(forcar?'?forcar=1':''))).json();
-    if(!d.ok){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">'+(d.erro||'erro')+'</span>';return;}
+    const aviso=d.aviso?(' · '+d.aviso):'';
+    if(!d.ok&&!(d.grupos||[]).length){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">'+(d.erro||'erro')+aviso+'</span>';return;}
     window.__wgrupos=d.grupos||[];
     const opts=window.__wgrupos.map(function(g){return '<option value="'+esc(g.jid)+'">'+esc(g.nome)+(g.tamanho!=null?' ('+g.tamanho+')':'')+'</option>';}).join('');
     $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
     $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
     $('mselPermissao').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
-    $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados';
+    $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados'+(d.deCache?' (lista salva — Evolution limitada)':'')+aviso;
   }catch(e){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+e.message+'</span>';}
 }
 async function permissaoGrupoUI(acao){
