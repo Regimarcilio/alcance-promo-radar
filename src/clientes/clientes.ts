@@ -141,14 +141,26 @@ export interface EstadoSync {
   total: number;
   contatos: number;
   ultimoSync: string | null;
+  /** grupos que falharam (ex.: rate limit do WhatsApp) */
+  erros?: number;
+  /** descrição do último erro */
+  ultimoErro?: string | null;
 }
 
 let sincronizando = false;
-let progresso = { feitos: 0, total: 0 };
+let progresso = { feitos: 0, total: 0, erros: 0, ultimoErro: null as string | null };
 
 export function estadoSync(): EstadoSync {
   const s = carregar();
-  return { rodando: sincronizando, feitos: progresso.feitos, total: progresso.total, contatos: s.contatos.length, ultimoSync: s.ultimoSync };
+  return {
+    rodando: sincronizando,
+    feitos: progresso.feitos,
+    total: progresso.total,
+    contatos: s.contatos.length,
+    ultimoSync: s.ultimoSync,
+    erros: progresso.erros,
+    ultimoErro: progresso.ultimoErro,
+  };
 }
 
 function instanciaPadrao(): string {
@@ -160,15 +172,79 @@ function instanciaPadrao(): string {
   }
 }
 
+// Ritmo do sync (ver sintaticar()).
+const PAUSA_GRUPOS_MS = Number(process.env.SYNC_PAUSA_MS ?? 4000); // respiro entre grupos
+const BACKOFF_MS = Number(process.env.SYNC_BACKOFF_MS ?? 45000); // espera quando o WhatsApp limita
+
+function dormir(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Busca os participantes de um grupo, com 1 retry quando o WhatsApp limita.
+ *
+ * O Evolution devolve HTTP 500 (payload genérico "Internal Server Error")
+ * quando o Baileys toma 429 "rate-overlimit" na groupMetadata — por isso
+ * 429 e 500 são tratados como "talvez rate limit": espera e tenta de novo.
+ * 403 (forbidden) = grupo sem permissão de leitura: pula sem retry.
+ */
+async function buscarParticipantes(
+  base: string,
+  key: string,
+  inst: string,
+  groupJid: string,
+): Promise<{ ok: boolean; dados: any | null; limite: boolean; erro: string | null }> {
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const r = await fetch(
+        `${base}/group/participants/${inst}?groupJid=${encodeURIComponent(groupJid)}`,
+        { headers: { apikey: key }, signal: ctrl.signal },
+      ).finally(() => clearTimeout(t));
+      const texto = await r.text();
+      if (r.ok) {
+        let dados: any = {};
+        try {
+          dados = JSON.parse(texto || "{}");
+        } catch {
+          /* corpo inválido: segue sem participantes */
+        }
+        return { ok: true, dados, limite: false, erro: null };
+      }
+      const pareceLimite = r.status === 429 || r.status === 500;
+      if (pareceLimite && tentativa === 0) {
+        await dormir(BACKOFF_MS);
+        continue;
+      }
+      return {
+        ok: false,
+        dados: null,
+        limite: pareceLimite,
+        erro: `Evolution ${r.status}`,
+      };
+    } catch {
+      return { ok: false, dados: null, limite: false, erro: "timeout/rede" };
+    }
+  }
+  return { ok: false, dados: null, limite: true, erro: "rate limit" };
+}
+
 /**
  * Varre os grupos do número e importa os participantes como contatos.
  * Preserva nomes já cadastrados; nunca remove ninguém. Roda em background
  * (a UI acompanha por estadoSync()).
+ *
+ * RITMO (importante): cada consulta de participantes dispara uma groupMetadata
+ * no WhatsApp. Sem pausa entre grupos, 30+ consultas seguidas estouram o
+ * rate limit do WhatsApp (429 "rate-overlimit" no Evolution, HTTP 500) e o sync
+ * termina sem capturar quase nada. Por isso: pausa entre grupos + backoff
+ * quando o WhatsApp limita + registro dos erros para a UI mostrar.
  */
 export async function sincronizar(): Promise<{ novos: number; total: number }> {
   if (sincronizando) throw new Error("sincronização já em andamento");
   sincronizando = true;
-  progresso = { feitos: 0, total: 0 };
+  progresso = { feitos: 0, total: 0, erros: 0, ultimoErro: null };
   try {
     const base = (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
     const key = process.env.EVO_KEY ?? "";
@@ -187,37 +263,36 @@ export async function sincronizar(): Promise<{ novos: number; total: number }> {
     const s = carregar();
     const existentes = new Set(s.contatos.map((c) => c.jid));
     let novos = 0;
-    for (const g of lista) {
-      try {
-        const ctrl2 = new AbortController();
-        const t2 = setTimeout(() => ctrl2.abort(), 30000);
-        const r = await fetch(`${base}/group/participants/${inst}?groupJid=${encodeURIComponent(g.id)}`, {
-          headers: { apikey: key },
-          signal: ctrl2.signal,
-        }).finally(() => clearTimeout(t2));
-        if (r.ok) {
-          const d: any = await r.json();
-          for (const p of Array.isArray(d?.participants) ? d.participants : []) {
-            const raw = p?.phoneNumber || (String(p?.id ?? "").includes("@s.whatsapp.net") ? p.id : "");
-            if (!raw) continue; // @lid sem telefone não serve para envio
-            const jid = String(raw);
-            if (existentes.has(jid)) continue;
-            existentes.add(jid);
-            s.contatos.push({
-              jid,
-              telefone: jid.split("@")[0],
-              nome: "",
-              origem: String(g.subject ?? g.id ?? ""),
-              criadoEm: new Date().toISOString(),
-            });
-            novos++;
-          }
+    for (let i = 0; i < lista.length; i++) {
+      const g = lista[i];
+      const r = await buscarParticipantes(base, key, inst, g.id);
+      if (r.ok && r.dados) {
+        for (const p of Array.isArray(r.dados?.participants) ? r.dados.participants : []) {
+          const raw = p?.phoneNumber || (String(p?.id ?? "").includes("@s.whatsapp.net") ? p.id : "");
+          if (!raw) continue; // @lid sem telefone não serve para envio
+          const jid = String(raw);
+          if (existentes.has(jid)) continue;
+          existentes.add(jid);
+          s.contatos.push({
+            jid,
+            telefone: jid.split("@")[0],
+            nome: "",
+            origem: String(g.subject ?? g.id ?? ""),
+            criadoEm: new Date().toISOString(),
+          });
+          novos++;
         }
-      } catch {
-        /* grupo falhou: segue para o próximo */
+      } else if (r.erro) {
+        // grupo inacessível (403) não é erro de verdade; rate limit é.
+        if (r.limite) {
+          progresso.erros++;
+          progresso.ultimoErro = `rate limit do WhatsApp em "${String(g.subject ?? g.id).slice(0, 40)}"`;
+        }
       }
       progresso.feitos++;
       salvar(s); // progresso persistido a cada grupo
+      // Respiro entre grupos: o WhatsApp limita consultas de metadados em rajada.
+      if (i < lista.length - 1) await dormir(PAUSA_GRUPOS_MS);
     }
     s.ultimoSync = new Date().toISOString();
     salvar(s);

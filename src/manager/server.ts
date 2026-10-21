@@ -1958,8 +1958,10 @@ async function carregarClientes(){
     kp('kpi-contatos',(d.contatos||[]).length);kp('kpi-listas',(d.listas||[]).length);kp('badge-clientes',(d.contatos||[]).length);
     const s=d.sync||{};
     $('clisync').textContent = s.rodando
-      ? ('puxando… '+(s.feitos||0)+'/'+(s.total||0)+' grupos · '+(s.contatos||0)+' contatos')
-      : (s.ultimoSync ? ('último sync: '+new Date(s.ultimoSync).toLocaleString('pt-BR')+' · '+(s.contatos||0)+' contatos') : 'nunca sincronizado');
+      ? ('puxando… '+(s.feitos||0)+'/'+(s.total||0)+' grupos · '+(s.contatos||0)+' contatos'
+        +(s.erros?(' · ⚠️ '+(s.erros)+' grupo(s) com erro (rate limit?)'):''))
+      : (s.ultimoSync ? ('último sync: '+new Date(s.ultimoSync).toLocaleString('pt-BR')+' · '+(s.contatos||0)+' contatos'
+        +(s.erros?(' · ⚠️ '+(s.erros)+' grupo(s) falharam: '+(s.ultimoErro||'rate limit')):'')) : 'nunca sincronizado');
     const f=d.fila||{};
     $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s';
     kp('kpi-clifila',f.pendentes||0);
@@ -2017,7 +2019,7 @@ function renderListas(){
   }).join('');
 }
 async function syncClientes(){
-  $('clisync').textContent='iniciando…';
+  $('clisync').textContent='iniciando… (leva alguns minutos: o WhatsApp limita consultas em rajada)';
   const r=await (await fetch('/api/clientes/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
   if(r.erro)return alert(r.erro);
   carregarClientes();
