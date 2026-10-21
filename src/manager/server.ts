@@ -435,7 +435,7 @@ const server = createServer(async (req, res) => {
       if (!r.ok) throw new Error(`Evolution ${r.status}`);
       const gs: any[] = await r.json();
       const dados = (Array.isArray(gs) ? gs : []).map((g: any) => ({
-        id: g.id, nome: g.subject ?? g.name ?? g.id, tamanho: g.size ?? null,
+        id: g.id, nome: g.subject || g.name || g.id || "(sem nome)", tamanho: g.size ?? null,
       }));
       cacheGrupos = { em: Date.now(), dados };
       json(200, { grupos: dados });

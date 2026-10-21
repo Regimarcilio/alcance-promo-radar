@@ -106,7 +106,9 @@ export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
   const dados = arr
     .map((g) => ({
       jid: String(g.id ?? ""),
-      nome: String(g.subject ?? g.id ?? ""),
+      // `||` (e não `??`): grupo sem nome vem com subject "" — `??` manteria o vazio
+      // e a opção apareceria sem rótulo na aba Monitor.
+      nome: String(g.subject || g.id || "(sem nome)"),
       tamanho: typeof g.size === "number" ? g.size : null,
     }))
     .filter((g) => g.jid.endsWith("@g.us"))
