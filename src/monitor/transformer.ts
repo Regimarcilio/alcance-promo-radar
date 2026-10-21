@@ -2,7 +2,9 @@
  * Transformador de link de afiliado (E6 / RF-032 / RN-012).
  * Troca o link original pelo link de afiliado do usuário.
  * - Mercado Livre: reusa converterLink (provider.ts) com TAG/COOKIE já configurados.
- * - Shopee/KaBuM/Amazon: aplica parâmetro de rastreio quando configurado; senão mantém
+ * - Shopee: Open API generateShortLink (shortLink de afiliado); sem credenciais/falha
+ *   mantém o link original e marca para revisão.
+ * - KaBuM/Amazon: aplica parâmetro de rastreio quando configurado; senão mantém
  *   o link (marcando NAO_TRANSFORMADO para revisão, nunca inventa link).
  */
 import { converterLink } from "../ml/provider.js";
@@ -10,6 +12,7 @@ import { resolverProdutoML, type DadosProduto } from "./produto.js";
 import { extrairId, type LinkDetectado } from "./parser.js";
 import { expandirCurtoAmazon } from "./curtos.js";
 import { resolverProdutoAmazon, resolverImagemAmazon } from "./amazon-api.js";
+import { credenciaisShopee, gerarLinkShopee } from "./shopee-api.js";
 
 export interface ResultadoTransformacao {
   url: string;
@@ -156,11 +159,38 @@ export async function transformar(
     }
 
     case "shopee": {
-      // Shopee usa link próprio do painel de afiliado; sem geração automática confiável.
-      // Aplica sub_id de rastreio se configurado, senão marca para revisão.
+      // Open API generateShortLink: devolve https://shope.ee/... com o
+      // affiliate_id do usuário. Sem credenciais ou em falha, nunca inventa
+      // link: mantém a URL original e manda para revisão (RN-012).
+      const linkAfiliado = await gerarLinkShopee(link.url);
+      if (linkAfiliado) return { url: linkAfiliado, ok: true };
+
+      if (credenciaisShopee()) {
+        return {
+          url: link.url,
+          ok: false,
+          motivo: "Shopee Open API falhou — revisar manualmente",
+        };
+      }
+
+      // Compatibilidade: SHOPEE_SUBID aplica só `smtt` (rastreio do app), que
+      // NÃO é atribuição de afiliado. Mantém o parâmetro, mas não marca ok.
       const sub = process.env.SHOPEE_SUBID?.trim();
-      if (sub) return { url: comParam(link.url, "smtt", sub), ok: true };
-      return { url: link.url, ok: false, motivo: "SHOPEE_SUBID não configurado — revisar manualmente" };
+      if (sub) {
+        return {
+          url: comParam(link.url, "smtt", sub),
+          ok: false,
+          motivo:
+            "SHOPEE_SUBID aplica só smtt (não gera comissão) — configure SHOPEE_APP_ID/SHOPEE_APP_SECRET ou gere o link no painel Shopee",
+        };
+      }
+
+      return {
+        url: link.url,
+        ok: false,
+        motivo:
+          "SHOPEE_APP_ID/SHOPEE_APP_SECRET não configurados — gere o link no painel Shopee ou configure a Open API",
+      };
     }
 
     case "kabum": {

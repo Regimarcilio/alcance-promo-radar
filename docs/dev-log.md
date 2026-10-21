@@ -973,3 +973,26 @@ local fora do repositório.
 extração da UI de `server.ts`, handlers globais de erro, credenciais Creators API, `SHOPEE_SUBID`,
 rotação das sessões ML, piloto com 0 loops.
 
+
+---
+
+## 2026-10-21 | E6-SHOPEE-01 | Link de afiliado Shopee via Open API
+
+**Pedido**: entender como o link de afiliado aparece no painel Shopee e corrigir a lacuna do monitor.
+
+**Diagnóstico**: o case `shopee` do `transformer.ts` anexava `smtt` e devolvia `ok:true`. `smtt` é
+rastreio do app, não atribuição de afiliado; o link saía sem comissão e pulava a revisão (RN-012).
+
+**Entregas**:
+- Issue #8 com contrato da API, variáveis, AC Gherkin e bloqueio de credenciais.
+- `src/monitor/shopee-api.ts` — `generateShortLink` na Open API, assinatura SHA-256
+  (`AppId+Timestamp+Payload+Secret`), timeout 8s, cache 6h e validação de domínio do shortLink.
+- `src/monitor/transformer.ts` — Shopee agora usa o shortLink; sem credenciais ou em falha mantém o
+  original e manda para revisão. `SHOPEE_SUBID` legado aplica `smtt`, mas com `ok:false`.
+- Testes: `shopee-api.test.ts` e `transformer.test.ts` (fetch mockado, sem rede).
+- `.env.example`, README, SRS (RF-032), US-18, relatório 14 e ADR-009 atualizados.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` 37/37; `npm run smoke:manager` OK.
+
+**Pendência**: App ID/Secret da Shopee (`affiliate.shopee.com.br/open_api`, até ~2 semanas) para validar
+o fluxo live; até lá, o módulo fica inerte e links Shopee vão para revisão.

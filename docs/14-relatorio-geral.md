@@ -259,7 +259,7 @@ Plano de correção: `docs/15-plano-sincronizacao-docs.md`.
 | Pendência | Impacto |
 |---|---|
 | Credenciais Amazon Creators API | Título/foto via API (hoje fallback por CDN/ASIN) |
-| `SHOPEE_SUBID` | Conversão de links Shopee |
+| `SHOPEE_APP_ID` + `SHOPEE_APP_SECRET` (Open API) | Link curto de afiliado Shopee (`generateShortLink`); sem isso, revisão manual |
 | Rotação das sessões ML | Enriquecimento ML sem cookie expirado |
 | TLS/reverse proxy (Caddy/Traefik/Nginx) | Liberar acesso em LAN com segurança |
 | Migração do container para non-root | Fechar M1 |

@@ -138,11 +138,19 @@ E links de domínio desconhecido geram status NAO_RECONHECIDO (fila de revisão)
 
 ### RF-032 — Transformar link para o link de afiliado do usuário (Must)
 **Ator:** SISTEMA. **Desc:** converter a URL original para a URL de afiliado do usuário usando os mesmos dados de acesso ML já configurados (tag/cookie do provedor). Reutilizar `src/ml/provider.ts` (`converterLink`/`gerarLinkAfiliado`). Nunca alterar preços/números.
+
+**Shopee (Open API):** usar `POST https://open-api.affiliate.shopee.com.br/graphql` com a mutation `generateShortLink(input: { originUrl, subIds })`, autenticada por `SHA256 Credential={AppId}, Timestamp={Timestamp}, Signature=SHA256(AppId+Timestamp+Payload+Secret)`. Configurar `SHOPEE_APP_ID`, `SHOPEE_APP_SECRET` e `SHOPEE_SUB_IDS` (até 5). Sem credenciais ou em falha, preservar a URL original e enviar para revisão; `smtt` aplicado por `SHOPEE_SUBID` legado **não** conta como transformação válida (não gera comissão).
+
 **Aceite:**
 ```gherkin
 Dado um link ML reconhecido na mensagem
 Quando aplico a transformação
 Então o link final usa a tag/atribuição do usuário e preserva o produto (nunca cai no perfil)
+
+Dado um link Shopee e SHOPEE_APP_ID/SHOPEE_APP_SECRET configurados
+Quando aplico a transformação
+Então o link final é o shortLink retornado pela Shopee (ex.: https://shope.ee/...)
+E falha ou ausência de credenciais mantém o link original e envia para REVISAO_MONITOR
 ```
 
 ### RF-033 — Aplicar template padrão do usuário (Should)

@@ -55,7 +55,7 @@ TLS/reverse proxy antes — veja `docs/13-auth-spec.md`.
 | `AUTH_TTL_HORAS`, `AUTH_IDLE_MIN` | validade absoluta e por inatividade da sessão |
 | `MANAGER_KEY` | credencial machine opcional para `/api/*` |
 | `AMAZON_TAG`, `AMAZON_CREATORS_ID`, `AMAZON_CREATORS_SECRET` | Amazon |
-| `SHOPEE_SUBID` | conversão de links Shopee |
+| `SHOPEE_APP_ID`, `SHOPEE_APP_SECRET`, `SHOPEE_SUB_IDS` | link curto de afiliado Shopee via Open API (`generateShortLink`) |
 | `TAG_ML`, `COOKIE_ML` | enriquecimento Mercado Livre |
 
 O template completo está em `.env.example`.
