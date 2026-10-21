@@ -527,7 +527,7 @@ variável inexistente — resolvido com alias `--mut` no `:root`.
   `#2a3942`→`var(--border-strong)`, `#f8806a`→`var(--danger-tx)`, links `#53bdeb`→`.lk-mini`;
   `prefers-reduced-motion` desliga transições.
 
-**Provas** (prints em `docs/prints/`): `pal-verde/azul/laranja/vermelho.png`, `tema-mobile.png`
+**Provas** (prints locais, não publicados por conterem dados reais): `pal-verde/azul/laranja/vermelho.png`, `tema-mobile.png`
 (390px) e `tema-live-completo.png` (página real em 8099 já populada pela API). Os 2 `<script>`
 servidos passam em `node --check`; `data-paleta="verde"` + 4 swatches no HTML; zero cores escuras
 residuais no fonte.
@@ -562,7 +562,7 @@ Clientes = `--tertiary`→grad-b; CTAs em gradiente (`--grad-a`→`--grad-b`); t
 laranja 5.02/5.18 · vermelho 6.29/5.27 (todos AA). Os `--tertiary` (2.26–3.68 vs branco) são
 **exclusivamente decorativos** — nenhum texto sobre eles.
 
-**Provas**: `docs/prints/top-{verde,azul,laranja,vermelho}.png` (cabeçalho + 1º painel de cada
+**Provas**: prints locais (não publicados) `top-{verde,azul,laranja,vermelho}.png` (cabeçalho + 1º painel de cada
 paleta), `alcance-mobile.png` (420px) e `alcance-live.png` (página real em :8099). Scripts
 servidos OK no `node --check`.
 
