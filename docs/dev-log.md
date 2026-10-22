@@ -1307,3 +1307,26 @@ está limitada (e voltando com `updateParticipants: []`).
 rate-overlimit, 409 = já no grupo e limite persistente); E2E contra a **Evolution real**: job
 2/2 processados em background, 1 adicionado e 1 recusado (número inexistente → "participante 451"),
 grupo com os mesmos 5 participantes (sem efeito colateral).
+
+---
+
+## 2026-10-21 | E6-PIL-02 | "Religar" loop parado + config salva ao parar
+
+**Sintoma**: "envios de mensagens parado". Diagnóstico: o **Monitor seguia encaminhando** (ENCAMINHADA a
+cada 2 min), mas o **Piloto** estava parado — o log mostrava `#1 ⏹️ parado e removido do grid` (10:12).
+Nenhum handler de SIGTERM chama `stop()`: foi o botão ⏹ do painel.
+
+**Problema de UX encontrado**: `stop(id)` REMOVIA o loop da grade, então o "▶ START" criava um loop
+**novo** (duplicando) e o operador tinha que redigitar conta/categoria/grupo.
+
+**Correções**:
+- `src/ml/piloto.ts` — `stop(id)` agora **guarda a config** do loop parado nos `presets` (até 5);
+  novo `religar(id)` religa um loop pausado **ou** uma config salva (1 clique, sem redigitar nada);
+  `status()` expõe os presets.
+- `src/manager/server.ts` — `POST /api/piloto/religar`; na aba Piloto, cada loop parado ganha botão
+  **▶ religar**, e as configs salvas aparecem listadas com o mesmo botão.
+
+**Contexto adicional**: às 10:05 o WhatsApp derrubou a sessão do número principal
+(`device_removed` / 401 → LOGOUT). A outra instância (`radar-mano-da-divulgacao-cfb`, open) assumiu
+os envios — a rotação evitou a parada total. O número principal precisa de **re-pareamento por QR**
+(aba Números → botão QR).
