@@ -150,47 +150,75 @@ export async function desconectar(): Promise<void> {
  * o grupo tiver o "link de convite" habilitado. Fora dessas condições a API
  * devolve erro — o chamador deve reportar sem quebrar a interface.
  */
-export async function adicionarParticipantes(
+/**
+ * Adiciona UM participante ao grupo, com retry quando o WhatsApp limita.
+ *
+ * O WhatsApp recusa operações de grupo em rajada (rate-overlimit). Por isso:
+ * um por vez, com pausa entre chamadas (no job) e espera maior entre tentativas.
+ *
+ * Resposta do Evolution: 201 com `updateParticipants[]` — cada item traz o
+ * status por participante (ex.: 409 = já está no grupo).
+ */
+export async function adicionarUmParticipante(
   groupJid: string,
-  numeros: string[],
-): Promise<{ ok: boolean; erro?: string; adicionados: number }> {
+  numero: string,
+  opts: { esperas?: number; tentativas?: number } = {},
+): Promise<{ ok: boolean; jaNoGrupo: boolean; limitado: boolean; erro?: string }> {
   const jid = String(groupJid ?? "").trim();
-  if (!jid.endsWith("@g.us")) return { ok: false, erro: "grupo inválido (esperado JID @g.us)", adicionados: 0 };
-  // Só dígitos com código do país, prefixo "+" (formato exigido pela API).
-  const participantes = [
-    ...new Set(
-      numeros
-        .map((n) => String(n ?? "").replace(/\D/g, ""))
-        .filter((n) => n.length >= 10)
-        .map((n) => `+${n}`),
-    ),
-  ];
-  if (!participantes.length) return { ok: false, erro: "nenhum número válido para adicionar", adicionados: 0 };
+  if (!jid.endsWith("@g.us")) return { ok: false, jaNoGrupo: false, limitado: false, erro: "grupo inválido" };
+  const digitos = String(numero ?? "").replace(/\D/g, "");
+  if (digitos.length < 10) return { ok: false, jaNoGrupo: false, limitado: false, erro: "número inválido" };
+  const participante = `+${digitos}`;
 
-  try {
-    const res = await fetch(
-      `${base()}/group/updateParticipant/${inst()}?groupJid=${encodeURIComponent(jid)}`,
-      {
-        method: "POST",
-        headers: { apikey: key(), "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "add", participants: participantes }),
-        signal: AbortSignal.timeout(60000),
-      },
-    );
-    if (!res.ok) {
-      const txt = (await res.text()).slice(0, 200);
-      return { ok: false, erro: `Evolution ${res.status}${txt ? `: ${txt}` : ""}`, adicionados: 0 };
+  const esperas = Number(opts.esperas ?? 45000);
+  const maxTentativas = Number(opts.tentativas ?? 3);
+  let ultimoErro = "";
+
+  for (let t = 0; t < maxTentativas; t++) {
+    if (t > 0) {
+      console.log(
+        `[grupo] WhatsApp limitou — nova tentativa em ${Math.round(esperas / 1000)}s (${t + 1}/${maxTentativas})`,
+      );
+      await new Promise((r) => setTimeout(r, esperas));
     }
-    return { ok: true, adicionados: participantes.length };
-  } catch (e) {
-    return { ok: false, erro: String((e as Error)?.message ?? e), adicionados: 0 };
+    try {
+      const res = await fetch(
+        `${base()}/group/updateParticipant/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+        {
+          method: "POST",
+          headers: { apikey: key(), "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", participants: [participante] }),
+          signal: AbortSignal.timeout(90000),
+        },
+      );
+      const txt = await res.text().catch(() => "");
+      if (res.ok) {
+        // 201: a API responde 201 mesmo com erro por participante
+        const j = (JSON.parse(txt || "{}") as any)?.updateParticipants;
+        const item = Array.isArray(j) ? j[0] : null;
+        const status = Number(item?.status ?? 0);
+        if (status === 409) return { ok: true, jaNoGrupo: true, limitado: false }; // já estava
+        if (status && status >= 400) {
+          ultimoErro = `participante ${status}: ${item?.content?.error ?? item?.error ?? "recusado"}`;
+          return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+        }
+        return { ok: true, jaNoGrupo: false, limitado: false };
+      }
+      ultimoErro = `Evolution ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ""}`;
+      if (/rate-overlimit|too many|429/i.test(txt) || res.status === 429) continue; // espera e repete
+      return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+    } catch (e) {
+      ultimoErro = String((e as Error)?.message ?? e);
+      return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+    }
   }
+  return { ok: false, jaNoGrupo: false, limitado: true, erro: ultimoErro || "rate limit do WhatsApp" };
 }
 
 /**
- * Permissões do grupo (quem pode falar/comentar).
+ * Adiciona participantes a um grupo do WhatsApp (aba Clientes → "adicionar ao grupo").
  *
- * Evolution API v2: POST /group/updateSetting/{instance}?groupJid=...
+ * Evolution API v2: POST /group/updateParticipant/{instance}?groupJid=...
  * body: { action }
  *   announcement     → só administradores enviam mensagens (participantes não comentam)
  *   not_announcement → todos voltam a enviar mensagens

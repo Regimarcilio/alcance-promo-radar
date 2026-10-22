@@ -1276,3 +1276,34 @@ nenhum acesso existente quebra.
 favoritos); smoke OK; E2E no navegador com Evolution mock: código enviado no WhatsApp → campo
 aparece com telefone mascarado → **código certo entra no painel** → código errado devolve
 "código inválido" → zero erros JS.
+
+---
+
+## 2026-10-21 | E6-GRUPO-01 | Adição de contatos ao grupo: rate-overlimit do WhatsApp
+
+**Sintoma**: ao adicionar contatos ao grupo, erro `Evolution 400: {"message":["Error updating
+participants","Error: rate-overlimit"]}`.
+
+**Diagnóstico**: os 38 erros de rate-limit em 5 min no log da Evolution vêm de
+`updateGroupMetadataCache` — o **job de fundo da própria Evolution**, que atualiza os metadados dos
+32 grupos da conta de uma vez e estoura o limite do WhatsApp. A adição de participante usa a mesma
+via (groupMetadata) e cai na mesma janela. Medido: uma adição pode levar **até 60s** quando a conta
+está limitada (e voltando com `updateParticipants: []`).
+
+**Correções**:
+- `src/monitor/evolution.ts` — `adicionarUmParticipante()`: UM participante por chamada, com retry e
+  espera maior quando vier rate-overlimit; interpreta o `updateParticipants[]` (409 = já estava no
+  grupo = sucesso).
+- `src/monitor/grupo-add.ts` (novo) — **job em background**: a adição é feita em gotejamento (pausa
+  entre contatos) e a UI acompanha o progresso. Antes, a tela ficava pendurada por minutos
+  (cada adição pode levar 60s).
+- `src/manager/server.ts` — `POST /api/clientes/grupo` inicia o job e responde na hora;
+  `GET /api/clientes/grupo/status` traz o progresso (feitos/total/adicionados/jaNoGrupo/falhos).
+  A UI mostra "adicionando… 3/12 · 2 no grupo" e explica o rate limit.
+- `.env.example` — `GRUPO_ADICIONAR_PAUSA_MS` (3s), `GRUPO_ADICIONAR_ESPERA_MS` (45s),
+  `GRUPO_ADICIONAR_TENTATIVAS` (3).
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **91/91** (6 novos, incluindo retry do
+rate-overlimit, 409 = já no grupo e limite persistente); E2E contra a **Evolution real**: job
+2/2 processados em background, 1 adicionado e 1 recusado (número inexistente → "participante 451"),
+grupo com os mesmos 5 participantes (sem efeito colateral).
