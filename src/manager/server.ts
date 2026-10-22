@@ -1864,6 +1864,14 @@ async function carregarGrupos(forcar){
     $('mapgrupo').innerHTML='<option value="">Grupo padrão (.env)</option>'+opts;
     $('pagrupo').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
     if(g.aviso)$('pagrupo').innerHTML+='<option value="" disabled>⚠️ '+g.aviso+'</option>';
+    // A aba Monitor usa a MESMA lista (vem do cache, sem chamar a Evolution de novo)
+    if($('mselOrigem')&&$('mselOrigem').options.length<=1){
+      $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
+      $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
+      $('mselPermissao').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
+      window.__wgrupos=(g.grupos||[]).map(function(x){return {jid:x.id,nome:x.nome,tamanho:x.tamanho};});
+      $('mgruposinfo').textContent=(g.grupos||[]).length+' grupos carregados'+(g.deCache?' (lista salva)':'');
+    }
     _gruposEm=Date.now();
   }catch(e){
     $('pagrupo').innerHTML='<option value="">⚠️ erro ao carregar — clique para tentar de novo</option>';
