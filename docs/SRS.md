@@ -153,6 +153,31 @@ Então o link final é o shortLink retornado pela Shopee (ex.: https://shope.ee/
 E falha ou ausência de credenciais mantém o link original e envia para REVISAO_MONITOR
 ```
 
+### RF-036 — Verificar celular do usuário no primeiro acesso (Must)
+**Ator:** SISTEMA. **Desc:** no cadastro, o usuário informa login, senha e **WhatsApp válido**. O sistema envia para o celular cadastrado um **código alfanumérico de 10 posições**, pedido no **primeiro login** (2FA de ativação). O código puro nunca é gravado (só SHA-256 com sal do usuário); expira em 10 min e trava após 5 tentativas. Celular mascarado nas respostas e na auditoria. Usuários sem celular cadastrado continuam entrando só com usuário e senha.
+**Aceite:**
+```gherkin
+Dado um usuário cadastrado com WhatsApp e celular ainda não confirmado
+Quando ele entra com usuário e senha
+Então o sistema envia um código de 10 posições para o WhatsApp cadastrado
+E o login só conclui quando o código digitado confere
+E após 5 tentativas erradas o código fica travado
+
+Dado um usuário já confirmado
+Quando ele entra com usuário e senha
+Então o acesso é liberado sem pedir código
+```
+
+### RF-037 — Salvar ofertas publicadas nos favoritos do Mercado Livre (Should)
+**Ator:** SISTEMA. **Desc:** a cada oferta de ML publicada, adicionar o item na lista de favoritos da conta de afiliado (`POST /users/me/bookmarks`), para ter a vitrine central do que já foi divulgado. Exige access token OAuth (`ML_ACCESS_TOKEN`); sem token, o módulo fica inerte. Falha ao favoritar nunca impede a publicação.
+**Aceite:**
+```gherkin
+Dado um access token OAuth do Mercado Livre configurado
+Quando uma oferta de ML é publicada
+Então o item é adicionado aos favoritos da conta de afiliado
+E se a API recusar, a oferta continua sendo publicada normalmente
+```
+
 ### RF-033 — Aplicar template padrão do usuário (Should)
 **Ator:** SISTEMA. **Desc:** reformatar a mensagem recebida no template Emipe (RN-001) preenchendo título, preços e link transformado; campos não reconhecidos são preservados do texto original.
 **Aceite:** mensagem transformada mantém o padrão de bolha WhatsApp (🔥/💵/🎟️/🛒) e o link do usuário.

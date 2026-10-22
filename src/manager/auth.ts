@@ -15,6 +15,18 @@ import { join } from "node:path";
 
 export type Papel = "admin" | "operador";
 
+/** Verificação do celular por WhatsApp (código de 10 posições). */
+export type Verificacao = {
+  /** SHA-256 do código + sal do usuário — o código NUNCA é gravado. */
+  hash: string;
+  /** ISO — o código expira (10 min por padrão). */
+  expiraEm: string;
+  /** tentativas erradas (trava após 5). */
+  tentativas: number;
+  /** ISO — quando o celular foi confirmado. */
+  verificadoEm?: string;
+};
+
 export type Usuario = {
   id: string;
   usuario: string;
@@ -22,6 +34,10 @@ export type Usuario = {
   papel: Papel;
   desativado?: boolean;
   criadoEm: string;
+  /** WhatsApp do usuário (só dígitos, com DDI). */
+  telefone?: string;
+  /** Estado da verificação do celular. */
+  verificacao?: Verificacao;
 };
 
 type Sessao = {

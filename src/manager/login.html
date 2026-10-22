@@ -600,6 +600,15 @@ h1{
             </div>
           </div>
 
+          <div class="field reveal" id="campoCodigo" style="--d:.38s;display:none">
+            <label for="codigo">Codigo de verificacao</label>
+            <input class="input" id="codigo" name="codigo" type="text" inputmode="text"
+                   placeholder="codigo de 10 posicoes enviado no seu WhatsApp"
+                   autocomplete="one-time-code" autocapitalize="characters" spellcheck="false"
+                   maxlength="10" aria-describedby="erroLogin">
+            <p class="card-sub" id="textoCodigo" style="margin:6px 0 0"></p>
+          </div>
+
           <div class="form-erro" id="erroLogin" role="alert" aria-live="polite">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1.1" fill="currentColor"/></svg>
             <span id="erroTexto"></span>
@@ -726,6 +735,13 @@ h1{
       (!u ? usuario : senha).focus();
       return;
     }
+    var codigoInput = document.getElementById('codigo');
+    var codigo = codigoInput ? codigoInput.value.trim() : '';
+    if (codigo && codigo.length !== 10) {
+      mostrarErro('O codigo tem 10 posicoes.');
+      codigoInput.focus();
+      return;
+    }
 
     limparErro();
     ocupado = true;
@@ -738,9 +754,27 @@ h1{
       var resposta = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario: u, senha: s })
+        body: JSON.stringify({
+          usuario: u,
+          senha: s,
+          codigo: (document.getElementById('codigo') || {}).value || ''
+        })
       });
       var dados = await resposta.json().catch(function () { return {}; });
+
+      // 2FA de primeiro uso: o servidor pede o codigo enviado no WhatsApp
+      if (dados && dados.precisaCodigo) {
+        liberarBotao();
+        var campo = document.getElementById('campoCodigo');
+        var texto = document.getElementById('textoCodigo');
+        campo.style.display = 'block';
+        texto.textContent = 'Enviamos um codigo de 10 posicoes para o WhatsApp ' +
+          (dados.telefone || 'cadastrado') + '.' + (dados.enviado === false && dados.erro ? ' ' + dados.erro : '');
+        rotuloBtn.textContent = 'Confirmar codigo';
+        document.getElementById('codigo').focus();
+        if (dados.erro) mostrarErro(dados.erro);
+        return;
+      }
 
       if (!resposta.ok) {
         liberarBotao();

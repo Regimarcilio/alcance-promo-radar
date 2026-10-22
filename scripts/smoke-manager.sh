@@ -33,7 +33,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-node scripts/auth-user.mjs admin >/dev/null
+# Cadastra o usuário de teste (celular fictício: a Evolution não está no ar
+# durante o smoke, então o envio do código falha e o script segue).
+node scripts/auth-user.mjs admin --telefone 5511999999999 >/dev/null 2>&1 || {
+  echo "falha ao cadastrar usuário de smoke" >&2
+  exit 1
+}
 
 node dist/manager/server.js >"$TMP/server.log" 2>&1 &
 PID=$!
