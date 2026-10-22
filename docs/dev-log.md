@@ -1379,3 +1379,28 @@ grupo ficam paradas?"*
 
 **Validação**: `typecheck`/`build` limpos; `npm test` **94/94** (3 novos da fila: reenfileirar
 preserva o id, não duplica, mantém os destinos restantes); smoke OK.
+
+---
+
+## 2026-10-21 | E6-ROT-01 | Política PRINCIPAL × SECUNDÁRIOS nos números
+
+**Acordo com o operador**: o **principal** fica com as **operações de serviço** (adicionar contatos
+ao grupo, permissões de grupo) e os **secundários assumem integralmente o envio de mensagens** — se o
+principal cair, o envio continua sem parar. Sem secundário disponível, o envio volta ao principal.
+
+**Implementação**:
+- `src/wa/rotacao.ts` — campo `principal` na instância; `instanciaPrincipal()` (marcada → EVO_INSTANCE
+  → primeira); `instanciaParaServico()` (sempre o principal, com aviso no log se ele estiver
+  fechado); `definirPrincipal()` (só um por vez).
+- `proximaInstancia()` (usada pelo envio) agora **exclui o principal** quando há secundário
+  disponível — entre os secundários continua o rodízio ponderado com anti-repetição.
+- `src/monitor/evolution.ts` — `adicionarUmParticipante()` e `definirPermissaoGrupo()` passam a usar
+  `instanciaParaServico()` (antes usavam a instância fixa do `EVO_INSTANCE`).
+- `src/manager/server.ts` — aba Números: botão **★ principal** por instância, explicação da política
+  e `POST /api/instancias/principal`.
+- `src/wa/rotacao.ts` — `dataDir`/`file()` agora são resolvidos **a cada uso** (o cache invalida
+  quando `ALCANCE_DATA_DIR` muda) — era o que impedia testar a política.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **99/99** (11 no rotacao.test.ts: anti-repetição
+entre secundários, envio nunca vai ao principal, fallback para o principal sem secundário, serviço
+sempre no principal, um principal por vez, e os 3 de dedup); smoke OK.

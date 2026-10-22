@@ -1,41 +1,45 @@
-/** Testes da rotação de números (anti-repetição) e do dedup do monitor. */
+/**
+ * Rotação de números: anti-repetição, política PRINCIPAL × SECUNDÁRIOS e dedup.
+ */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Instâncias de teste: 2 números ativos, mesmo peso. */
-async function carregarRotacao(repeticao = "1") {
+/**
+ * Ambiente de rotação: 1 principal + 2 secundários (padrão).
+ * O estado de conexão é "erro" (Evolution fora) → o sorteio cai nos ATIVOS.
+ */
+async function carregarRotacao(repeticao = "1", itens?: unknown[]) {
   const dir = mkdtempSync(join(tmpdir(), "alcance-rot-"));
   writeFileSync(
     join(dir, "instancias.json"),
     JSON.stringify({
-      itens: [
-        { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
-        { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
-      ],
+      itens:
+        itens ?? [
+          { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+          { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+          { instancia: "cel-3", nome: "Celular 3", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+        ],
     }),
   );
   process.env.ALCANCE_DATA_DIR = dir;
   process.env.RODIZIO_EVITA_REPETICAO = repeticao;
-  // estado fixo: os dois "open" (sem depender da Evolution)
   process.env.EVO_URL = "http://evo.test";
   const mod = await import(`./rotacao.js?v=${Math.random()}`);
   return { mod, dir };
 }
 
-test("rotação: com 2 números, nunca repete o anterior (anti-repetição 100%)", async () => {
+test("rotação: com 2 secundários, nunca repete o anterior (anti-repetição 100%)", async () => {
   const { mod, dir } = await carregarRotacao("1");
   try {
-    // o estado da conexão precisa ser "open": forçamos via env EVO_URL inválido
-    // então usamos o fallback (ativos) — o sorteio ainda alterna.
     const a = await mod.proximaInstancia();
     const b = await mod.proximaInstancia();
     const c = await mod.proximaInstancia();
     assert.notEqual(a, b, "não deveria repetir o mesmo número em sequência");
     assert.notEqual(b, c, "não deveria repetir o mesmo número em sequência");
-    assert.equal(a, c, "com 2 números deve alternar");
+    assert.equal(a, c, "deve alternar entre os dois secundários");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -46,7 +50,7 @@ test("rotação: sem anti-repetição (0) pode repetir — sorteio puro por peso
   try {
     const sorteios = new Set<string>();
     for (let i = 0; i < 40; i++) sorteios.add(await mod.proximaInstancia());
-    assert.equal(sorteios.size, 2, "com 2 números ativos os dois devem aparecer");
+    assert.equal(sorteios.size, 2, "com 2 secundários os dois devem aparecer");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -62,7 +66,63 @@ test("rotação: registra a última usada para a UI", async () => {
   }
 });
 
-/** Dedup do monitor: janela e escopo. */
+/* ---------------- política PRINCIPAL × SECUNDÁRIOS ----------------------- */
+
+test("principal: é a marcada; senão a que casa com EVO_INSTANCE", async () => {
+  const { mod, dir } = await carregarRotacao("1");
+  try {
+    assert.equal(mod.instanciaPrincipal()?.instancia, "cel-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("envio de mensagens: usa os SECUNDÁRIOS, nunca o principal", async () => {
+  const { mod, dir } = await carregarRotacao("1");
+  try {
+    for (let i = 0; i < 12; i++) {
+      const escolhida = await mod.proximaInstancia();
+      assert.notEqual(escolhida, "cel-1", "o envio não deve ir para o principal");
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("sem secundário disponível: o envio volta ao principal (nada para)", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    assert.equal(await mod.proximaInstancia(), "cel-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("operação de serviço: sempre no principal", async () => {
+  const { mod, dir } = await carregarRotacao("1");
+  try {
+    assert.equal(await mod.instanciaParaServico(), "cel-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("definirPrincipal: só um por vez", async () => {
+  const { mod, dir } = await carregarRotacao("1");
+  try {
+    mod.definirPrincipal("cel-2", true);
+    assert.equal(mod.instanciaPrincipal()?.instancia, "cel-2");
+    const itens = mod.listarInstancias();
+    assert.equal(itens.filter((i: { principal?: boolean }) => i.principal).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------ dedup ------------------------------------ */
+
 async function carregarEstado(env: Record<string, string | undefined>) {
   const dir = mkdtempSync(join(tmpdir(), "alcance-dedup-"));
   process.env.ALCANCE_DATA_DIR = dir;
@@ -100,14 +160,12 @@ test("dedup: janela em dias configurável (DEDUP_DIAS)", async () => {
   try {
     assert.equal(mod.diasDedup(), 1);
     mod.marcarMonitorado("mercadolivre", "MLB999", "https://y", "origemA");
-    // mark now, and simulate an older timestamp by rewriting the hash store
     const fs = await import("node:fs");
     const f = join(dir, "monitor-estado.json");
     const j = JSON.parse(fs.readFileSync(f, "utf8"));
     const h = Object.keys(j.hashes)[0];
-    j.hashes[h] = new Date(Date.now() - 3 * 86400000).toISOString(); // 3 dias atrás
+    j.hashes[h] = new Date(Date.now() - 3 * 86400000).toISOString();
     fs.writeFileSync(f, JSON.stringify(j, null, 2));
-    // com janela de 1 dia, um registro de 3 dias atrás já expirou
     assert.equal(mod.jaMonitorado("mercadolivre", "MLB999", "https://y", "origemA"), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });

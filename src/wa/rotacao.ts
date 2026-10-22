@@ -8,6 +8,15 @@
  * - se nenhum estiver open, ainda sorteia um ativo (o retry do dispatch cobre);
  * - a conta do Mercado Livre NÃO muda: o celular é só o remetente;
  * - peso por número (1..10) para dar mais volume a um número mais "quente".
+ *
+ * POLÍTICA PRINCIPAL × SECUNDÁRIOS (acordo com o operador):
+ * - o **PRINCIPAL** é usado nas operações de SERVIÇO (adicionar contatos ao
+ *   grupo, permissões de grupo, permissões de grupo) — o número "de casa";
+ * - os **SECUNDÁRIOS** assumem integralmente o **ENVIO DE MENSAGENS** para os
+ *   grupos: se o principal cair, o envio continua sem parar;
+ * - se TODOS os secundários estiverem fora, o envio volta para o principal
+ *   (nada fica sem enviar);
+ * - entre os secundários, o envio alterna (rodízio ponderado + anti-repetição).
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -21,6 +30,8 @@ export interface InstanciaWhats {
   enviadas: number;
   ultimaEm: string | null;
   criadaEm: string;
+  /** principal = reservado às operações de serviço (adicionar contatos, permissões) */
+  principal?: boolean;
 }
 
 interface Store {
@@ -30,10 +41,17 @@ interface Store {
 export const MAX_INSTANCIAS = 5;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "instancias.json");
+// lazy: o diretório é resolvido a cada uso (permite trocar ALCANCE_DATA_DIR
+// em tempo de execução — smoke/teste — sem recarregar o módulo).
+function dataDir(): string {
+  return process.env.ALCANCE_DATA_DIR || join(root, "data");
+}
+function file(): string {
+  return join(dataDir(), "instancias.json");
+}
 
 let cache: Store | null = null;
+let cacheDir = "";
 const estados = new Map<string, { estado: string; em: number }>();
 const TTL_ESTADO = 45_000;
 
@@ -66,10 +84,11 @@ function vazio(): Store {
 }
 
 function carregar(): Store {
-  if (cache) return cache;
+  // o cache é invalidado se o diretório de dados mudar (teste/smoke)
+  if (cache && cacheDir === dataDir()) return cache;
   try {
-    if (existsSync(file)) {
-      const raw: any = JSON.parse(readFileSync(file, "utf8"));
+    if (existsSync(file())) {
+      const raw: any = JSON.parse(readFileSync(file(), "utf8"));
       if (Array.isArray(raw?.itens)) {
         cache = {
           itens: raw.itens
@@ -82,25 +101,31 @@ function carregar(): Store {
               enviadas: Number(i.enviadas) || 0,
               ultimaEm: i.ultimaEm ?? null,
               criadaEm: i.criadaEm ?? new Date().toISOString(),
+              ...(i.principal ? { principal: true } : {}),
             })),
         };
-        if (cache.itens.length > 0) return cache;
+        if (cache.itens.length > 0) {
+          cacheDir = dataDir();
+          return cache;
+        }
       }
     }
   } catch {
     /* cai no padrão */
   }
   cache = vazio();
+  cacheDir = dataDir();
   return cache;
 }
 
 function salvar(s: Store): void {
   cache = s;
   try {
-    mkdirSync(dataDir, { recursive: true });
-    const tmp = `${file}.tmp`;
+    mkdirSync(dataDir(), { recursive: true });
+    const destino = file();
+    const tmp = `${destino}.tmp`;
     writeFileSync(tmp, JSON.stringify(s, null, 2));
-    renameSync(tmp, file);
+    renameSync(tmp, destino);
   } catch {
     /* mantém o cache em memória */
   }
@@ -123,6 +148,33 @@ async function evo(path: string, init: RequestInit = {}, timeoutMs = 60_000): Pr
 
 export function listarInstancias(): InstanciaWhats[] {
   return [...carregar().itens];
+}
+
+/**
+ * Instância PRINCIPAL: a marcada com `principal: true`; se não houver marca,
+ * a que corresponde ao EVO_INSTANCE (a principal de fábrica); senão a primeira.
+ */
+export function instanciaPrincipal(): InstanciaWhats | null {
+  const itens = carregar().itens;
+  if (!itens.length) return null;
+  const marcada = itens.find((i) => i.principal);
+  if (marcada) return marcada;
+  const padrao = itens.find((i) => i.instancia === padraoInstancia());
+  return padrao ?? itens[0];
+}
+
+function padraoInstancia(): string {
+  return process.env.EVO_INSTANCE ?? "radar-piloto";
+}
+
+/** Marca/desmarca a instância principal (só uma por vez). */
+export function definirPrincipal(instancia: string, principal: boolean): void {
+  const s = carregar();
+  for (const i of s.itens) {
+    if (principal) i.principal = i.instancia === instancia;
+    else if (i.instancia === instancia) delete i.principal;
+  }
+  salvar(s);
 }
 
 /** Estado da conexão com cache curto (evita 1 request por envio). */
@@ -171,6 +223,14 @@ export async function proximaInstancia(): Promise<string> {
   const abertos = comEstado.filter((x) => x.e === "open").map((x) => x.i);
   let candidatos = abertos.length > 0 ? abertos : ativos;
 
+  // ENVIO DE MENSAGENS: os SECUNDÁRIOS assumem integralmente. O principal só
+  // volta se nenhum secundário estiver disponível (para nada parar).
+  const principal = instanciaPrincipal();
+  if (principal) {
+    const secundarios = candidatos.filter((i) => i.instancia !== principal.instancia);
+    if (secundarios.length > 0) candidatos = secundarios;
+  }
+
   // anti-repetição: tira a última usada (com probabilidade) se houver outra
   if (candidatos.length > 1 && ultimaUsada && Math.random() < evitaRepeticao()) {
     const outras = candidatos.filter((i) => i.instancia !== ultimaUsada);
@@ -189,6 +249,27 @@ export async function proximaInstancia(): Promise<string> {
   const ultima = candidatos[candidatos.length - 1].instancia;
   ultimaUsada = ultima;
   return ultima;
+}
+
+/**
+ * Instância para OPERAÇÕES DE SERVIÇO (adicionar contatos ao grupo, permissões
+ * de grupo): sempre o principal, para não dispersar essas ações e para que os
+ * secundários fiquem exclusivos com o envio de mensagens.
+ */
+export async function instanciaParaServico(): Promise<string> {
+  const p = instanciaPrincipal();
+  if (p) {
+    const estado = await estadoInstancia(p.instancia);
+    // Se o principal estiver fechado, ainda assim usamos ele (a operação de
+    // serviço depende dele) — mas avisamos no log.
+    if (estado !== "open") {
+      console.log(
+        `[rotacao] principal "${p.nome}" está ${estado} — operação de serviço pode falhar`,
+      );
+    }
+    return p.instancia;
+  }
+  return padrao();
 }
 
 export function registrarEnvio(instancia: string): void {
