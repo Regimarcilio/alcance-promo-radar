@@ -58,6 +58,7 @@ TLS/reverse proxy antes — veja `docs/13-auth-spec.md`.
 | `SHOPEE_APP_ID`, `SHOPEE_APP_SECRET`, `SHOPEE_SUB_IDS` | link curto de afiliado Shopee via Open API (`generateShortLink`) |
 | `MONITOR_EVENTOS_LIMITE` | quantos eventos o estado do monitor guarda (`0` = ilimitado, padrão `500`) |
 | `TAG_ML`, `COOKIE_ML` | enriquecimento Mercado Livre |
+| `ML_ACCESS_TOKEN` | access token OAuth do ML (favoritar itens automaticamente) |
 
 O template completo está em `.env.example`.
 

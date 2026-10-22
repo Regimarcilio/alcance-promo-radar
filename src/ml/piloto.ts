@@ -608,6 +608,21 @@ async function tick(id: number): Promise<void> {
         });
       const r = await enviarParaGrupo({ grupo: loop.grupo, imagem, legenda: mensagem, dryRun: false });
       registrarEnvio(op.mlbId, precoPix, cupom);
+      // FAVORITOS ML: guarda o item na lista de favoritos do afiliado (inerte
+      // sem ML_ACCESS_TOKEN). Nunca pode derrubar a publicação.
+      try {
+        const { favoritarItem } = await import("../ml/favoritos.js");
+        if (programa === "ml") {
+          const r = await favoritarItem(op.mlbId);
+          if (r.ok) log(`${tag} ⭐ item ${op.mlbId} salvo nos favoritos do ML.`);
+          else if (r.erro && !/não configurado/.test(r.erro)) {
+            log(`${tag} ⭐ não foi possível salvar nos favoritos (${r.erro.slice(0, 60)}).`);
+          }
+        }
+      } catch {
+        /* favoritos é acessório */
+      }
+
       // RASTREIO: guarda o link EXATO publicado (com a tag) para reconciliar
       // com o painel de comissão do programa de afiliados.
       try {

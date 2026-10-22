@@ -45,10 +45,14 @@ import {
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
 } from "../wa/rotacao.js";
 import {
-  autenticar, auditar, checarLimite, configurarAuth, cookieExpirado, cookieSessao,
+  autenticar, auditar, checarLimite, carregarUsuarios, configurarAuth, cookieExpirado, cookieSessao,
   criarSessao, encerrarSessao, HashOcupadoError, iguais, iniciarLimpezaAuth, ipDoRequest,
   limparLimite, registrarTentativa, sessaoDoRequest, validarConfigAuth, type Usuario,
 } from "./auth.js";
+import {
+  ensureCodigoVerificacao, enviarCodigoWhatsApp, gerarCodigo, hashCodigo, mascarTelefone,
+  precisaCodigo, salvarVerificacao, validarCodigo,
+} from "./verificacao.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -204,6 +208,42 @@ const server = createServer(async (req, res) => {
       json(401, { erro: "usuário ou senha inválidos" });
       return;
     }
+
+    // ---------- verificação de celular (2FA de primeiro uso) ----------
+    // Usuário com WhatsApp cadastrado e celular ainda não confirmado precisa do
+    // código de 10 posições que foi enviado para o celular dele.
+    if (precisaCodigo(usuario)) {
+      const codigoInformado = typeof corpo?.codigo === "string" ? corpo.codigo.trim() : "";
+      if (!codigoInformado) {
+        // ainda sem código: reenvia (ou reusa) e devolve o pedido
+        const r = await ensureCodigoVerificacao(usuario, dataDir);
+        json(200, {
+          ok: false,
+          precisaCodigo: true,
+          telefone: mascarTelefone(usuario.telefone ?? ""),
+          enviado: r.enviado,
+          // sem erro = o código do cadastro continua valendo (não precisa reenviar)
+          erro: r.erro ? `não foi possível enviar o código: ${r.erro}` : undefined,
+        });
+        return;
+      }
+      const v = validarCodigo(usuario, codigoInformado, dataDir);
+      if (!v.ok) {
+        auditar("codigo_invalido", { usuario: usuario.usuario, ip, ua, detalhe: v.motivo });
+        const msgs: Record<string, string> = {
+          invalido: "código inválido",
+          expirado: "código expirado — peça um novo",
+          tentativas: "demasiadas tentativas — peça um novo código",
+          sem_codigo: "código não encontrado — peça um novo",
+        };
+        json(401, { erro: msgs[v.motivo] ?? "código inválido", precisaCodigo: true });
+        return;
+      }
+      // recarrega o usuário (verificação gravada)
+      const recarregado = carregarUsuarios().find((u) => u.id === usuario!.id);
+      if (recarregado) usuario = recarregado;
+    }
+
     limparLimite(ip);
     const sessao = criarSessao(usuario, ip, ua);
     auditar("login_ok", { usuario: usuario.usuario, ip, ua });
@@ -211,6 +251,36 @@ const server = createServer(async (req, res) => {
       ok: true,
       usuario: { nome: usuario.usuario, papel: usuario.papel },
     }, { "Set-Cookie": cookieSessao(sessao.valor, sessao.maxAge) });
+    return;
+  }
+
+  if (metodo === "POST" && caminho === "/api/auth/reenviar-codigo") {
+    // Reenvia o código de verificação (celular ainda não confirmado).
+    try {
+      const corpo = JSON.parse(await lerCorpo(req, 64 * 1024));
+      const nome = String(corpo?.usuario ?? "").trim();
+      const u = carregarUsuarios().find(
+        (x) => x.usuario.toLowerCase() === nome.toLowerCase() && !x.desativado
+      );
+      if (!u) {
+        json(200, { ok: true }); // não revela se existe
+        return;
+      }
+      if (!precisaCodigo(u)) {
+        json(200, { ok: true });
+        return;
+      }
+      const r = await ensureCodigoVerificacao(u, dataDir, true);
+      auditar("codigo_reenviado", { usuario: u.usuario, ip, ua, detalhe: r.enviado ? "enviado" : `falhou: ${r.erro ?? "?"}` });
+      json(200, {
+        ok: true,
+        enviado: r.enviado,
+        telefone: mascarTelefone(u.telefone ?? ""),
+        erro: r.enviado ? undefined : r.erro,
+      });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
     return;
   }
 

@@ -1237,3 +1237,42 @@ shrinkme, clck.ru, 0x0.st, lnkd.in, t.co…) e reclassifica o destino.
 
 **Medição**: último bloco de 80 eventos após `DEDUP_POR_ORIGEM=1`: ENCAMINHADA 40 · DUPLICADO 33 ·
 REVISÃO 7 → **50%** encaminhada (antes 36%).
+
+---
+
+## 2026-10-21 | E6-SEC-01 | Verificação de celular no 1º acesso + favoritos do ML
+
+**Pedidos**: (1) camada de segurança no login — além de usuário e senha, exigir **WhatsApp válido**
+no cadastro e enviar um **código alfanumérico de 10 posições** para o celular, usado no primeiro
+acesso; (2) salvar automaticamente cada oferta enviada nos **favoritos do Mercado Livre**, para o
+cliente navegar outras opções.
+
+**Entregas**:
+- `src/manager/verificacao.ts` — código de 10 posições (alfabeto sem 0/O e 1/I), SHA-256 com sal do
+  usuário (o texto puro **nunca** é gravado), validade 10 min, trava após 5 tentativas, comparação
+  em tempo constante; envio por WhatsApp via Evolution; código puro em memória só para *reenviar o
+  mesmo*; máscara do telefone (`55•••9999`).
+- `scripts/auth-user.mjs` — exige `--telefone 5511999999999` (ou `AUTH_TELEFONE`), valida o número,
+  envia o código no cadastro e grava a verificação pendente.
+- `src/manager/server.ts` + `src/manager/login.html` — `POST /api/auth/login` passa a pedir o código
+  quando o celular não foi confirmado (`precisaCodigo` + telefone mascarado);
+  `POST /api/auth/reenviar-codigo`; tela de login com campo de código (10 posições) e aviso do
+  telefone mascarado.
+- `src/ml/favoritos.ts` — `POST /users/me/bookmarks` (item_id) com `ML_ACCESS_TOKEN`; inerte sem
+  token; erro nunca impede a publicação. Ligado ao fluxo do Piloto (com log `⭐`).
+
+**Verificação da viabilidade dos favoritos (docs oficiais do ML)**: a API existe
+(`POST /users/me/bookmarks`, `GET`, `DELETE`), mas **(a)** exige **access token OAuth** — o projeto
+usa TAG + COOKIE, que não autenticam essa API; e **(b)** os favoritos são **da conta do afiliado**:
+o cliente final **não** vê a sua lista ao clicar no link (ele vê a vitrine do vendedor de cada
+oferta, que o ML já oferece nativamente). Ou seja: a implementação fica pronta, mas o objetivo
+original ("o cliente navegar outras opções") tem um caminho melhor — divulgar a vitrine do
+**próprio** vendedor. Isso está registrado na ADR-010.
+
+**Compatibilidade**: usuário **sem** celular cadastrado continua entrando só com usuário e senha —
+nenhum acesso existente quebra.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **88/88** (13 novos: 8 de verificação, 5 de
+favoritos); smoke OK; E2E no navegador com Evolution mock: código enviado no WhatsApp → campo
+aparece com telefone mascarado → **código certo entra no painel** → código errado devolve
+"código inválido" → zero erros JS.

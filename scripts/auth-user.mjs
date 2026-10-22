@@ -3,13 +3,16 @@
  * Cria/atualiza um usuário do painel Alcance.
  *
  * Uso:
- *   npm run auth:user -- admin
- *   AUTH_PASSWORD='senha-forte' npm run auth:user -- admin
+ *   npm run auth:user -- admin --telefone 5511999999999
+ *   AUTH_PASSWORD='senha-forte' npm run auth:user -- admin --telefone 5511999999999
+ *
+ * O celular (WhatsApp) é obrigatório: o sistema envia para ele um código
+ * alfanumérico de 10 posições, pedido no PRIMEIRO login (2FA de ativação).
  *
  * O hash scrypt é gravado em data/auth-users.json (modo 0600).
  * Nunca imprime a senha nem o hash.
  */
-import { randomBytes, randomUUID, scrypt as scryptCb } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID, scrypt as scryptCb } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,6 +114,29 @@ async function principal() {
     process.exit(1);
   }
 
+  // ---------- celular (WhatsApp) ----------
+  // aceita: --telefone 5511999999999 | --telefone=5511999999999 | AUTH_TELEFONE=...
+  let telefone = "";
+  const args = process.argv.slice(2);
+  const iTel = args.findIndex((a) => a === "--telefone" || a.startsWith("--telefone="));
+  if (iTel >= 0) {
+    const bruto = args[iTel];
+    telefone = bruto.includes("=") ? bruto.split("=").slice(1).join("=") : args[iTel + 1] ?? "";
+  }
+  telefone = String(process.env.AUTH_TELEFONE ?? telefone ?? "").trim();
+  if (!telefone) {
+    console.error(
+      "Informe o WhatsApp do usuário: --telefone 5511999999999 (ou AUTH_TELEFONE=...).",
+    );
+    process.exit(1);
+  }
+  const digitos = String(telefone).replace(/\D/g, "");
+  const telFinal = digitos.length === 11 ? `55${digitos}` : digitos;
+  if (telFinal.length < 10 || telFinal.length > 15) {
+    console.error("Telefone inválido: use DDI + DDD + número (ex.: 5511999999999).");
+    process.exit(1);
+  }
+
   const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
   // ALCANCE_DATA_DIR permite criar credencial em diretório temporário (smoke/CI).
   const dataDir = process.env.ALCANCE_DATA_DIR || join(raiz, "data");
@@ -122,26 +148,95 @@ async function principal() {
   const hash = await hashSenha(senha);
   const agora = new Date().toISOString();
 
+  let alvo;
   if (existente) {
     existente.hash = hash;
     existente.desativado = false;
     existente.atualizadoEm = agora;
+    alvo = existente;
     console.log(`Senha atualizada para "${usuario}".`);
   } else {
-    usuarios.push({
+    alvo = {
       id: randomUUID(),
       usuario,
       hash,
       papel: "admin",
       criadoEm: agora,
-    });
+    };
+    usuarios.push(alvo);
     console.log(`Usuário "${usuario}" criado.`);
   }
+
+  // celular + verificação pendente
+  const codigo = gerarCodigo();
+  alvo.telefone = telFinal;
+  alvo.verificacao = {
+    hash: createHash("sha256").update(`${alvo.id}:${codigo}`).digest("hex"),
+    expiraEm: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    tentativas: 0,
+  };
 
   writeFileSync(arquivo, JSON.stringify({ usuarios }, null, 2) + "\n", { mode: 0o600 });
   chmodSync(arquivo, 0o600);
   console.log(`Credencial salva em ${arquivo} (modo 0600).`);
+
+  // envia o código para o WhatsApp cadastrado
+  const enviado = await enviarCodigo(telFinal, codigo, usuario);
+  if (enviado.ok) {
+    console.log(`Código de verificação enviado para o WhatsApp ${mascarar(telFinal)}.`);
+    console.log("No primeiro login o painel pede esse código (10 posições).");
+  } else {
+    console.error(`⚠️  Não foi possível enviar o código: ${enviado.erro}`);
+    console.error("   O usuário foi criado, mas o celular precisa ser confirmado antes do 1º login.");
+    console.error("   Reexecute o comando depois de a Evolution estar no ar.");
+  }
   console.log("Reinicie o painel para garantir a leitura da nova credencial.");
+}
+
+/** Código alfanumérico de 10 posições (sem 0/O e 1/I). */
+function gerarCodigo() {
+  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 10; i++) s += alfabeto[randomInt(0, alfabeto.length)];
+  return s;
+}
+
+function mascarar(tel) {
+  const d = String(tel).replace(/\D/g, "");
+  return d.length < 4 ? "••••" : `${d.slice(0, 2)}•••${d.slice(-4)}`;
+}
+
+/** Envia o código por WhatsApp (Evolution). */
+async function enviarCodigo(telefone, codigo, usuario) {
+  const base = (process.env.EVO_URL ?? "").replace(/\/$/, "");
+  const key = process.env.EVO_KEY ?? "";
+  const inst = process.env.EVO_INSTANCE ?? "radar-piloto";
+  if (!base || !key) return { ok: false, erro: "Evolution não configurada (EVO_URL/EVO_KEY)" };
+  const texto = [
+    `🔐 *Alcance — verificação de celular*`,
+    ``,
+    `Olá, ${usuario}!`,
+    `Seu código de acesso é:`,
+    ``,
+    `\`${codigo}\``,
+    ``,
+    `Ele vale por 10 minutos. Se não foi você, ignore esta mensagem.`,
+  ].join("\n");
+  try {
+    const r = await fetch(`${base}/message/sendText/${inst}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: key },
+      body: JSON.stringify({ number: `${telefone}@s.whatsapp.net`, text: texto }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      return { ok: false, erro: `Evolution ${r.status}${t ? `: ${t.slice(0, 120)}` : ""}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: String(e?.message ?? e) };
+  }
 }
 
 principal().catch((e) => {
