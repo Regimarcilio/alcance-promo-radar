@@ -1330,3 +1330,24 @@ Nenhum handler de SIGTERM chama `stop()`: foi o botão ⏹ do painel.
 (`device_removed` / 401 → LOGOUT). A outra instância (`radar-mano-da-divulgacao-cfb`, open) assumiu
 os envios — a rotação evitou a parada total. O número principal precisa de **re-pareamento por QR**
 (aba Números → botão QR).
+
+---
+
+## 2026-10-21 | E6-GRP-01 | "Evolution inacessível" no painel: rotas unificadas + cache de grupos
+
+**Sintoma**: no painel, a lista de grupos mostrava *"Evolution inacessível: This operation was
+aborted — mostrando a última lista salva"*.
+
+**Diagnóstico**: a rota `/api/grupos` (usada pelo select de grupo da aba Piloto/Contas) fazia um
+**fetch próprio** com timeout de **45s** e **cache só em memória** — não era a mesma função
+`listarGrupos()` da rota `/api/monitor/whats-grupos`, e portanto **não gravava o cache em disco**
+(`data/grupos-cache.json` estava com 19,6h de idade). Com a conta no limite do WhatsApp, o
+`fetchAllGroups` passava de 45s → abort → o painel caía na lista salva (que nunca era atualizada).
+
+**Correções**:
+- `src/manager/server.ts` — `/api/grupos` agora usa a **mesma** `listarGrupos()` (um único cache em
+  memória + o cache em disco, refrescado a cada sucesso).
+- `src/monitor/evolution.ts` — timeout do `fetchAllGroups` 90s → **120s** (a Evolution leva 12-20s
+  com a conta limitada; 45s era apertado).
+- Aviso no painel mais claro: *"Evolution demorou demais — mostrando a última lista salva (de N min
+  atrás)"*, e a opção do select passa a mostrar o aviso.

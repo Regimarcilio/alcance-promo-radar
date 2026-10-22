@@ -540,39 +540,31 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/api/grupos") {
     // Grupos reais do WhatsApp pareado (para amarrar categoria → grupo).
-    // fetchAllGroups é lento (~10s): cache de 60s para a UI abrir instantânea.
+    // MESMA fonte do /api/monitor/whats-grupos (listarGrupos): assim há um
+    // único cache em memória + o cache em disco (data/grupos-cache.json),
+    // que é refrescado a cada sucesso.
+    const refresh = url.searchParams.get("refresh") === "1";
+    const t0 = Date.now();
     try {
-      const refresh = url.searchParams.get("refresh") === "1";
-      if (cacheGrupos && !refresh && Date.now() - cacheGrupos.em < 60_000) {
-        json(200, { grupos: cacheGrupos.dados, cache: true });
-        return;
-      }
-      const base = (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
-      const inst = process.env.EVO_INSTANCE ?? "radar-piloto";
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 45000);
-      const r = await fetch(`${base}/group/fetchAllGroups/${inst}?getParticipants=false`, {
-        headers: { apikey: process.env.EVO_KEY ?? "" },
-        signal: ctrl.signal,
-      }).finally(() => clearTimeout(t));
-      if (!r.ok) throw new Error(`Evolution ${r.status}`);
-      const gs: any[] = await r.json();
-      const dados = (Array.isArray(gs) ? gs : []).map((g: any) => ({
-        id: g.id, nome: g.subject || g.name || g.id || "(sem nome)", tamanho: g.size ?? null,
-      }));
-      cacheGrupos = { em: Date.now(), dados };
-      json(200, { grupos: dados });
+      const dados = await listarGrupos(refresh);
+      cacheGrupos = { em: Date.now(), dados: dados.map((g) => ({ id: g.jid, nome: g.nome, tamanho: g.tamanho })) };
+      json(200, { grupos: cacheGrupos.dados });
     } catch (e: any) {
-      // Fallback: última lista salva em disco (Evolution limitada/fora).
+      // Fallback: última lista salva em disco (Evolution lenta/limitada/fora).
       const salvo = gruposDoCache();
-      const lista = cacheGrupos?.dados ?? salvo.grupos;
+      const lista = cacheGrupos?.dados ?? salvo.grupos.map((g) => ({ id: g.jid, nome: g.nome, tamanho: g.tamanho }));
+      const idadeMin = salvo.em ? Math.round((Date.now() - new Date(salvo.em).getTime()) / 60000) : null;
       json(200, {
         grupos: lista,
-        aviso: `Evolution inacessível: ${e.message}${lista.length ? " — mostrando a última lista salva" : ""}`,
+        aviso: lista.length
+          ? `Evolution ${String(e?.message ?? e).includes("aborted") ? "demorou demais" : "inacessível"} — mostrando a última lista salva${idadeMin != null ? ` (de ${idadeMin} min atrás)` : ""}`
+          : `Evolution inacessível: ${String(e?.message ?? e)}`,
+        deCache: true,
       });
     }
     return;
   }
+
   if (req.method === "GET" && url.pathname === "/api/grupos/permissao") {
     // Permissões atuais do grupo (announce = só admins falam; restrict = só admins editam).
     const grupoJid = String(url.searchParams.get("grupoJid") ?? "");
@@ -1868,6 +1860,7 @@ async function carregarGrupos(forcar){
   try{
     const g=await (await fetch('/api/grupos'+(forcar?'?refresh=1':''))).json();
     let opts=(g.grupos||[]).map(function(x){return '<option value="'+x.id+'">'+x.nome+' ('+x.id.slice(0,12)+'…)</option>';}).join('');
+    if(g.aviso)$('pagrupo').innerHTML='<option value="">⚠️ '+esc(g.aviso)+'</option>';
     $('mapgrupo').innerHTML='<option value="">Grupo padrão (.env)</option>'+opts;
     $('pagrupo').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
     if(g.aviso)$('pagrupo').innerHTML+='<option value="" disabled>⚠️ '+g.aviso+'</option>';
