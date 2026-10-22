@@ -4,50 +4,92 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo } from "./evolution.js";
+import { adicionarUmParticipante, buscarPermissaoGrupo, definirPermissaoGrupo } from "./evolution.js";
 import { mockFetch, resJson } from "./test-utils.js";
 
 const GRUPO = "120363000000000000@g.us";
 
-test("adiciona participantes: normaliza para +código e envia action=add", async () => {
+test("adiciona participante: normaliza para +código e envia action=add", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
   let corpo = "";
-  let url = "";
-  const m = mockFetch(async (u, init) => {
-    url = u;
+  const m = mockFetch(async (url, init) => {
+    assert.match(url, /\/group\/updateParticipant\/inst-teste\?groupJid=120363000000000000%40g\.us/);
     corpo = String(init?.body);
-    return resJson({});
+    return resJson({ updateParticipants: [] });
   });
   try {
-    const r = await adicionarParticipantes(GRUPO, ["5511999999999", "5511988888888@s.whatsapp.net"]);
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999");
     assert.equal(r.ok, true);
-    assert.equal(r.adicionados, 2);
-    assert.match(url, /\/group\/updateParticipant\/inst-teste\?groupJid=120363000000000000%40g\.us/);
-    const body = JSON.parse(corpo) as { action: string; participants: string[] };
-    assert.equal(body.action, "add");
-    assert.deepEqual(body.participants, ["+5511999999999", "+5511988888888"]);
+    assert.deepEqual(JSON.parse(corpo), { action: "add", participants: ["+5511999999999"] });
   } finally {
     m.restaurar();
   }
 });
 
-test("números duplicados ou curtos são ignorados", async () => {
+test("adiciona participante: rate-overlimit faz retry", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
-  let corpo = "";
-  const m = mockFetch(async (_u, init) => {
-    corpo = String(init?.body);
-    return resJson({});
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    if (chamadas === 1) {
+      return resJson({ message: ["Error updating participants", "Error: rate-overlimit"] }, 400);
+    }
+    return resJson({ updateParticipants: [] });
   });
   try {
-    const r = await adicionarParticipantes(GRUPO, ["5511999999999", "5511999999999", "123"]);
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 3 });
     assert.equal(r.ok, true);
-    assert.equal(r.adicionados, 1);
-    const body = JSON.parse(corpo) as { participants: string[] };
-    assert.deepEqual(body.participants, ["+5511999999999"]);
+    assert.equal(chamadas, 2, "deveria tentar de novo após o limite");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: limite persistente devolve aviso de limitação", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  const m = mockFetch(async () =>
+    resJson({ message: ["Error updating participants", "Error: rate-overlimit"] }, 400),
+  );
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 2 });
+    assert.equal(r.ok, false);
+    assert.equal(r.limitado, true);
+    assert.match(r.erro ?? "", /rate-overlimit/);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: 409 na resposta = já estava no grupo (sucesso)", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  const m = mockFetch(async () =>
+    resJson({ updateParticipants: [{ status: 409, content: { error: "409" } }] }),
+  );
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999");
+    assert.equal(r.ok, true);
+    assert.equal(r.jaNoGrupo, true);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: grupo/número inválido não toca a rede", async () => {
+  const m = mockFetch(async () => resJson({}));
+  try {
+    const r1 = await adicionarUmParticipante("5511999999999@s.whatsapp.net", "5511999999999");
+    assert.equal(r1.ok, false);
+    const r2 = await adicionarUmParticipante(GRUPO, "123");
+    assert.equal(r2.ok, false);
+    assert.equal(m.chamadas.length, 0);
   } finally {
     m.restaurar();
   }
@@ -56,7 +98,7 @@ test("números duplicados ou curtos são ignorados", async () => {
 test("grupo inválido: erro sem tocar na rede", async () => {
   const m = mockFetch(async () => resJson({}));
   try {
-    const r = await adicionarParticipantes("5511999999999@s.whatsapp.net", ["5511999999999"]);
+    const r = await adicionarUmParticipante("5511999999999@s.whatsapp.net", "5511999999999");
     assert.equal(r.ok, false);
     assert.match(r.erro ?? "", /grupo inválido/);
     assert.equal(m.chamadas.length, 0);
@@ -71,7 +113,7 @@ test("erro da API (403): devolve erro com status, sem lançar", async () => {
   process.env.EVO_INSTANCE = "inst-teste";
   const m = mockFetch(async () => new Response("forbidden", { status: 403 }));
   try {
-    const r = await adicionarParticipantes(GRUPO, ["5511999999999"]);
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999");
     assert.equal(r.ok, false);
     assert.match(r.erro ?? "", /Evolution 403/);
   } finally {

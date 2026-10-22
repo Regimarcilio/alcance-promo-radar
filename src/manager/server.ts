@@ -37,9 +37,10 @@ import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor
 import { expandirLink } from "../monitor/curtos.js";
 import {
   listarGrupos, estadoConexao, contaPareada, reiniciar, desconectar, configurarWebhook,
-  adicionarParticipantes, buscarPermissaoGrupo, definirPermissaoGrupo, gruposDoCache,
+  buscarPermissaoGrupo, definirPermissaoGrupo, gruposDoCache,
   type AcaoGrupo,
 } from "../monitor/evolution.js";
+import { estadoAdicao, iniciarAdicaoGrupo } from "../monitor/grupo-add.js";
 import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
@@ -843,6 +844,10 @@ const server = createServer(async (req, res) => {
     }
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/clientes/grupo/status") {
+    json(200, { ok: true, job: estadoAdicao() });
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/clientes/grupo") {
     // Adiciona os contatos selecionados como participantes de um grupo
     // (Evolution updateParticipant action=add). Exige conta ADMIN + link de
@@ -865,13 +870,10 @@ const server = createServer(async (req, res) => {
         json(400, { erro: "contatos não encontrados (rode 'Puxar contatos' de novo)" });
         return;
       }
-      const r = await adicionarParticipantes(grupoJid, numeros);
-      json(r.ok ? 200 : 502, {
-        ok: r.ok,
-        adicionados: r.adicionados,
-        requested: numeros.length,
-        erro: r.erro,
-      });
+      // Job em BACKGROUND: cada adição pode levar até 60s quando o WhatsApp
+      // limita (rate-overlimit) — travar o request deixaria a tela pendurada.
+      const job = iniciarAdicaoGrupo(grupoJid, numeros);
+      json(200, { ok: true, job, ...estadoAdicao() });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -2334,14 +2336,36 @@ async function adicionarAoGrupo(){
   if(!grupo)return alert('escolha o grupo de destino');
   if(!SELECAO.size)return alert('selecione pelo menos 1 contato');
   const nomeGrupo=$('cligrupoalvo').options[$('cligrupoalvo').selectedIndex].textContent;
-  if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\\n\\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.'))return;
-  $('cliaddmsg').textContent='adicionando…';
+  if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\\n\\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.\\n\\nO envio é feito um a um (o WhatsApp limita adições em rajada) e pode levar alguns minutos.'))return;
+  $('cliaddmsg').innerHTML='<span class="mini">iniciando…</span>';
   const r=await (await fetch('/api/clientes/grupo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupoJid:grupo,jids:[...SELECAO]})})).json();
-  if(r.erro){$('cliaddmsg').textContent='erro: '+r.erro;return alert('Erro: '+r.erro);}
-  $('cliaddmsg').textContent=(r.adicionados||0)+' adicionado(s) ✓';
+  if(r.erro){$('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(r.erro)+'</span>';return;}
   SELECAO.clear();
   renderContatos();
   atualizarCaixaAdicionar();
+  await acompanharAdicaoGrupo();
+}
+// Acompanha o job em background (a adição é 1 por vez e pode levar minutos).
+async function acompanharAdicaoGrupo(){
+  for(let i=0;i<600;i++){
+    const d=await (await fetch('/api/clientes/grupo/status')).json();
+    const j=d.job||{};
+    if(j.rodando){
+      const extra=j.limitado?' · ⚠️ WhatsApp limitou, aguardando janela livre':'';
+      $('cliaddmsg').innerHTML='<span class="mini">adicionando… '+j.feitos+'/'+j.total+' · '+j.adicionados+' no grupo'+(j.jaNoGrupo?(' · '+j.jaNoGrupo+' já estavam'):'')+extra+'</span>';
+      await new Promise(r=>setTimeout(r,2000));
+      continue;
+    }
+    if(j.total>0){
+      const extra=j.limitado?' <span style="color:var(--danger-tx)">· o WhatsApp limitou algumas adições</span>':'';
+      $('cliaddmsg').innerHTML='<span style="color:var(--ok-tx)">'+j.adicionados+' adicionado(s) ✓</span>'
+        +(j.jaNoGrupo?(' <span class="mini">· '+j.jaNoGrupo+' já estavam no grupo</span>'):'')
+        +(j.falhos&&j.falhos.length?(' <span style="color:var(--danger-tx)">· '+j.falhos.length+' não entraram</span>'):'')
+        +extra;
+      return;
+    }
+    return;
+  }
 }
 $('clilist').addEventListener('change',function(ev){
   const el=ev.target;
