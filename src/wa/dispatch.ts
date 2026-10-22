@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
 import { proximaInstancia, registrarEnvio } from "./rotacao.js";
+import { marcarEnvioAtivo } from "../monitor/envio-lock.js";
 
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
@@ -34,6 +35,7 @@ async function comRetry<T>(fn: (instancia: string) => Promise<T>, tentativas = 3
     try {
       const r = await fn(instancia);
       registrarEnvio(instancia);
+      marcarEnvioAtivo(); // o envio tem prioridade sobre adições ao grupo
       return r;
     } catch (e: any) {
       ultimo = e;

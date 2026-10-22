@@ -1351,3 +1351,31 @@ aborted — mostrando a última lista salva"*.
   com a conta limitada; 45s era apertado).
 - Aviso no painel mais claro: *"Evolution demorou demais — mostrando a última lista salva (de N min
   atrás)"*, e a opção do select passa a mostrar o aviso.
+
+---
+
+## 2026-10-21 | E6-PRIO-01 | Envio tem prioridade sobre a adição de contatos ao grupo
+
+**Pergunta do operador**: *"caso esteja enviando novos contatos ao grupo, as mensagens para esse
+grupo ficam paradas?"*
+
+**Resposta honesta (antes da correção)**:
+- No **código** o job de adição NÃO bloqueia (é uma IIFE async, o event loop fica livre);
+- mas na **prática** as duas coisas disputam o mesmo orçamento de taxa do WhatsApp. Quando o limite
+  estoura, o envio falha com 500 → o `comRetry` tentava 3x → e, se ainda assim falhasse, o item era
+  **DESCARTADO** (evento ERRO e a oferta perdida). Já houve caso real: `sendMedia 500` no log.
+- Pior: as adições usam sempre a instância `EVO_INSTANCE` (não passam pela rotação), concentrando o
+  desgaste em um aparelho só.
+
+**Correções**:
+- `src/monitor/envio-lock.ts` (novo) — o envio marca "conta ocupada" por 20s
+  (`ENVIO_ATIVO_MS`); o job de adição **espera** essa folga antes de cada contato
+  (`aguardarEnvioLivre()`). A adição acontece na lacuna entre os envios, nunca competindo.
+- `src/wa/dispatch.ts` — todo envio bem-sucedido chama `marcarEnvioAtivo()`.
+- `src/monitor/fila.ts` — falha **transitória** (rate-overlimit, socket caiu, timeout) agora
+  **reenfileira** o item (mesmo id, até 3 tentativas) em vez de descartá-lo: a oferta não se perde.
+  Antes: evento ERRO e oferta perdida.
+- `src/manager/server.ts` — `/api/monitor/status` expõe `adicao` (job em andamento) para a UI avisar.
+
+**Validação**: `typecheck`/`build` limpos; `npm test` **94/94** (3 novos da fila: reenfileirar
+preserva o id, não duplica, mantém os destinos restantes); smoke OK.

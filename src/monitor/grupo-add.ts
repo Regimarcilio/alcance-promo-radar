@@ -10,6 +10,7 @@
  * assim vier o limite, o job registra e segue para o próximo contato.
  */
 import { adicionarUmParticipante } from "./evolution.js";
+import { aguardarEnvioLivre } from "./envio-lock.js";
 
 export interface EstadoAdicao {
   rodando: boolean;
@@ -78,6 +79,8 @@ export function iniciarAdicaoGrupo(grupoJid: string, numeros: string[]): EstadoA
 
   void (async () => {
     for (const num of lista) {
+      // O envio tem prioridade: a adição só acontece na folga entre envios.
+      await aguardarEnvioLivre();
       const r = await adicionarUmParticipante(grupoJid, num, { esperas: espera, tentativas });
       if (r.ok) estado.adicionados++;
       else if (r.jaNoGrupo) estado.jaNoGrupo++;

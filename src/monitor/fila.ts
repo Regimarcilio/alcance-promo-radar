@@ -33,6 +33,8 @@ export interface ItemFila {
   fonte?: string;
   destinos: string[];
   criadoEm: string;
+  /** quantas vezes o envio falhou e o item voltou para a fila */
+  tentativas?: number;
 }
 
 interface StoreFila {
@@ -102,6 +104,18 @@ export function enfileirar(item: Omit<ItemFila, "id" | "criadoEm">): ItemFila {
   return novo;
 }
 
+/**
+ * Devolve um item para a fila preservando-o (mesmo id, mesma oferta).
+ * Usado quando o envio falha por motivo transitório (limite do WhatsApp):
+ * a oferta volta em vez de ser perdida.
+ */
+export function reenfileirar(item: ItemFila): ItemFila {
+  const s = carregar();
+  if (!s.itens.some((i) => i.id === item.id)) s.itens.push(item);
+  salvar(s);
+  return item;
+}
+
 // --- rajada: > 3 mensagens da MESMA origem dentro de 1 minuto ---------------
 const JANELA_RAJADA_MS = 60_000;
 const LIMITE_RAJADA = 3;
@@ -163,11 +177,26 @@ export async function entregarItem(
         }
       }
     } catch (e: any) {
-      registrarEvento({
-        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
-        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
-        status: "ERRO", detalhe: String(e?.message ?? e).slice(0, 120),
-      });
+      const msg = String(e?.message ?? e);
+      // Falha TRANSITÓRIA (limite do WhatsApp, socket caiu): o item volta
+      // para a fila em vez de ser descartado — a oferta não se perde.
+      const transitorio = /rate-overlimit|500|Connection Closed|socket hang up|terminated|ECONNRESET|ETIMEDOUT|fetch failed|429/i.test(msg);
+      const tentativas = (item.tentativas ?? 0) + 1;
+      const restantes = item.destinos.filter((d) => d !== jid);
+      if (transitorio && tentativas <= 3 && restantes.length > 0) {
+        registrarEvento({
+          em: new Date().toISOString(), origem: item.origem, programa: item.programa,
+          idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
+          status: "ERRO", detalhe: `reenfileirado (${tentativas}/3): ${msg.slice(0, 90)}`,
+        });
+        reenfileirar({ ...item, tentativas, destinos: restantes } as ItemFila);
+      } else {
+        registrarEvento({
+          em: new Date().toISOString(), origem: item.origem, programa: item.programa,
+          idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
+          status: "ERRO", detalhe: msg.slice(0, 120),
+        });
+      }
     }
   }
   return enviados;
