@@ -101,7 +101,7 @@ export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
   if (!forcar && cacheGrupos && Date.now() - cacheGrupos.em < TTL_GRUPOS_MS) {
     return cacheGrupos.dados;
   }
-  const arr = await evoGet<any[]>(`/group/fetchAllGroups/${inst()}?getParticipants=false`, 90000);
+  const arr = await evoGet<any[]>(`/group/fetchAllGroups/${inst()}?getParticipants=false`, 120000);
   if (!Array.isArray(arr)) throw new Error("resposta inesperada de fetchAllGroups");
   const dados = arr
     .map((g) => ({
