@@ -953,6 +953,8 @@ const server = createServer(async (req, res) => {
     json(200, {
       ...resumoMonitor(), autoEnviar: s.autoEnviar, origens: s.regras.length, destinos,
       fila: tamanhoFila(), intervaloFila: intervaloFila(),
+      // adição de contatos em andamento (consome a taxa do WhatsApp)
+      adicao: estadoAdicao(),
       // volume: por que as ofertas não foram para o grupo?
       volume: {
         dedupDias: diasDedup(),
