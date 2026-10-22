@@ -13,7 +13,7 @@ import type { Oportunidade } from "../hunter/schema.js";
 import { completarCandidato } from "../ml/item-page.js";
 import { converterLink } from "../ml/provider.js";
 import { listarContas, salvarConta, definirPadrao, definirMapa, lerMapa, resolver, grupoPara } from "../ml/contas.js";
-import { status as pilotoStatus, start as pilotoStart, stop as pilotoStop, ligarTudo, lerCesta, salvarCesta, limparCesta, retomarLoopsNoBoot } from "../ml/piloto.js";
+import { status as pilotoStatus, start as pilotoStart, stop as pilotoStop, ligarTudo, lerCesta, salvarCesta, limparCesta, retomarLoopsNoBoot, religar as pilotoReligar } from "../ml/piloto.js";
 import { colher, lerMapaVitrine, definirMapaVitrine, folhasDescobertas } from "../ml/vitrine.js";
 import { subcategoriasDe } from "../ml/hub.js";
 import { gerarHeadline } from "../ai/gateway.js";
@@ -374,6 +374,16 @@ const server = createServer(async (req, res) => {
         { conta: b.conta ?? "", category: b.category ?? "", grupo: b.grupo ?? "", sub: b.sub ?? "", qtd: b.qtd ?? 2, intervaloS: b.intervaloS ?? 60, filtro: String(b.filtro ?? "").trim(), minMin: 5, maxMin: 5, programa: b.programa === "amazon" ? "amazon" : "ml" },
         true
       );
+      json(200, { ok: true, loop, ...pilotoStatus() });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/piloto/religar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const loop = pilotoReligar(Number(b.id ?? 0));
       json(200, { ok: true, loop, ...pilotoStatus() });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
@@ -1886,12 +1896,22 @@ async function atualizarPiloto(){
       html+='<div class="malerta warn" style="margin:8px 0">⏸ <b>'+parados.length+' loop(s) parados</b> — nada está sendo publicado por eles. Clique em <b>▶ START</b> (ou <b>▶ LIGA TUDO</b>) para religar. Se o container reiniciou, o piloto pausa tudo por segurança (defina <b>PILOTO_AUTORELIGA=1</b> para religar sozinho).</div>';
     }
     (s.loops||[]).forEach(function(l){
-      html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px">'
+      html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px'+(l.rodando?'':';opacity:.75')+'">'
         +'<b>#'+l.id+'</b> '+l.conta+' → '+l.category+' → '+String(l.grupo).slice(0,20)+'… '
+        +(l.programa&&l.programa!=='ml'?'['+l.programa+'] ':'')
         +'• enviadas: <b>'+l.enviadas+'</b>'
         +(l.ultimaMsg?' • última: '+horaLocal(l.ultimaMsg):'')
         +(l.proximaEm?' • próxima: '+horaLocal(l.proximaEm):'')
+        +(l.rodando?'':' <span class="mini">(parado)</span>')
+        +(l.rodando?'':' <button class="mbtn ok" style="width:auto;padding:4px 10px;margin:0" onclick="pilotoReligarUI('+l.id+')">▶ religar</button>')
         +' <button class="ghost" style="width:auto;padding:4px 10px;margin:0" onclick="pilotoStop('+l.id+')">⏹</button></div>';
+    });
+    // configs salvas de loops parados: religar sem redigitar nada
+    (s.presets||[]).forEach(function(p,i){
+      html+='<div style="border:1px dashed var(--border-strong);border-radius:10px;padding:6px 8px;margin:6px 0;font-size:12.5px;opacity:.85">'
+        +'<b>⏸ config salva</b> '+esc(p.conta||'(mapa)')+' → '+esc(p.category)+(p.sub?('/'+esc(p.sub)):'')+' → '+esc(String(p.grupo).slice(0,20))+'…'
+        +(p.programa&&p.programa!=='ml'?' ['+esc(p.programa)+']':'')
+        +' <button class="mbtn ok" style="width:auto;padding:4px 10px;margin:0" onclick="pilotoReligarUI('+i+')">▶ religar</button></div>';
     });
     html+='<div style="margin-top:6px"><b>'+n+'/5 loops</b> <button class="ghost" style="width:auto;padding:4px 10px" onclick="pilotoStopAll()">⏹ parar todos</button></div>';
     $('pstatus').innerHTML=html;
@@ -1905,6 +1925,11 @@ async function pilotoStart(){
   atualizarPiloto();carregarCesta();
 }
 function horaLocal(iso){try{return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+async function pilotoReligarUI(id){
+  const r=await (await fetch('/api/piloto/religar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:Number(id)})})).json();
+  if(r.erro)return alert(r.erro);
+  atualizarPiloto();
+}
 async function pilotoStop(id){
   await fetch('/api/piloto/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
   atualizarPiloto();

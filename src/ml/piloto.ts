@@ -87,6 +87,8 @@ export interface LoopState extends PilotoCfg {
 interface Store {
   loops: LoopState[];
   logs: string[];
+  /** configs dos loops parados (para religar com 1 clique, sem redigitar) */
+  presets: PilotoCfg[];
 }
 
 const timers = new Map<number, NodeJS.Timeout>();
@@ -172,7 +174,7 @@ let mem: Store | null = null;
 
 function store(): Store {
   if (mem) return mem;
-  let s: Store = { loops: [], logs: [] };
+  let s: Store = { loops: [], logs: [], presets: [] };
   let pausados = 0;
   // PILOTO_AUTORELIGA=1: retoma os loops após reinício. Padrão (0) é pausar
   // tudo por segurança — o painel avisa e o operador clica em START.
@@ -192,9 +194,10 @@ function store(): Store {
             rodando: autoreliga ? l.rodando : false,
           })),
           logs: Array.isArray(raw.logs) ? raw.logs : [],
+          presets: Array.isArray(raw.presets) ? (raw.presets as PilotoCfg[]) : [],
         };
       } else if (raw && typeof raw === "object" && ("category" in raw || "conta" in raw)) {
-        s = { loops: [], logs: Array.isArray(raw.logs) ? raw.logs : [] };
+        s = { loops: [], logs: Array.isArray(raw.logs) ? raw.logs : [], presets: [] };
       }
     }
   } catch {
@@ -725,6 +728,7 @@ export function status() {
     max: MAX_LOOPS,
     rodando: s.loops.filter((l) => l.rodando).length,
     loops: s.loops,
+    presets: s.presets,
     logs: [...s.logs].reverse(),
     cestas: mapa,
   };
@@ -795,6 +799,31 @@ export function ligarTudo(): { ligados: LoopState[]; pulados: string[] } {
   }
   return { ligados, pulados };
 }
+/**
+ * Religa um loop parado — seja o que ainda está na grade (pausado por
+ * reinício) ou uma config salva nos presets (loop removido com ⏹).
+ */
+export function religar(id: number): LoopState {
+  const s = store();
+  const naGrade = s.loops.find((l) => l.id === id);
+  if (naGrade) {
+    naGrade.rodando = true;
+    naGrade.iniciadaEm = new Date().toISOString();
+    naGrade.proximaEm = new Date(Date.now() + 2000).toISOString();
+    salvar();
+    log(`#${id} ▶️ religado.`);
+    agendar(naGrade);
+    timers.set(id, setTimeout(() => tick(id), 2000));
+    return naGrade;
+  }
+  const preset = s.presets.find((_, i) => i === id);
+  if (!preset) throw new Error("loop não encontrado para religar");
+  const loop = start(preset, true);
+  s.presets = s.presets.filter((_, i) => i !== id);
+  salvar();
+  return loop;
+}
+
 export function stop(id?: number): void {
   const s = store();
   if (id == null) {
@@ -806,8 +835,18 @@ export function stop(id?: number): void {
     const t = timers.get(id);
     if (t) clearTimeout(t);
     timers.delete(id);
+    const alvo = s.loops.find((l) => l.id === id);
     s.loops = s.loops.filter((l) => l.id !== id);
-    log(`#${id} ⏹️ parado e removido do grid.`);
+    // guarda a config para poder religar com 1 clique (sem redigitar tudo)
+    if (alvo) {
+      s.presets.unshift({
+        conta: alvo.conta, category: alvo.category, grupo: alvo.grupo, sub: alvo.sub ?? "",
+        filtro: alvo.filtro ?? "", qtd: alvo.qtd ?? 2, intervaloS: alvo.intervaloS ?? 60,
+        minMin: alvo.minMin, maxMin: alvo.maxMin, programa: (alvo.programa ?? "ml") as "ml" | "amazon",
+      });
+      s.presets = s.presets.slice(0, 5);
+    }
+    log(`#${id} ⏹️ parado (config salva para religar).`);
   }
   salvar();
 }
