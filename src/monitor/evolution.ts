@@ -97,10 +97,8 @@ function salvarCacheGrupos(dados: GrupoWhats[]): void {
   }
 }
 
-export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
-  if (!forcar && cacheGrupos && Date.now() - cacheGrupos.em < TTL_GRUPOS_MS) {
-    return cacheGrupos.dados;
-  }
+/** Busca a lista direto na Evolution (e grava o cache em disco). */
+async function buscarGruposNaEvolution(): Promise<GrupoWhats[]> {
   const arr = await evoGet<any[]>(`/group/fetchAllGroups/${inst()}?getParticipants=false`, 120000);
   if (!Array.isArray(arr)) throw new Error("resposta inesperada de fetchAllGroups");
   const dados = arr
@@ -116,6 +114,42 @@ export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
   cacheGrupos = { em: Date.now(), dados };
   salvarCacheGrupos(dados);
   return dados;
+}
+
+let revalidando = false;
+
+/**
+ * Lista de grupos da conta pareada.
+ *
+ * Stale-while-revalidate: sem cache em memória (ex.: após reiniciar o
+ * container) devolve IMEDIATAMENTE a última lista salva em disco e atualiza em
+ * segundo plano — assim o painel não fica 10-30s "carregando grupos…".
+ */
+export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
+  const agora = Date.now();
+  if (!forcar && cacheGrupos && agora - cacheGrupos.em < TTL_GRUPOS_MS) {
+    return cacheGrupos.dados;
+  }
+  if (!forcar && !cacheGrupos) {
+    const salvo = gruposDoCache();
+    if (salvo.grupos.length) {
+      cacheGrupos = { em: agora, dados: salvo.grupos };
+      // revalida em background (não bloqueia a tela)
+      void (async () => {
+        if (revalidando) return;
+        revalidando = true;
+        try {
+          await buscarGruposNaEvolution();
+        } catch {
+          /* mantém a lista salva */
+        } finally {
+          revalidando = false;
+        }
+      })();
+      return salvo.grupos;
+    }
+  }
+  return buscarGruposNaEvolution();
 }
 
 /** Força reconexão do socket (destrava instância presa em "connecting"). */
