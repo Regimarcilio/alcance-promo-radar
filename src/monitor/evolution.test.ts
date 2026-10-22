@@ -1,7 +1,7 @@
 /** Testes da adição de participantes em grupo (Evolution updateParticipant). */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { adicionarUmParticipante, buscarPermissaoGrupo, definirPermissaoGrupo } from "./evolution.js";
@@ -9,10 +9,30 @@ import { mockFetch, resJson } from "./test-utils.js";
 
 const GRUPO = "120363000000000000@g.us";
 
+/**
+ * Ambiente isolado: o store de instâncias precisa conhecer a instância do
+ * teste (as operações de serviço usam sempre o número principal).
+ */
+function ambiente(principal = "inst-teste"): string {
+  const dir = mkdtempSync(join(tmpdir(), "alcance-evo-"));
+  writeFileSync(
+    join(dir, "instancias.json"),
+    JSON.stringify({
+      itens: [
+        { instancia: principal, nome: "Principal", ativo: true, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+        { instancia: "secundario-1", nome: "Secundário 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+      ],
+    }),
+  );
+  process.env.ALCANCE_DATA_DIR = dir;
+  return dir;
+}
+
 test("adiciona participante: normaliza para +código e envia action=add", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   let corpo = "";
   const m = mockFetch(async (url, init) => {
     assert.match(url, /\/group\/updateParticipant\/inst-teste\?groupJid=120363000000000000%40g\.us/);
@@ -32,6 +52,7 @@ test("adiciona participante: rate-overlimit faz retry", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   let chamadas = 0;
   const m = mockFetch(async () => {
     chamadas++;
@@ -53,6 +74,7 @@ test("adiciona participante: limite persistente devolve aviso de limitação", a
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   const m = mockFetch(async () =>
     resJson({ message: ["Error updating participants", "Error: rate-overlimit"] }, 400),
   );
@@ -70,6 +92,7 @@ test("adiciona participante: 409 na resposta = já estava no grupo (sucesso)", a
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   const m = mockFetch(async () =>
     resJson({ updateParticipants: [{ status: 409, content: { error: "409" } }] }),
   );
@@ -111,6 +134,7 @@ test("erro da API (403): devolve erro com status, sem lançar", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   const m = mockFetch(async () => new Response("forbidden", { status: 403 }));
   try {
     const r = await adicionarUmParticipante(GRUPO, "5511999999999");
@@ -125,6 +149,7 @@ test("permissão: updateSetting com action=announcement", async () => {
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   let url = "";
   let corpo = "";
   const m = mockFetch(async (u, init) => {
@@ -158,6 +183,7 @@ test("permissão: 403 da Evolution avisa que a conta precisa ser admin", async (
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   const m = mockFetch(async () => new Response("forbidden", { status: 403 }));
   try {
     const r = await definirPermissaoGrupo(GRUPO, "announcement");
@@ -173,6 +199,7 @@ test("permissão: estado atual (announce/restrict) via findGroupInfos", async ()
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
   const m = mockFetch(async () =>
     resJson({ subject: "Mano dos Achadinhos", size: 5, announce: true, restrict: false }),
   );

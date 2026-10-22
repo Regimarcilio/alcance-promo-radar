@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { instanciaParaServico } from "../wa/rotacao.js";
 
 export interface GrupoWhats {
   jid: string;
@@ -216,8 +217,10 @@ export async function adicionarUmParticipante(
       await new Promise((r) => setTimeout(r, esperas));
     }
     try {
+      // Operação de SERVIÇO → sempre no número principal.
+      const alvo = await instanciaParaServico();
       const res = await fetch(
-        `${base()}/group/updateParticipant/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+        `${base()}/group/updateParticipant/${alvo}?groupJid=${encodeURIComponent(jid)}`,
         {
           method: "POST",
           headers: { apikey: key(), "Content-Type": "application/json" },
@@ -307,8 +310,9 @@ export async function definirPermissaoGrupo(
   const jid = String(groupJid ?? "").trim();
   if (!jid.endsWith("@g.us")) return { ok: false, erro: "grupo inválido (esperado JID @g.us)" };
   try {
+    const alvo = await instanciaParaServico();
     const res = await fetch(
-      `${base()}/group/updateSetting/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+      `${base()}/group/updateSetting/${alvo}?groupJid=${encodeURIComponent(jid)}`,
       {
         method: "POST",
         headers: { apikey: key(), "Content-Type": "application/json" },

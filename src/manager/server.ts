@@ -44,6 +44,7 @@ import { estadoAdicao, iniciarAdicaoGrupo } from "../monitor/grupo-add.js";
 import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
+  definirPrincipal, listarInstancias as listarInstanciasWhats,
 } from "../wa/rotacao.js";
 import {
   autenticar, auditar, checarLimite, carregarUsuarios, configurarAuth, cookieExpirado, cookieSessao,
@@ -749,6 +750,16 @@ const server = createServer(async (req, res) => {
       const b = JSON.parse(await lerCorpo(req));
       definirAtivoWhats(String(b.instancia ?? ""), b.ativo === true);
       json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/principal") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirPrincipal(String(b.instancia ?? ""), b.principal !== false);
+      json(200, { ok: true, instancias: listarInstanciasWhats().map((i) => ({ instancia: i.instancia, principal: !!i.principal })) });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -1670,7 +1681,7 @@ body{padding:0;max-width:none;margin:0}
 </div>
 <div class="panel ac-numeros">
 <div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
-<div class="mini" style="margin-bottom:6px">Sorteio ponderado entre os números <b>ativos e conectados</b>. Número caído é pulado. A conta ML continua a mesma.</div>
+<div class="mini" style="margin-bottom:6px"><b>★ Principal</b> = número de casa: fica com as <b>operações de serviço</b> (adicionar contatos ao grupo, permissões). Os <b>secundários</b> assumem integralmente o <b>envio de mensagens</b> — se o principal cair, o envio continua. Sem secundário disponível, o envio volta ao principal. A conta ML continua a mesma.</div>
 <div id="minstlist" class="mini">carregando…</div>
 <div style="display:flex;gap:6px;margin-top:8px">
 <input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
@@ -2063,6 +2074,7 @@ async function carregarInstancias(){
       const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
       let acoes='';
       if(i.estado!=='open') acoes+='<button class="mbtn" onclick="verQR(\\''+i.instancia+'\\')">QR</button>';
+      acoes+='<button class="mbtn" onclick="instPrincipal(\\''+i.instancia+'\\','+(i.principal?'false':'true')+')">'+(i.principal?'★ principal':'☆ principal')+'</button>';
       acoes+='<button class="mbtn" onclick="instAtivo(\\''+i.instancia+'\\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
       acoes+='<button class="mbtn" onclick="instPeso(\\''+i.instancia+'\\','+i.peso+')">peso</button>';
       acoes+='<button class="mbtn" onclick="instRemover(\\''+i.instancia+'\\')">🗑</button>';
@@ -2091,6 +2103,10 @@ async function verQR(inst){
   const r=await (await fetch('/api/instancias/qr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst})})).json();
   if(r.erro)return alert(r.erro);
   mostrarQR(r.qr,inst);
+}
+async function instPrincipal(inst,principal){
+  await fetch('/api/instancias/principal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,principal:principal})});
+  carregarInstancias();
 }
 async function instAtivo(inst,ativo){
   await fetch('/api/instancias/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,ativo:ativo})});
