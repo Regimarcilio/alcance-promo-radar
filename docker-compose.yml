@@ -1,13 +1,57 @@
+# ==========================================================================
+# alcance-promo-radar — stack principal (manager + Evolution API v2 + Postgres)
+#
+# Hardening aplicado:
+#   - segredos obrigatórios falham no `compose config/up` (${VAR:?mensagem});
+#   - portas publicadas apenas em loopback por padrão;
+#   - containers sem privilégios extras, com limites de recurso e logs rotativos;
+#   - manager com rootfs read-only e tmpfs para /tmp;
+#   - Postgres isolado em rede interna; só a Evolution fala com ele.
+#
+# Uso:
+#   cp .env.example .env   # preencha EVO_DB_PASS, EVO_KEY, SESSION_SECRET, WEBHOOK_KEY
+#   docker compose up -d --build
+# ==========================================================================
+
 services:
   postgres-radar:
     image: postgres:16-alpine
     container_name: evolution_pg_radar
     environment:
-      POSTGRES_USER: radar
-      POSTGRES_PASSWORD: ${EVO_DB_PASS:-troque_a_senha_do_banco}
-      POSTGRES_DB: evolution
+      POSTGRES_USER: ${EVO_DB_USER:-radar}
+      # Sem default fraco: o compose recusa subir sem a senha.
+      POSTGRES_PASSWORD: ${EVO_DB_PASS:?EVO_DB_PASS obrigatorio (defina no .env)}
+      POSTGRES_DB: ${EVO_DB_NAME:-evolution}
+      TZ: America/Sao_Paulo
     volumes:
       - evo_pg_radar:/var/lib/postgresql/data
+    networks:
+      - evo_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # O entrypoint oficial precisa de chown/gosu; todo o resto é descartado.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    stop_grace_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    shm_size: 128mb
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
   evolution:
@@ -16,50 +60,168 @@ services:
     image: evoapicloud/evolution-api:v2.3.7
     container_name: evolution_api_radar
     ports:
-      # Nesta máquina a 8080 já é outra Evolution (projeto ecommerce) — usamos 8082 via EVO_HOST_PORT.
-      - "${EVO_HOST_PORT:-8080}:8080"
+      # Nesta máquina a 8080 já é outra Evolution (projeto ecommerce).
+      # Publica somente em loopback: QR/painel não ficam expostos na LAN.
+      - "127.0.0.1:${EVO_HOST_PORT:-8082}:8080"
     environment:
-      - SERVER_URL=${EVO_SERVER_URL:-http://localhost:8080}
-      - AUTHENTICATION_API_KEY=${EVO_KEY}
-      # v2.3.x exige Postgres (Prisma). Piloto: só instância+sessão, sem salvar mensagens.
-      - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://radar:${EVO_DB_PASS:-troque_a_senha_do_banco}@postgres-radar:5432/evolution?schema=public
-      - DATABASE_SAVE_DATA_INSTANCE=true
-      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
-      - DATABASE_SAVE_MESSAGE_UPDATE=false
-      - DATABASE_SAVE_DATA_CONTACTS=false
-      - DATABASE_SAVE_DATA_CHATS=false
-      - DATABASE_SAVE_DATA_LABELS=false
-      - DATABASE_SAVE_DATA_HISTORIC=false
-      - CACHE_REDIS_ENABLED=false
-      - CACHE_LOCAL_ENABLED=true
+      SERVER_URL: ${EVO_SERVER_URL:-http://127.0.0.1:8082}
+      AUTHENTICATION_API_KEY: ${EVO_KEY:?EVO_KEY obrigatorio (defina no .env)}
+      # v2.3.x exige Postgres (Prisma). Piloto: só instância+sessão.
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      # ATENÇÃO: se EVO_DB_PASS tiver caracteres especiais (@ : / ? #), eles
+      # precisam estar URL-encoded nesta URI.
+      DATABASE_CONNECTION_URI: postgresql://${EVO_DB_USER:-radar}:${EVO_DB_PASS:?EVO_DB_PASS obrigatorio (defina no .env)}@postgres-radar:5432/${EVO_DB_NAME:-evolution}?schema=public
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      TZ: America/Sao_Paulo
     volumes:
       - evo_instances:/evolution/instances
+    networks:
+      - evo_db
+      - app_net
     depends_on:
-      - postgres-radar
+      postgres-radar:
+        condition: service_healthy
+    healthcheck:
+      # A raiz responde assim que o servidor HTTP da Evolution sobe; qualquer
+      # status < 500 serve como "processo vivo" (não depende de instância pareada).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 8s
+      retries: 10
+      start_period: 60s
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    stop_grace_period: 30s
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
+
+  manager-init:
+    # One-shot: corrige o dono de data/ e logs/ (o container antigo rodava como
+    # root e deixava esses bind mounts root:root). Roda como root APENAS para
+    # chown, sem rede e com todas as capabilities exceto as necessárias.
+    image: promo-radar-manager:${MANAGER_IMAGE_TAG:-local}
+    pull_policy: never  # usa a imagem construída por `manager` (não tenta registry)
+    container_name: automensagem_manager_init
+    healthcheck:
+      disable: true
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /app/data /app/logs && chown -R 1000:1000 /app/data /app/logs"]
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "1"
 
   manager:
     # Gerenciador web :8091 — reinicia sozinho se parar.
     build:
       context: .
       dockerfile: Dockerfile.manager
-    image: automensagemwhats-manager:latest
+    image: promo-radar-manager:${MANAGER_IMAGE_TAG:-local}
     container_name: automensagem_manager
+    # A porta do HOST fica em loopback por padrão. Para expor na LAN, use
+    # MANAGER_BIND=0.0.0.0 E coloque um reverse proxy TLS na frente.
     ports:
-      - "${MANAGER_PORT:-8091}:8091"
+      - "${MANAGER_BIND:-127.0.0.1}:${MANAGER_PORT:-8091}:8091"
     env_file:
-      - .env
+      # O compose só exige o arquivo quando ele existe; as variáveis
+      # obrigatórias são cobradas abaixo (${...:?}) e o app valida as demais.
+      - path: .env
+        required: false
     environment:
-      - MANAGER_PORT=8091
-      - TZ=America/Sao_Paulo
-      # dentro do compose, a Evolution está no hostname "evolution" (não localhost)
-      - EVO_URL=http://evolution:8080
+      # Dentro do container o bind precisa ser 0.0.0.0; a exposição é limitada
+      # pelo MANAGER_BIND no mapeamento de portas.
+      HOST: "0.0.0.0"
+      MANAGER_PORT: "8091"
+      ALCANCE_DATA_DIR: /app/data
+      TZ: America/Sao_Paulo
+      # Dentro do compose, a Evolution está no hostname "evolution".
+      EVO_URL: http://evolution:8080
+      # Default seguro (cookie só via HTTPS). Use 0 apenas em HTTP local.
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    networks:
+      app_net:
+        aliases:
+          # Compatibilidade com WEBHOOK_URL antigo (promo_radar_manager:8091).
+          - promo_radar_manager
+    depends_on:
+      manager-init:
+        condition: service_completed_successfully
+      postgres-radar:
+        condition: service_healthy
+      evolution:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
+
 volumes:
   evo_instances:
   evo_pg_radar:
+
+networks:
+  # Rede do manager + Evolution: a Evolution também usa esta rede para sair
+  # para a internet (WhatsApp). Por isso ela NÃO é internal.
+  app_net:
+    driver: bridge
+  # Postgres fica isolado: sem rota para a internet e só a Evolution o acessa.
+  evo_db:
+    driver: bridge
+    internal: true

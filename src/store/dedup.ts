@@ -1,10 +1,9 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { dataDirAtual } from "../config/paths.js";
+import { gravarJsonAtomico } from "./json.js";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "envios.json");
+const file = join(dataDirAtual(), "envios.json");
 
 export function hashEnvio(mlbId: string, preco: number, cupom?: string | null): string {
   return `${mlbId}|${preco}|${(cupom ?? "").toUpperCase()}`;
@@ -36,9 +35,16 @@ export function jaEnviado(mlbId: string, preco: number, cupom?: string | null, d
   }
 }
 
-export function registrarEnvio(mlbId: string, preco: number, cupom?: string | null): void {
-  mkdirSync(dataDir, { recursive: true });
-  const arr = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+export function registrarEnvio(mlbId: string, preco: number, cupom?: string | null, dias = 7): void {
+  let arr: { hash: string; data: string; dia?: string }[] = [];
+  try {
+    arr = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+    if (!Array.isArray(arr)) arr = [];
+  } catch {
+    arr = [];
+  }
+  const corte = Date.now() - dias * 86_400_000;
+  arr = arr.filter((e) => new Date(e.data).getTime() >= corte);
   arr.push({ hash: hashEnvio(mlbId, preco, cupom), data: new Date().toISOString(), dia: diaLocal() });
-  writeFileSync(file, JSON.stringify(arr, null, 2));
+  gravarJsonAtomico(file, arr);
 }

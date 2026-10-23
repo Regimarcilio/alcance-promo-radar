@@ -1,23 +1,107 @@
 name: ci
+
 on:
   push:
     branches: [develop, main, master, "release/*"]
   pull_request:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  quality:
+    name: quality (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      - run: npm run smoke:manager
-      - run: node dist/cli.js categorias:list
-      - run: node dist/cli.js hunter:buscar --category MLB3937 --q "Orient" --limite 1
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Testes (node:test)
+        run: npm test
+
+      - name: Smoke do manager
+        run: npm run smoke:manager
+
+      - name: CLI (categorias)
+        run: node dist/cli.js categorias:list
+
+      # Depende de rede externa (Mercado Livre); não deve derrubar o gate.
+      - name: CLI (hunter — tolerante a falha de rede)
+        continue-on-error: true
+        run: node dist/cli.js hunter:buscar --category MLB3937 --q "Orient" --limite 1
+
+      - name: Auditoria de dependências de produção (high+)
+        if: matrix.node == 20
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-scan:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Para repositórios privados de organização, configure o secret
+      # GITLEAKS_LICENSE. Em repositórios públicos o action roda sem licença.
+      - name: Gitleaks (working tree)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  docker:
+    name: docker build + trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [quality, secret-scan]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build da imagem (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.manager
+          tags: promo-radar-manager:ci
+          load: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy (falha em CRITICAL/HIGH com correção disponível)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: promo-radar-manager:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+          vuln-type: "os,library"

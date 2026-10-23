@@ -1,5 +1,12 @@
 # 14 — Relatório Geral do Projeto — Alcance (`promo-radar-novo`)
 
+> **RETRATO HISTÓRICO — 2026-10-21 (pré-publicação).**
+> Este relatório descreve o estado naquele dia e foi preservado como evidência. Ele **não** é a fonte
+> de verdade atual: menciona 22 testes (hoje são 99 em 17 arquivos), uma pendência de remoto já
+> resolvida e funcionalidades que mudaram depois (por exemplo, a política principal × secundários dos
+> números). Para requisitos e estado vigentes, use `docs/00-INDICE.md`, `docs/SRS-v0.4.md`,
+> `docs/04-ADRs/` e `CHANGELOG.md`. O conteúdo abaixo **não foi reescrito**.
+
 > Levantamento: 2026-10-21 · Branch `develop` · Estado no início do levantamento (pré-publicação)
 > O histórico público foi sanitizado e reescrito; os hashes antigos não existem no remoto.
 > Método: inspeção de código, documentação, Git, runtime (containers/HTTP/logs) e execução de build/testes.

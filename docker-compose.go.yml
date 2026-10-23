@@ -1,32 +1,107 @@
+# ==========================================================================
 # Evolution GO (engine alternativo) — exige PostgreSQL.
 # Fonte: https://docs.evolutionfoundation.com.br/evolution-go/installation
-# Sobe em 8081 para conviver com a v2 (8080). Nunca suba os dois na mesma porta.
+#
+# Sobe em 8081 para conviver com a v2 (8082). Nunca suba os dois na mesma porta.
+# Versão pinada (não use latest): evoapicloud/evolution-go:0.7.2-beta.
+# ==========================================================================
+
 services:
   postgres-go:
-    image: postgres:15
+    image: postgres:16-alpine
+    container_name: evolution_go_pg
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${EVO_GO_DB_PASS:-troque_a_senha_do_banco}
+      POSTGRES_USER: ${EVO_GO_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${EVO_GO_DB_PASS:?EVO_GO_DB_PASS obrigatorio (defina no .env)}
+      # O script de init cria evogo_users; este é o banco de auth.
+      POSTGRES_DB: ${EVO_GO_AUTH_DB:-evogo_auth}
+      TZ: America/Sao_Paulo
     volumes:
       - evo_go_pg:/var/lib/postgresql/data
+      # Só roda na primeira inicialização do volume. Se o volume já existe e
+      # evogo_users não foi criado, execute manualmente o SQL no container.
+      - ./scripts/init-evogo.sql:/docker-entrypoint-initdb.d/10-init-evogo.sql:ro
+    networks:
+      - go_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    stop_grace_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
   evolution-go:
-    image: evoapicloud/evolution-go:latest
+    image: evoapicloud/evolution-go:0.7.2-beta
+    container_name: evolution_go_api
     ports:
-      - "8081:8080"
+      # Painel/API somente em loopback.
+      - "127.0.0.1:${EVO_GO_HOST_PORT:-8081}:8080"
     environment:
-      SERVER_PORT: 8080
+      SERVER_PORT: "8080"
       CLIENT_NAME: evolution
-      GLOBAL_API_KEY: ${EVO_GO_KEY:-troque_aqui}
-      POSTGRES_AUTH_DB: postgres://postgres:${EVO_GO_DB_PASS:-troque_a_senha_do_banco}@postgres-go:5432/evogo_auth?sslmode=disable
-      POSTGRES_USERS_DB: postgres://postgres:${EVO_GO_DB_PASS:-troque_a_senha_do_banco}@postgres-go:5432/evogo_users?sslmode=disable
+      GLOBAL_API_KEY: ${EVO_GO_KEY:?EVO_GO_KEY obrigatorio (defina no .env)}
+      # Postgres local/privado na rede do compose: sslmode=disable é aceitável
+      # porque o tráfego não sai do bridge. Em Postgres externo, use
+      # sslmode=require/verify-full.
+      # ATENÇÃO: URL-encode a senha se ela tiver @ : / ? #.
+      POSTGRES_AUTH_DB: postgres://${EVO_GO_DB_USER:-postgres}:${EVO_GO_DB_PASS:?EVO_GO_DB_PASS obrigatorio (defina no .env)}@postgres-go:5432/${EVO_GO_AUTH_DB:-evogo_auth}?sslmode=disable
+      POSTGRES_USERS_DB: postgres://${EVO_GO_DB_USER:-postgres}:${EVO_GO_DB_PASS:?EVO_GO_DB_PASS obrigatorio (defina no .env)}@postgres-go:5432/${EVO_GO_USERS_DB:-evogo_users}?sslmode=disable
       DATABASE_SAVE_MESSAGES: "false"
       WADEBUG: INFO
       LOGTYPE: console
+      TZ: America/Sao_Paulo
+    networks:
+      - go_db
+      - go_app
     depends_on:
-      - postgres-go
+      postgres-go:
+        condition: service_healthy
+    healthcheck:
+      # /server/ok é público e responde sem instância pareada.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/server/ok || exit 1"]
+      interval: 20s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:
   evo_go_pg:
+
+networks:
+  # Rede externa: a Evolution GO precisa sair para o WhatsApp.
+  go_app:
+    name: alcance_promo_radar_go
+  # Postgres isolado da internet; só a Evolution GO o acessa.
+  go_db:
+    name: alcance_promo_radar_go_db
+    internal: true

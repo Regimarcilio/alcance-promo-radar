@@ -62,3 +62,64 @@ test("encurtador genérico: destino sem programa conhecido devolve null", async 
     m.restaurar();
   }
 });
+
+test("link.amazon → amzlinks.in: segue os dois saltos e acha o produto", async () => {
+  const m = mockFetch(async (url) => {
+    if (url.includes("link.amazon")) return resRedirect("https://amzlinks.in/B0ABC12345");
+    if (url.includes("amzlinks.in")) return resRedirect("https://www.amazon.com.br/dp/B0ABC12345?tag=origem-20");
+    return new Response(null, { status: 404 });
+  });
+  try {
+    const r = await expandirLink("https://link.amazon/B0ABC12345");
+    assert.equal(r?.programa, "amazon");
+    assert.equal(r?.idProduto, "B0ABC12345");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("shozap → link.amazon → amzlinks.in: resolve a cadeia de 3 saltos", async () => {
+  const m = mockFetch(async (url) => {
+    if (url.includes("shozap.com.br")) return resRedirect("https://link.amazon/B0XYZ98765");
+    if (url.includes("link.amazon")) return resRedirect("https://amzlinks.in/B0XYZ98765");
+    if (url.includes("amzlinks.in")) return resRedirect("https://www.amazon.com.br/dp/B0XYZ98765?tag=origem-20");
+    return new Response(null, { status: 404 });
+  });
+  try {
+    const r = await expandirLink("https://amazon.shozap.com.br/abc123");
+    assert.equal(r?.programa, "amazon");
+    assert.equal(r?.idProduto, "B0XYZ98765");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("mercadolivre.com: segue redirect e classifica como ML", async () => {
+  const m = mockFetch(async (url) => {
+    if (url.includes("mercadolivre.com")) return resRedirect("https://produto.mercadolivre.com.br/MLB-123456789-produto");
+    return new Response(null, { status: 404 });
+  });
+  try {
+    const r = await expandirLink("https://mercadolivre.com/sec/abc123");
+    assert.equal(r?.programa, "mercadolivre");
+    assert.equal(r?.idProduto, "MLB123456789");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("link.emipefps.com: resolve pelo RPC get_link_by_slug", async () => {
+  const m = mockFetch(async (url) => {
+    if (url.includes("get_link_by_slug")) {
+      return resJson([{ resolved_url: "https://www.amazon.com.br/dp/B0EPIPE123?tag=origem-20" }]);
+    }
+    return new Response(null, { status: 404 });
+  });
+  try {
+    const r = await expandirLink("https://link.emipefps.com/abc123");
+    assert.equal(r?.programa, "amazon");
+    assert.equal(r?.idProduto, "B0EPIPE123");
+  } finally {
+    m.restaurar();
+  }
+});

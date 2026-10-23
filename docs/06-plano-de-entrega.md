@@ -1,5 +1,10 @@
 # 06 — Plano de Entrega — promo-radar-novo
 
+> **PLANEJAMENTO HISTÓRICO (v0.3, 2026-10-17).** Escrito antes da implementação. A estrutura de
+> pastas, variáveis de ambiente e o modo "duplo" evoluíram: o projeto hoje está em **v0.8.0** e a
+> fonte vigente de requisitos é [`SRS-v0.4.md`](SRS-v0.4.md); o índice geral é
+> [`00-INDICE.md`](00-INDICE.md). Onde houver divergência, valem o SRS v0.4 e o código.
+
 > v0.3 | 2026-10-17 | Branch: `develop` | Modo duplo: AUTOMÁTICO (E1–E5) + MONITOR (E6)
 
 ## 1. Estrutura proposta (criar na Sprint 1)

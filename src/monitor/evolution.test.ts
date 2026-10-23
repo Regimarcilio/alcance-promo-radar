@@ -245,3 +245,30 @@ test("lista de grupos: cache em disco sobrevive a falha da Evolution", async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("grupos: consulta todas as instâncias ativas e une os grupos", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  // .env de produção pode continuar com o nome de fábrica; o store manda.
+  process.env.EVO_INSTANCE = "inst-antiga";
+  const dir = ambiente("inst-principal");
+  const mod = await import(`./evolution.js?v=${Math.random()}`);
+  const urls: string[] = [];
+  const m = mockFetch(async (url) => {
+    urls.push(String(url));
+    if (String(url).includes("inst-principal")) {
+      return resJson([{ id: "120363111@g.us", subject: "Grupo do principal", size: 1 }]);
+    }
+    return resJson([{ id: "120363222@g.us", subject: "Grupo do secundário", size: 2 }]);
+  });
+  try {
+    const grupos = await mod.listarGrupos(true);
+    assert.equal(grupos.length, 2);
+    assert.ok(urls.some((u) => /\/group\/fetchAllGroups\/inst-principal\?/.test(u)));
+    assert.ok(urls.some((u) => /\/group\/fetchAllGroups\/secundario-1\?/.test(u)));
+    assert.ok(!urls.some((u) => /inst-antiga/.test(u)));
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

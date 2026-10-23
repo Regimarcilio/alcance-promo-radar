@@ -11,6 +11,36 @@ interface Resolvedor {
   resolver: (url: string) => Promise<string | null>;
 }
 
+
+/**
+ * `link.emipefps.com` / `links.emipefps.com`: SPA (Lovable) que consulta
+ * `rpc/get_link_by_slug` no Supabase e devolve `original_url`/`resolved_url`.
+ * A chave é pública (vai no bundle), então não é segredo.
+ */
+async function viaEpipeSlug(url: string): Promise<string | null> {
+  try {
+    const u = new URL(url);
+    const slug = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    if (!slug) return null;
+    const r = await fetch("https://uqnprtjwztidrxlayqne.supabase.co/rest/v1/rpc/get_link_by_slug", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: "sb_publishable_EVpPQHIenwTvNFklhTDf-g_XWbOYiZi",
+      },
+      body: JSON.stringify({ p_slug: slug }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const arr = (await r.json().catch(() => null)) as any[] | null;
+    const item = Array.isArray(arr) ? arr[0] : null;
+    const destino = typeof item?.resolved_url === "string" ? item.resolved_url : item?.original_url;
+    return typeof destino === "string" && /^https?:\/\//i.test(destino) ? destino : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Epipe (grupo #55): a página é um shell JS que chama
  * `POST https://oferta.emipefps.com/api/public/abrir-link {codigo}` e recebe
@@ -27,10 +57,10 @@ async function viaEpipe(url: string): Promise<string | null> {
     body: JSON.stringify({ codigo, dispositivo: "computador", token: null, referer: "" }),
     signal: AbortSignal.timeout(8000),
   });
-  if (!r.ok) return null;
+  if (!r.ok) return viaRedirect(url);
   const j = (await r.json().catch(() => null)) as { destino?: unknown } | null;
   const destino = typeof j?.destino === "string" ? j.destino : "";
-  return /^https?:\/\//i.test(destino) ? destino : null;
+  return /^https?:\/\//i.test(destino) ? destino : viaRedirect(url);
 }
 
 /**
@@ -57,9 +87,10 @@ async function viaRedirect(url: string): Promise<string | null> {
 
 /** Hosts de encurtador conhecidos (resolvidos por 1 salto de redirect). */
 const ENCURTADORES =
-  /(^|\.)(tidd\.ly|bit\.ly|cutt\.ly|tinyurl\.com|shorturl\.at|is\.gd|rebrand\.ly|short\.gy|vk\.cc|rb\.gy|qrco\.de|lnkd\.in|t\.co|t\.me|encurtador\.com\.br|meulink\.com\.br|linkr\.com\.br|shorturl\.com|0x0\.st|clck\.ru|tr\.ee|shrinkme\.io|shorturl\.br)$/i;
+  /(^|\.)(tidd\.ly|bit\.ly|cutt\.ly|tinyurl\.com|shorturl\.at|is\.gd|rebrand\.ly|short\.gy|vk\.cc|rb\.gy|qrco\.de|lnkd\.in|t\.co|t\.me|encurtador\.com\.br|meulink\.com\.br|linkr\.com\.br|shorturl\.com|0x0\.st|clck\.ru|tr\.ee|shrinkme\.io|shorturl\.br|link\.amazon|amzlinks\.in|shozap\.com\.br|promosdebrother\.com|mercadolivre\.com)$/i;
 
 const RESOLVEDORES: Resolvedor[] = [
+  { host: /(^|\.)(link|links)\.emipefps\.com$/i, resolver: viaEpipeSlug },
   { host: /(^|\.)emipefps\.com$/i, resolver: viaEpipe },
   { host: ENCURTADORES, resolver: viaRedirect },
 ];

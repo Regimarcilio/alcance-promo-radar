@@ -10,13 +10,12 @@
  * Não substitui o relatório de comissão do programa de afiliados: é a nossa
  * lado "o que foi publicado", para cruzar com "o que vendeu".
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { dataDirAtual } from "../config/paths.js";
+import { gravarJsonAtomico } from "./json.js";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "publicacoes.json");
+const file = join(dataDirAtual(), "publicacoes.json");
 
 /** Mantém as últimas N publicações (o arquivo não cresce sem limite). */
 export const LIMITE_PUBLICACOES = 5000;
@@ -54,10 +53,7 @@ function carregar(): Publicacao[] {
 }
 
 function salvar(arr: Publicacao[]): void {
-  mkdirSync(dataDir, { recursive: true });
-  const tmp = `${file}.tmp`;
-  writeFileSync(tmp, JSON.stringify(arr.slice(-LIMITE_PUBLICACOES), null, 2));
-  renameSync(tmp, file); // escrita atômica: nunca deixa o arquivo meio escrito
+  gravarJsonAtomico(file, arr.slice(-LIMITE_PUBLICACOES));
 }
 
 /** Registra uma publicação. Nunca lança (rastreio não pode derrubar um post). */
@@ -121,7 +117,13 @@ export function resumoRastreio(f: FiltroRastreio = {}): {
 export function publicacoesCsv(f: FiltroRastreio = {}): string {
   const linhas = listarPublicacoes(f);
   const cab = ["data", "programa", "categoria", "grupo", "id", "titulo", "preco", "tag", "via", "link"];
-  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  // Anti formula/CSV injection: campos iniciados por = + - @ TAB CR são
+  // prefixados com apóstrofo para o Excel/LibreOffice não executarem nada.
+  const esc = (v: unknown) => {
+    let t = String(v ?? "");
+    if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+    return `"${t.replace(/"/g, '""')}"`;
+  };
   return [
     cab.join(";"),
     ...linhas.map((p) =>

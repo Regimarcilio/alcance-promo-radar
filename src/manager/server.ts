@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createServer } from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { accessSync, constants as fsConstants, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import catsJson from "../categorias.json" with { type: "json" };
@@ -19,20 +20,21 @@ import { subcategoriasDe } from "../ml/hub.js";
 import { gerarHeadline } from "../ai/gateway.js";
 import { formatar } from "../wa/formatter.js";
 import { registrarEnvio } from "../store/dedup.js";
-import { enviarParaGrupo } from "../wa/dispatch.js";
+import { enviarParaGrupo, validarImagem } from "../wa/dispatch.js";
 import {
   carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar, definirFoto,
   alternarOrigem, alternarDestino,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor, zerarContadores, limparDedup } from "../monitor/state.js";
-import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker } from "../monitor/fila.js";
+import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker, pararFilaWorker, aguardarProcessamento } from "../monitor/fila.js";
 import {
   listarContatos, listarListas, criarLista, removerLista, adicionarContato, renomearContato,
   removerContato, sincronizar as sincronizarClientes, estadoSync, enfileirarCampanha,
-  estadoFilaClientes, limparFilaClientes, iniciarClientesWorker,
+  estadoFilaClientes, limparFilaClientes, iniciarClientesWorker, pararClientesWorker,
 } from "../clientes/clientes.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
+import { logger } from "../observability/logger.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
 import { expandirLink } from "../monitor/curtos.js";
 import {
@@ -42,14 +44,17 @@ import {
 } from "../monitor/evolution.js";
 import { estadoAdicao, iniciarAdicaoGrupo } from "../monitor/grupo-add.js";
 import {
+  estadoSyncGrupos, iniciarSyncGruposDiario, pararSyncGruposDiario, sincronizarGruposAgora,
+} from "../monitor/sync-grupos.js";
+import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
-  definirPrincipal, listarInstancias as listarInstanciasWhats,
+  definirPrincipal, listarInstancias as listarInstanciasWhats, instanciaParaServico,
 } from "../wa/rotacao.js";
 import {
   autenticar, auditar, checarLimite, carregarUsuarios, configurarAuth, cookieExpirado, cookieSessao,
   criarSessao, encerrarSessao, HashOcupadoError, iguais, iniciarLimpezaAuth, ipDoRequest,
-  limparLimite, registrarTentativa, sessaoDoRequest, validarConfigAuth, type Usuario,
+  limparLimite, registrarTentativa, sessaoDoRequest, validarConfigAuth, checarLimiteReenvio, type Usuario,
 } from "./auth.js";
 import {
   ensureCodigoVerificacao, enviarCodigoWhatsApp, gerarCodigo, hashCodigo, mascarTelefone,
@@ -63,6 +68,7 @@ const cacheFile = join(dataDir, "ultima-busca.json");
 const CATS = catsJson as { id: string; name: string }[];
 const CATS_AMAZON = CATEGORIAS_AMAZON;
 const PORT = Number(process.env.MANAGER_PORT ?? 8091);
+const HOST = process.env.HOST ?? "127.0.0.1";
 
 configurarAuth(dataDir);
 try {
@@ -97,9 +103,32 @@ function lerBusca(): Oportunidade[] {
 
 let cacheGrupos: { em: number; dados: any[] } | null = null;
 
-const server = createServer(async (req, res) => {
+const server = createServer((req, res) => {
+  req.setTimeout?.(30_000);
+  const reqId = randomUUID();
+  const inicio = Date.now();
+  res.setHeader("X-Request-Id", reqId);
+  void atender(req, res, reqId, inicio).catch((e: any) => {
+    logger.error({ reqId, err: String(e?.stack ?? e?.message ?? e) }, "erro não tratado");
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ erro: "falha interna", requestId: reqId }));
+    } else {
+      res.end();
+    }
+  });
+});
+
+async function atender(req: any, res: any, reqId: string, inicio: number): Promise<void> {
   const url = new URL(req.url ?? "/", "http://x");
   const metodo = req.method ?? "GET";
+  res.on("finish", () => {
+    if (metodo === "GET" && (url.pathname === "/healthz" || url.pathname === "/readyz")) return;
+    logger.info(
+      { reqId, metodo, rota: url.pathname, status: res.statusCode, ms: Date.now() - inicio },
+      "http",
+    );
+  });
   const json = (code: number, obj: unknown, headers: Record<string, string> = {}) => {
     res.writeHead(code, {
       "Content-Type": "application/json; charset=utf-8",
@@ -127,13 +156,28 @@ const server = createServer(async (req, res) => {
   res.setHeader("X-Robots-Tag", "noindex, nofollow");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
   );
 
   const caminho = url.pathname;
   const ip = ipDoRequest(req);
   const ua = String(req.headers["user-agent"] ?? "");
   const ehWebhook = caminho === "/api/webhook/evolution";
+
+  // ---------- health (público, sem detalhes sensíveis) ----------
+  if (metodo === "GET" && caminho === "/healthz") {
+    json(200, { ok: true, uptime: Math.floor(process.uptime()), versao: "0.8.0" });
+    return;
+  }
+  if (metodo === "GET" && caminho === "/readyz") {
+    try {
+      accessSync(dataDir, fsConstants.W_OK);
+      json(200, { ok: true, dataDir: "writable" });
+    } catch {
+      json(503, { ok: false, erro: "data dir não gravável" });
+    }
+    return;
+  }
 
   // CSRF de borda: navegador manda Origin; exige mesmo host. Webhook é S2S.
   if (metodo !== "GET" && !ehWebhook && !origemPermitida(req)) {
@@ -258,30 +302,32 @@ const server = createServer(async (req, res) => {
 
   if (metodo === "POST" && caminho === "/api/auth/reenviar-codigo") {
     // Reenvia o código de verificação (celular ainda não confirmado).
+    // Anti-abuso: rate-limit dedicado, resposta uniforme (não revela usuário
+    // nem telefone) e sem resetar o lockout de tentativas.
+    const limite = checarLimiteReenvio(ip);
+    if (!limite.ok) {
+      auditar("reenvio_limited", { ip, ua });
+      json(429, { ok: true }, { "Retry-After": String(limite.retryAfter) });
+      return;
+    }
+    const tipo = String(req.headers["content-type"] ?? "").toLowerCase();
+    if (!tipo.includes("application/json")) {
+      json(415, { ok: true });
+      return;
+    }
     try {
-      const corpo = JSON.parse(await lerCorpo(req, 64 * 1024));
+      const corpo = JSON.parse(await lerCorpo(req, 4 * 1024));
       const nome = String(corpo?.usuario ?? "").trim();
       const u = carregarUsuarios().find(
         (x) => x.usuario.toLowerCase() === nome.toLowerCase() && !x.desativado
       );
-      if (!u) {
-        json(200, { ok: true }); // não revela se existe
-        return;
+      if (u && precisaCodigo(u)) {
+        const r = await ensureCodigoVerificacao(u, dataDir, true);
+        auditar("codigo_reenviado", { usuario: u.usuario, ip, ua, detalhe: r.enviado ? "enviado" : `falhou: ${r.erro ?? "?"}` });
       }
-      if (!precisaCodigo(u)) {
-        json(200, { ok: true });
-        return;
-      }
-      const r = await ensureCodigoVerificacao(u, dataDir, true);
-      auditar("codigo_reenviado", { usuario: u.usuario, ip, ua, detalhe: r.enviado ? "enviado" : `falhou: ${r.erro ?? "?"}` });
-      json(200, {
-        ok: true,
-        enviado: r.enviado,
-        telefone: mascarTelefone(u.telefone ?? ""),
-        erro: r.enviado ? undefined : r.erro,
-      });
-    } catch (e: any) {
-      json(400, { erro: String(e?.message ?? e) });
+      json(200, { ok: true }); // resposta uniforme: não enumera usuários/telefones
+    } catch {
+      json(200, { ok: true });
     }
     return;
   }
@@ -482,6 +528,7 @@ const server = createServer(async (req, res) => {
         precoPix: completo.precoAtual, cupom: completo.cupom, link: enrich.linkAfiliado,
         categoria: `${catName}${body.q ? ` • "${body.q}"` : ""}`, score: completo.score,
       });
+      validarImagem(completo.imagem);
       const r = await enviarParaGrupo({
         grupo: grupoPara(body.category, body.grupo),
         imagem: completo.imagem, legenda: mensagem, dryRun: dry,
@@ -495,7 +542,8 @@ const server = createServer(async (req, res) => {
         titulo: completo.titulo, mensagem,
       });
     } catch (e: any) {
-      json(500, { erro: String(e.message ?? e) });
+      logger.error({ reqId, err: String(e?.stack ?? e) }, "erro na rota");
+      json(500, { erro: "falha interna", requestId: reqId });
     }
     return;
   }
@@ -503,7 +551,8 @@ const server = createServer(async (req, res) => {
     try {
       json(200, { contas: listarContas(), mapa: lerMapa() });
     } catch (e: any) {
-      json(500, { erro: String(e.message ?? e) });
+      logger.error({ reqId, err: String(e?.stack ?? e) }, "erro na rota");
+      json(500, { erro: "falha interna", requestId: reqId });
     }
     return;
   }
@@ -680,7 +729,8 @@ const server = createServer(async (req, res) => {
         autoOk: !!auto,
       });
     } catch (e: any) {
-      json(500, { erro: String(e.message ?? e) });
+      logger.error({ reqId, err: String(e?.stack ?? e) }, "erro na rota");
+      json(500, { erro: "falha interna", requestId: reqId });
     }
     return;
   }
@@ -705,6 +755,7 @@ const server = createServer(async (req, res) => {
         precoParc: b.precoParc ? Number(b.precoParc) : undefined,
         cupom: fake.cupom, link: fake.link, categoria: "Curadoria", score: 80,
       });
+      validarImagem(fake.imagem);
       const r = await enviarParaGrupo({
         grupo: grupoPara(b.category, b.grupo),
         imagem: fake.imagem, legenda: mensagem, dryRun: dry,
@@ -715,7 +766,8 @@ const server = createServer(async (req, res) => {
         grupo: grupoPara(b.category, b.grupo),
       });
     } catch (e: any) {
-      json(500, { erro: String(e.message ?? e) });
+      logger.error({ reqId, err: String(e?.stack ?? e) }, "erro na rota");
+      json(500, { erro: "falha interna", requestId: reqId });
     }
     return;
   }
@@ -895,9 +947,11 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/clientes/enviar") {
     try {
       const b = JSON.parse(await lerCorpo(req));
+      const imagem = String(b.imagem ?? "");
+      if (imagem) validarImagem(imagem);
       const pendentes = enfileirarCampanha({
         texto: String(b.texto ?? ""),
-        imagem: String(b.imagem ?? ""),
+        imagem,
         jids: Array.isArray(b.jids) ? b.jids.map(String) : [],
       });
       json(200, { ok: true, fila: estadoFilaClientes(), pendentes });
@@ -1002,9 +1056,20 @@ const server = createServer(async (req, res) => {
     return;
   }
   // Conta pareada + estado (para trocar o celular)
+  if (req.method === "GET" && url.pathname === "/api/monitor/sync-grupos") {
+    json(200, { ok: true, ...estadoSyncGrupos(), autoOrigens: process.env.MONITOR_AUTO_ORIGENS !== "0" });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/monitor/sync-grupos") {
+    const r = await sincronizarGruposAgora("manual");
+    json(200, { ...r, autoOrigens: process.env.MONITOR_AUTO_ORIGENS !== "0" });
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/monitor/conta") {
-    const [estado, conta] = await Promise.all([estadoConexao(), contaPareada()]);
-    json(200, { estado, ...conta, instancia: process.env.EVO_INSTANCE ?? "radar-piloto" });
+    const [estado, conta, instancia] = await Promise.all([
+      estadoConexao(), contaPareada(), instanciaParaServico(),
+    ]);
+    json(200, { estado, ...conta, instancia });
     return;
   }
   // Lista os grupos da conta pareada (origem/destino escolhidos daqui)
@@ -1043,7 +1108,8 @@ const server = createServer(async (req, res) => {
     // Troca de celular: desloga a conta atual e devolve um QR novo.
     try {
       await desconectar();
-      const r = await fetch(`${(process.env.EVO_URL ?? "").replace(/\/$/, "")}/instance/connect/${process.env.EVO_INSTANCE ?? "radar-piloto"}`, {
+      const instancia = await instanciaParaServico();
+      const r = await fetch(`${(process.env.EVO_URL ?? "").replace(/\/$/, "")}/instance/connect/${instancia}`, {
         headers: { apikey: process.env.EVO_KEY ?? "" },
       });
       const j: any = await r.json().catch(() => ({}));
@@ -1088,10 +1154,9 @@ const server = createServer(async (req, res) => {
       return;
     }
     try {
-      const p = JSON.parse(await lerCorpo(req));
+      const p = JSON.parse(await lerCorpo(req, 8 * 1024 * 1024));
       if (process.env.MONITOR_DEBUG === "1") {
         try {
-          const { appendFileSync } = await import("node:fs");
           const d: any = (p as any)?.data ?? {};
           const m: any = d?.message ?? {};
           const img = m.imageMessage;
@@ -1101,12 +1166,14 @@ const server = createServer(async (req, res) => {
             img: img ? {
               mimetype: img.mimetype, fileLength: img.fileLength,
               temUrl: !!img.url, temThumb: !!img.jpegThumbnail,
-              caption: String(img.caption ?? "").slice(0, 40),
+              caption: String(img.caption ?? "").slice(0, 500),
             } : null,
+            texto: String(m.conversation ?? m.extendedTextMessage?.text ?? "").slice(0, 500),
             base64: m.base64 === undefined ? "ausente" : typeof m.base64 === "string" ? `string(${m.base64.length})` : typeof m.base64,
             mediaUrl: m.mediaUrl ? String(m.mediaUrl).slice(0, 60) : null,
           };
-          appendFileSync("/app/data/debug-webhook.log", new Date().toISOString() + " " + JSON.stringify(resumo) + "\n");
+          const { appendFileSync } = await import("node:fs");
+          appendFileSync(join(dataDir, "debug-webhook.log"), new Date().toISOString() + " " + JSON.stringify(resumo) + "\n", { mode: 0o600 });
         } catch { /* ignore */ }
       }
       const msg = extrairMensagem(p);
@@ -1119,13 +1186,14 @@ const server = createServer(async (req, res) => {
     return;
   }
   json(404, { erro: "rota?" });
-});
+}
 
 function lerCorpo(req: any, max = 1024 * 1024): Promise<string> {
   return new Promise((resolve, reject) => {
     let b = "";
     let n = 0;
     let excedeu = false;
+    req.setEncoding("utf8");
     req.on("data", (c: any) => {
       if (excedeu) return;
       n += c.length;
@@ -1681,7 +1749,7 @@ body{padding:0;max-width:none;margin:0}
 </div>
 <div class="panel ac-numeros">
 <div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
-<div class="mini" style="margin-bottom:6px"><b>★ Principal</b> = número de casa: fica com as <b>operações de serviço</b> (adicionar contatos ao grupo, permissões). Os <b>secundários</b> assumem integralmente o <b>envio de mensagens</b> — se o principal cair, o envio continua. Sem secundário disponível, o envio volta ao principal. A conta ML continua a mesma.</div>
+<div class="mini" style="margin-bottom:6px"><b>★ Principal</b> = número de casa, preferido para as <b>operações de serviço</b> (adicionar contatos ao grupo, permissões). <b>Todos os números abertos</b> — principal inclusive — participam do <b>envio de mensagens</b>, na proporção do peso. Se um cair, o envio continua pelos outros. A conta ML continua a mesma.</div>
 <div id="minstlist" class="mini">carregando…</div>
 <div style="display:flex;gap:6px;margin-top:8px">
 <input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
@@ -1814,8 +1882,8 @@ if(btnSair)btnSair.addEventListener('click',async function(){
   window.location.replace('/login');
 });
 fetch('/api/categorias').then(r=>r.json()).then(cs=>{
-  $('mapcat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
-  $('pacat').innerHTML=cs.map(c=>\`<option value="\${c.id}">\${c.name}</option>\`).join('');
+  $('mapcat').innerHTML=cs.map(c=>\`<option value="\${esc(c.id)}">\${esc(c.name)}</option>\`).join('');
+  $('pacat').innerHTML=cs.map(c=>\`<option value="\${esc(c.id)}">\${esc(c.name)}</option>\`).join('');
   carregarContas();
   carregarGrupos();
   carregarVitrine();
@@ -1831,14 +1899,14 @@ let CS=[];
 async function carregarVitrine(){
   const d=await (await fetch('/api/vitrine')).json();
   CS=d.items||[];
-  if(!d.ok){$('vitrineout').innerHTML='⚠️ '+(d.erro||'vitrine indisponível');return;}
+  if(!d.ok){$('vitrineout').textContent='⚠️ '+(d.erro||'vitrine indisponível');return;}
   const cats=await (await fetch('/api/categorias')).json();
-  const opts=cats.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('');
-  let html='<b>'+d.total+'</b> ofertas reais. Amarre a folha à sua categoria:<br>';
+  const opts=cats.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>';}).join('');
+  let html='<b>'+esc(d.total)+'</b> ofertas reais. Amarre a folha à sua categoria:<br>';
   (d.folhas||[]).forEach(function(f,i){
-    html+='<div style="display:flex;gap:8px;margin-top:6px;align-items:center"><span style="flex:2">'+f.leaf+' ('+f.qtd+' itens — '+f.exemplo.slice(0,40)+'…)</span>'
+    html+='<div style="display:flex;gap:8px;margin-top:6px;align-items:center"><span style="flex:2">'+esc(f.leaf)+' ('+esc(f.qtd)+' itens — '+esc(String(f.exemplo).slice(0,40))+'…)</span>'
       +'<select id="vmap'+i+'" style="flex:2">'+opts+'</select>'
-      +'<button class="buscar" style="margin-top:0;width:auto" data-leaf="'+f.leaf+'" data-i="'+i+'" onclick="salvarVitrineMapBtn(this)">✔</button></div>';
+      +'<button class="buscar" style="margin-top:0;width:auto" data-leaf="'+esc(f.leaf)+'" data-i="'+esc(i)+'" onclick="salvarVitrineMapBtn(this)">✔</button></div>';
   });
   $('vitrineout').innerHTML=html;
   (d.folhas||[]).forEach(function(f,i){
@@ -1857,10 +1925,10 @@ async function carregarContas(){
   const d=await (await fetch('/api/contas')).json();
   const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
   kp('kpi-contas',(d.contas||[]).length);kp('badge-contas',(d.contas||[]).length);
-  const opts=d.contas.map(c=>\`<option value="\${c.nome}">\${c.nome} (\${c.tagMask})\${c.padrao?' ★':''}</option>\`).join('');
+  const opts=d.contas.map(c=>\`<option value="\${esc(c.nome)}">\${esc(c.nome)} (\${esc(c.tagMask)})\${c.padrao?' ★':''}</option>\`).join('');
   $('paconta').innerHTML=opts;
   $('mapconta').innerHTML='<option value="-">Padrão</option>'+opts;
-  $('contasout').innerHTML=d.contas.map(c=>\`\${c.padrao?'★':'•'} <b>\${c.nome}</b> <small>\${c.tagMask}</small> <a href="#" class="lk-mini" onclick="tornarPadrao('\${c.nome}');return false">tornar padrão</a>\`).join('<br>')||'Nenhuma conta — usando .env.';
+  $('contasout').innerHTML=d.contas.map(c=>\`\${c.padrao?'★':'•'} <b>\${esc(c.nome)}</b> <small>\${esc(c.tagMask)}</small> <a href="#" class="lk-mini" data-conta="\${esc(c.nome)}">tornar padrão</a>\`).join('<br>')||'Nenhuma conta — usando .env.';
   if(d.mapa&&d.mapa[$('mapcat').value]){const m=d.mapa[$('mapcat').value];$('mapconta').value=m.conta||'-';if(m.grupo)$('mapgrupo').value=m.grupo;if(m.sub)window._mapsub=m.sub;}
   carregarGrupos();carregarSubs('mapcat','mapsub',true);carregarSubs('pacat','pasub',false);
 }
@@ -1872,11 +1940,11 @@ async function carregarGrupos(forcar){
   $('pagrupo').innerHTML='<option value="">— carregando grupos… (pode levar 10s)</option>';
   try{
     const g=await (await fetch('/api/grupos'+(forcar?'?refresh=1':''))).json();
-    let opts=(g.grupos||[]).map(function(x){return '<option value="'+x.id+'">'+x.nome+' ('+x.id.slice(0,12)+'…)</option>';}).join('');
+    let opts=(g.grupos||[]).map(function(x){return '<option value="'+esc(x.id)+'">'+esc(x.nome)+' ('+esc(String(x.id).slice(0,12))+'…)</option>';}).join('');
     if(g.aviso)$('pagrupo').innerHTML='<option value="">⚠️ '+esc(g.aviso)+'</option>';
     $('mapgrupo').innerHTML='<option value="">Grupo padrão (.env)</option>'+opts;
     $('pagrupo').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
-    if(g.aviso)$('pagrupo').innerHTML+='<option value="" disabled>⚠️ '+g.aviso+'</option>';
+    if(g.aviso)$('pagrupo').innerHTML+='<option value="" disabled>⚠️ '+esc(g.aviso)+'</option>';
     // A aba Monitor usa a MESMA lista (vem do cache, sem chamar a Evolution de novo)
     if($('mselOrigem')&&$('mselOrigem').options.length<=1){
       $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
@@ -1911,9 +1979,9 @@ async function atualizarPiloto(){
     }
     (s.loops||[]).forEach(function(l){
       html+='<div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px;margin:6px 0;font-size:12.5px'+(l.rodando?'':';opacity:.75')+'">'
-        +'<b>#'+l.id+'</b> '+l.conta+' → '+l.category+' → '+String(l.grupo).slice(0,20)+'… '
-        +(l.programa&&l.programa!=='ml'?'['+l.programa+'] ':'')
-        +'• enviadas: <b>'+l.enviadas+'</b>'
+        +'<b>#'+esc(l.id)+'</b> '+esc(l.conta)+' → '+esc(l.category)+' → '+esc(String(l.grupo).slice(0,20))+'… '
+        +(l.programa&&l.programa!=='ml'?'['+esc(l.programa)+'] ':'')
+        +'• enviadas: <b>'+esc(l.enviadas)+'</b>'
         +(l.ultimaMsg?' • última: '+horaLocal(l.ultimaMsg):'')
         +(l.proximaEm?' • próxima: '+horaLocal(l.proximaEm):'')
         +(l.rodando?'':' <span class="mini">(parado)</span>')
@@ -2016,10 +2084,10 @@ async function carregarCupons(){
     const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
     kp('kpi-cuponsn',regs.length);kp('badge-cupons',regs.length);
     kp('kpi-cupons-reg',regs.length);kp('kpi-cupons-ml',(d.paraCategoria||[]).length);
-    html+=regs.length?regs.map(function(e){const v=(typeof e[1]==='string')?{codigo:e[1],nome:''}:e[1];return e[0]+'=<b>'+v.codigo+'</b>'+(v.nome?' ('+v.nome+')':'');}).join(' · '):'nenhum';
+    html+=regs.length?regs.map(function(e){const v=(typeof e[1]==='string')?{codigo:e[1],nome:''}:e[1];return esc(e[0])+'=<b>'+esc(v.codigo)+'</b>'+(v.nome?' ('+esc(v.nome)+')':'');}).join(' · '):'nenhum';
     html+='<br><b>ML p/ esta categoria:</b> ';
-    html+=(d.paraCategoria||[]).map(function(c){return c.titulo+(c.minimo?' ('+c.minimo+')':'');}).join(' · ')||'—';
-    if(d.codigo)html+='<br>Ativo aqui: <b>'+d.codigo+'</b>';
+    html+=(d.paraCategoria||[]).map(function(c){return esc(c.titulo)+(c.minimo?' ('+esc(c.minimo)+')':'');}).join(' · ')||'—';
+    if(d.codigo)html+='<br>Ativo aqui: <b>'+esc(d.codigo)+'</b>';
     $('cuponsout').innerHTML=html;
     const ml=(d.paraCategoria||[]).slice(0,3).map(function(c){return c.titulo;}).join(' · ');
     $('cuponsml').textContent=ml?('Na vitrine ML agora: '+ml):'';
@@ -2073,13 +2141,14 @@ async function carregarInstancias(){
     $('minstlist').innerHTML=itens.map(function(i){
       const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
       let acoes='';
-      if(i.estado!=='open') acoes+='<button class="mbtn" onclick="verQR(\\''+i.instancia+'\\')">QR</button>';
-      acoes+='<button class="mbtn" onclick="instPrincipal(\\''+i.instancia+'\\','+(i.principal?'false':'true')+')">'+(i.principal?'★ principal':'☆ principal')+'</button>';
-      acoes+='<button class="mbtn" onclick="instAtivo(\\''+i.instancia+'\\','+(i.ativo?'false':'true')+')">'+(i.ativo?'desativar':'ativar')+'</button>';
-      acoes+='<button class="mbtn" onclick="instPeso(\\''+i.instancia+'\\','+i.peso+')">peso</button>';
-      acoes+='<button class="mbtn" onclick="instRemover(\\''+i.instancia+'\\')">🗑</button>';
+      const inst=esc(i.instancia);
+      if(i.estado!=='open') acoes+='<button class="mbtn" data-acao="qr" data-inst="'+inst+'">QR</button>';
+      acoes+='<button class="mbtn" data-acao="principal" data-valor="'+(i.principal?'false':'true')+'" data-inst="'+inst+'">'+(i.principal?'★ principal':'☆ principal')+'</button>';
+      acoes+='<button class="mbtn" data-acao="ativo" data-valor="'+(i.ativo?'false':'true')+'" data-inst="'+inst+'">'+(i.ativo?'desativar':'ativar')+'</button>';
+      acoes+='<button class="mbtn" data-acao="peso" data-valor="'+esc(Number(i.peso)||0)+'" data-inst="'+inst+'">peso</button>';
+      acoes+='<button class="mbtn" data-acao="remover" data-inst="'+inst+'">🗑</button>';
       return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">'+
-        '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+i.peso+' · '+i.enviadas+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
+        '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+esc(i.peso)+' · '+esc(i.enviadas)+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
         '<span style="display:flex;gap:4px;flex-wrap:wrap">'+acoes+'</span></div>';
     }).join('');
   }catch(e){}
@@ -2158,6 +2227,21 @@ async function instRemover(inst){
     if(e.key==='Escape'&&box&&box.open)box.open=false;
   });
 })();
+document.addEventListener('click',function(e){
+  const a=e.target.closest&&e.target.closest('[data-conta]');
+  if(a){e.preventDefault();tornarPadrao(a.getAttribute('data-conta'));}
+});
+document.addEventListener('click',function(e){
+  const b=e.target.closest&&e.target.closest('[data-acao][data-inst]');
+  if(!b)return;
+  const inst=b.getAttribute('data-inst');
+  const acao=b.getAttribute('data-acao');
+  if(acao==='qr')verQR(inst);
+  else if(acao==='principal')instPrincipal(inst,b.getAttribute('data-valor')==='true');
+  else if(acao==='ativo')instAtivo(inst,b.getAttribute('data-valor')==='true');
+  else if(acao==='peso')instPeso(inst,Number(b.getAttribute('data-valor'))||0);
+  else if(acao==='remover')instRemover(inst);
+});
 // ---------- TITULOS DOS CARDS ----------
 async function carregarTitulos(){
   try{
@@ -2231,11 +2315,11 @@ function renderContatos(){
   $('clilist').innerHTML=cap.map(function(c){
     const nome=c.nome||telFmt(c.telefone);
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--border)">'
-      +'<input type="checkbox" data-sel="'+c.jid+'"'+(SELECAO.has(c.jid)?' checked':'')+'>'
+      +'<input type="checkbox" data-sel="'+esc(c.jid)+'"'+(SELECAO.has(c.jid)?' checked':'')+'>'
       +'<span style="flex:1;font-size:13px">'+esc(nome)+(c.nome?(' <span class="mini">'+esc(telFmt(c.telefone))+'</span>'):'')
       +(c.origem?('<br><span class="mini">'+esc(String(c.origem).slice(0,42))+'</span>'):'')+'</span>'
-      +'<button class="mbtn" data-act="ren" data-jid="'+c.jid+'">✏️</button>'
-      +'<button class="mbtn" data-act="del" data-jid="'+c.jid+'">🗑</button></div>';
+      +'<button class="mbtn" data-act="ren" data-jid="'+esc(c.jid)+'">✏️</button>'
+      +'<button class="mbtn" data-act="del" data-jid="'+esc(c.jid)+'">🗑</button></div>';
   }).join('');
 }
 function renderListas(){
@@ -2244,8 +2328,8 @@ function renderListas(){
   $('clilistas').innerHTML='<label>📋 Listas salvas</label>'+ls.map(function(l){
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<span style="flex:1">'+esc(l.nome)+' <span class="mini">'+l.contatos.length+' contato(s)</span></span>'
-      +'<button class="mbtn" data-act="sell" data-jid="'+l.id+'">selecionar</button>'
-      +'<button class="mbtn" data-act="dell" data-jid="'+l.id+'">🗑</button></div>';
+      +'<button class="mbtn" data-act="sell" data-jid="'+esc(l.id)+'">selecionar</button>'
+      +'<button class="mbtn" data-act="dell" data-jid="'+esc(l.id)+'">🗑</button></div>';
   }).join('');
 }
 // ===== Rastreio (publicações) =====
@@ -2273,7 +2357,7 @@ async function carregarRastreio(){
         +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.titulo||p.id)+'</span>'
         +'<span class="mini">'+esc(p.categoria)+'</span>'
         +(p.tag?('<span class="mini">tag: '+esc(p.tag)+'</span>'):'')
-        +'<a class="lk-mini" href="'+esc(p.link)+'" target="_blank" rel="noopener">abrir</a></div>';
+        +'<a class="lk-mini" href="'+esc(linkSeguro(p.link))+'" target="_blank" rel="noopener">abrir</a></div>';
     }).join('')+'</div>';
   }catch(e){$('rtinfo').textContent='erro: '+e.message;}
 }
@@ -2291,7 +2375,7 @@ async function trocarProgramaPiloto(){
   const box=$('pamazoninfo');
   const selCat=$('pacat');
   const resp=await (await fetch('/api/categorias?programa='+encodeURIComponent(prog))).json();
-  selCat.innerHTML=resp.map(function(c){return '<option value="'+c.id+'">'+c.name+' ('+c.id+')</option>';}).join('');
+  selCat.innerHTML=resp.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+' ('+esc(c.id)+')</option>';}).join('');
   const subBox=$('pmlsubbox');
   if(subBox)subBox.style.display=prog==='amazon'?'none':'block';
   if(prog==='amazon'){
@@ -2487,7 +2571,7 @@ async function carregarContaMonitor(){
     const d=await (await fetch('/api/monitor/conta')).json();
     const ok=d.estado==='open';
     $('mcontalabel').textContent='Conta WhatsApp: '+(d.nome||d.jid||'—')+(d.jid?' ('+d.jid.replace(/@.*/,'')+')':'');
-    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+(d.estado||'?'))+' • instância '+d.instancia;
+    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+esc(d.estado||'?'))+' • instância '+esc(d.instancia);
   }catch(e){}
 }
 async function carregarGruposSelects(forcar){
@@ -2495,14 +2579,14 @@ async function carregarGruposSelects(forcar){
   try{
     const d=await (await fetch('/api/monitor/whats-grupos'+(forcar?'?forcar=1':''))).json();
     const aviso=d.aviso?(' · '+d.aviso):'';
-    if(!d.ok&&!(d.grupos||[]).length){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">'+(d.erro||'erro')+aviso+'</span>';return;}
+    if(!d.ok&&!(d.grupos||[]).length){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">'+esc(d.erro||'erro')+esc(aviso)+'</span>';return;}
     window.__wgrupos=d.grupos||[];
     const opts=window.__wgrupos.map(function(g){return '<option value="'+esc(g.jid)+'">'+esc(g.nome)+(g.tamanho!=null?' ('+g.tamanho+')':'')+'</option>';}).join('');
     $('mselOrigem').innerHTML='<option value="">— escolha a origem —</option>'+opts;
     $('mselDestino').innerHTML='<option value="">— escolha o destino —</option>'+opts;
     $('mselPermissao').innerHTML='<option value="">— escolha o grupo —</option>'+opts;
     $('mgruposinfo').textContent=window.__wgrupos.length+' grupos carregados'+(d.deCache?' (lista salva — Evolution limitada)':'')+aviso;
-  }catch(e){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+e.message+'</span>';}
+  }catch(e){$('mgruposinfo').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(e.message)+'</span>';}
 }
 async function permissaoGrupoUI(acao){
   const sel=$('mselPermissao');
@@ -2618,11 +2702,13 @@ async function testarMonitor(){
   $('mtesteout').textContent='programa: '+((r.principal&&r.principal.programa)||'—')+'\\nid: '+((r.principal&&r.principal.id)||'—')+'\\nação: '+r.resultado.acao+(r.resultado.motivo?' ('+r.resultado.motivo+')':'')+(r.mensagem?'\\n\\n--- mensagem que seria enviada ---\\n'+r.mensagem:'');
   carregarMonitorStatus();
 }
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function linkSeguro(u){try{const x=new URL(String(u||''));return (x.protocol==='http:'||x.protocol==='https:')?x.href:'';}catch(e){return '';}}
 </script></body></html>`;
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`gerenciador em http://localhost:${PORT} (porta publicada só em 127.0.0.1; LAN exige TLS)`);
+server.listen(PORT, HOST, () => {
+  logger.info({ host: HOST, porta: PORT }, "manager iniciado");
+  console.log(`gerenciador em http://${HOST}:${PORT} (LAN exige TLS/reverse proxy)`);
   if (process.env.ALCANCE_SMOKE === "1") {
     // Smoke test: não inicia workers (evita tocar em fila/estado real).
     console.log("smoke mode: workers de fila desativados");
@@ -2630,10 +2716,36 @@ server.listen(PORT, "0.0.0.0", () => {
   }
   iniciarFilaWorker();
   iniciarClientesWorker();
+  iniciarSyncGruposDiario();
   // Piloto: o store é lazy — sem isto, os timers nunca são agendados no boot
   // e o Piloto fica muda (mesmo com a grade "ligada" no painel).
   const rl = retomarLoopsNoBoot();
   if (rl.religados > 0) console.log(`piloto: ${rl.religados} loop(s) religados no boot`);
   else if (rl.pausados > 0) console.log(`piloto: ${rl.pausados} loop(s) pausados no boot — clique em START (PILOTO_AUTORELIGA=1 religa sozinho)`);
   console.log(`fila anti-rajada ativa: 1 envio a cada ${intervaloFila()}s`);
+});
+
+let encerrando = false;
+async function encerrar(sinal: string): Promise<void> {
+  if (encerrando) return;
+  encerrando = true;
+  logger.info({ sinal }, "shutdown iniciado");
+  try { pararFilaWorker(); } catch { /* ignore */ }
+  try { pararClientesWorker(); } catch { /* ignore */ }
+  try { pararSyncGruposDiario(); } catch { /* ignore */ }
+  await aguardarProcessamento(30_000);
+  server.closeIdleConnections?.();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  logger.info({ sinal }, "shutdown concluído");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => { void encerrar("SIGTERM"); });
+process.on("SIGINT", () => { void encerrar("SIGINT"); });
+process.on("unhandledRejection", (e) => {
+  logger.error({ err: String((e as any)?.stack ?? e) }, "unhandledRejection");
+});
+process.on("uncaughtException", (e) => {
+  logger.fatal({ err: String((e as any)?.stack ?? e) }, "uncaughtException");
+  process.exit(1);
 });

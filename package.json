@@ -12,7 +12,9 @@
     "auth:user": "node scripts/auth-user.mjs",
     "smoke:manager": "bash scripts/smoke-manager.sh",
     "typecheck": "tsc --noEmit",
-    "test": "node --test dist/**/*.test.js"
+    "pretest": "npm run build",
+    "test": "node --test dist/**/*.test.js",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage dist/**/*.test.js"
   },
   "engines": {
     "node": ">=20"

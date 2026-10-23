@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enviarParaGrupo } from "../wa/dispatch.js";
-import { listarInstancias } from "../wa/rotacao.js";
+import { instanciaParaServico } from "../wa/rotacao.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -163,10 +163,10 @@ export function estadoSync(): EstadoSync {
   };
 }
 
-function instanciaPadrao(): string {
+async function instanciaPadrao(): Promise<string> {
+  // Operação de serviço (ler grupos p/ sincronizar contatos) = número principal.
   try {
-    const itens = listarInstancias();
-    return itens.find((i) => i.ativo)?.instancia ?? process.env.EVO_INSTANCE ?? "radar-piloto";
+    return await instanciaParaServico();
   } catch {
     return process.env.EVO_INSTANCE ?? "radar-piloto";
   }
@@ -248,7 +248,7 @@ export async function sincronizar(): Promise<{ novos: number; total: number }> {
   try {
     const base = (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
     const key = process.env.EVO_KEY ?? "";
-    const inst = instanciaPadrao();
+    const inst = await instanciaPadrao();
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 60000);
     const rg = await fetch(`${base}/group/fetchAllGroups/${inst}?getParticipants=false`, {

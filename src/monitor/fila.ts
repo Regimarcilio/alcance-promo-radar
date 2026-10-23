@@ -1,25 +1,24 @@
 /**
- * Fila de reenvio (anti-rajada) — E6 / RF-036.
+ * Fila de reenvio (anti-rajada) — RF-043.
  *
  * Regra: quando uma origem publica VÁRIAS mensagens em pouco tempo, elas vão
- * para a espera e são liberadas **uma a cada intervalo fixo** (default 45s).
- * Evita disparar 10 posts de uma vez — risco de ban e de poluir o grupo.
+ * para a espera e são liberadas **uma a cada intervalo fixo** (default 120s).
  *
  * Persistida em data/monitor-fila.json (sobrevive a restart do manager).
+ * O item em envio fica em `emAndamento` até a conclusão; no boot, ele volta
+ * para a fila em vez de se perder.
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { enviarParaGrupo } from "../wa/dispatch.js";
+import { join } from "node:path";
+import { enviarParaGrupo, ehErroTransitorio } from "../wa/dispatch.js";
 import { registrarPublicacao } from "../store/publicacoes.js";
 import { carregarMonitor } from "./grupos.js";
 import { limparMidiaAntiga } from "./midia.js";
 import { registrarEvento } from "./state.js";
+import { dataDirAtual } from "../config/paths.js";
+import { gravarJsonAtomico, lerJson } from "../store/json.js";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "monitor-fila.json");
+const file = join(dataDirAtual(), "monitor-fila.json");
 
 export interface ItemFila {
   id: string;
@@ -40,34 +39,30 @@ export interface ItemFila {
 interface StoreFila {
   itens: ItemFila[];
   ultimoEnvio: string | null;
+  emAndamento?: { item: ItemFila; desde: string } | null;
 }
 
 let cache: StoreFila | null = null;
+let processando: Promise<void> | null = null;
+
+function blank(): StoreFila {
+  return { itens: [], ultimoEnvio: null, emAndamento: null };
+}
 
 function carregar(): StoreFila {
-  try {
-    if (!existsSync(file)) return cache ?? { itens: [], ultimoEnvio: null };
-    const raw: any = JSON.parse(readFileSync(file, "utf8"));
-    cache = {
-      itens: Array.isArray(raw?.itens) ? raw.itens : [],
-      ultimoEnvio: raw?.ultimoEnvio ?? null,
-    };
-    return cache;
-  } catch {
-    return cache ?? { itens: [], ultimoEnvio: null };
-  }
+  const raw = lerJson<any>(file, null);
+  if (!raw || typeof raw !== "object") return cache ?? blank();
+  cache = {
+    itens: Array.isArray(raw.itens) ? raw.itens : [],
+    ultimoEnvio: raw.ultimoEnvio ?? null,
+    emAndamento: raw.emAndamento?.item ? raw.emAndamento : null,
+  };
+  return cache;
 }
 
 function salvar(s: StoreFila): void {
-  try {
-    mkdirSync(dataDir, { recursive: true });
-    cache = s;
-    const tmp = `${file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(s, null, 2));
-    renameSync(tmp, file); // atômico
-  } catch {
-    /* ignore */
-  }
+  cache = s;
+  gravarJsonAtomico(file, s);
 }
 
 /** Intervalo entre liberações da fila de rajada (env, default 120s = 2 min). */
@@ -106,14 +101,31 @@ export function enfileirar(item: Omit<ItemFila, "id" | "criadoEm">): ItemFila {
 
 /**
  * Devolve um item para a fila preservando-o (mesmo id, mesma oferta).
- * Usado quando o envio falha por motivo transitório (limite do WhatsApp):
- * a oferta volta em vez de ser perdida.
+ * Se ele ainda estiver em `emAndamento`, entra como cópia; se já estiver na
+ * fila, apenas atualiza destinos/tentativas (evita duplicar).
  */
 export function reenfileirar(item: ItemFila): ItemFila {
   const s = carregar();
-  if (!s.itens.some((i) => i.id === item.id)) s.itens.push(item);
+  const existente = s.itens.find((i) => i.id === item.id);
+  if (existente) {
+    existente.destinos = item.destinos;
+    existente.tentativas = item.tentativas;
+  } else {
+    s.itens.push({ ...item });
+  }
   salvar(s);
   return item;
+}
+
+/** No boot: devolve à fila o item que estava sendo enviado quando caiu. */
+export function recuperarEmAndamento(): number {
+  const s = carregar();
+  const pendente = s.emAndamento?.item;
+  if (!pendente) return 0;
+  if (!s.itens.some((i) => i.id === pendente.id)) s.itens.unshift(pendente);
+  s.emAndamento = null;
+  salvar(s);
+  return 1;
 }
 
 // --- rajada: > 3 mensagens da MESMA origem dentro de 1 minuto ---------------
@@ -133,13 +145,19 @@ export function ehRajada(origem: string, agora = Date.now()): boolean {
   return arr.length > LIMITE_RAJADA;
 }
 
-/** Envia um item para todos os destinos e registra evento por destino. */
+/**
+ * Envia um item para todos os destinos e registra evento por destino.
+ * Falha transitória reenfileira o destino que falhou + os ainda não tentados
+ * (sem duplicar os que já receberam). Falha permanente segue para o próximo.
+ */
 export async function entregarItem(
-  item: Omit<ItemFila, "id" | "criadoEm">
+  item: ItemFila
 ): Promise<{ jid: string; messageId: string }[]> {
   const dry = process.env.MONITOR_DRY === "1"; // rede de segurança
   const enviados: { jid: string; messageId: string }[] = [];
-  for (const jid of item.destinos) {
+
+  for (let i = 0; i < item.destinos.length; i += 1) {
+    const jid = item.destinos[i];
     try {
       const r = await enviarParaGrupo({
         grupo: jid,
@@ -178,25 +196,25 @@ export async function entregarItem(
       }
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      // Falha TRANSITÓRIA (limite do WhatsApp, socket caiu): o item volta
-      // para a fila em vez de ser descartado — a oferta não se perde.
-      const transitorio = /rate-overlimit|500|Connection Closed|socket hang up|terminated|ECONNRESET|ETIMEDOUT|fetch failed|429/i.test(msg);
       const tentativas = (item.tentativas ?? 0) + 1;
-      const restantes = item.destinos.filter((d) => d !== jid);
-      if (transitorio && tentativas <= 3 && restantes.length > 0) {
+      if (ehErroTransitorio(msg) && tentativas <= 3) {
+        // Reenfileira do destino que falhou em diante: os anteriores já
+        // receberam e NÃO podem ser repetidos.
+        const restantes = item.destinos.slice(i);
         registrarEvento({
           em: new Date().toISOString(), origem: item.origem, programa: item.programa,
           idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
           status: "ERRO", detalhe: `reenfileirado (${tentativas}/3): ${msg.slice(0, 90)}`,
         });
-        reenfileirar({ ...item, tentativas, destinos: restantes } as ItemFila);
-      } else {
-        registrarEvento({
-          em: new Date().toISOString(), origem: item.origem, programa: item.programa,
-          idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
-          status: "ERRO", detalhe: msg.slice(0, 120),
-        });
+        reenfileirar({ ...item, tentativas, destinos: restantes });
+        return enviados;
       }
+      registrarEvento({
+        em: new Date().toISOString(), origem: item.origem, programa: item.programa,
+        idProduto: item.idProduto, linkTransformado: item.link, destino: jid,
+        status: "ERRO", detalhe: msg.slice(0, 120),
+      });
+      // falha permanente: tenta os demais destinos
     }
   }
   return enviados;
@@ -208,25 +226,54 @@ export async function entregarItem(
  * Devolve o item liberado (ou null).
  */
 export async function liberarProximo(): Promise<ItemFila | null> {
+  if (processando) return null;
   const s = carregar();
+  if (s.emAndamento) return null; // já há um envio em curso
   if (!s.itens.length) return null;
   if (!carregarMonitor().autoEnviar) return null; // pausado: mantém na fila
+
   const desde = s.ultimoEnvio ? Date.now() - new Date(s.ultimoEnvio).getTime() : Infinity;
   if (desde < intervaloMs()) return null;
 
   const item = s.itens.shift()!;
   s.ultimoEnvio = new Date().toISOString();
-  salvar(s); // já sai da fila (não reenvia em loop se o envio falhar)
+  s.emAndamento = { item, desde: s.ultimoEnvio };
+  salvar(s);
 
-  await entregarItem(item);
+  processando = (async () => {
+    try {
+      await entregarItem(item);
+    } finally {
+      const atual = carregar();
+      if (atual.emAndamento?.item.id === item.id) {
+        atual.emAndamento = null;
+        salvar(atual);
+      }
+    }
+  })();
+  try {
+    await processando;
+  } finally {
+    processando = null;
+  }
   return item;
+}
+
+/** Aguarda o envio em curso terminar (usado no shutdown gracioso). */
+export async function aguardarProcessamento(timeoutMs = 30_000): Promise<void> {
+  if (!processando) return;
+  await Promise.race([
+    processando,
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
-/** Worker: verifica a cada 5s e libera 1 item por intervalo (45s). */
+/** Worker: verifica a cada 5s e libera 1 item por intervalo. */
 export function iniciarFilaWorker(tickMs = 5000): void {
   if (timer) return;
+  recuperarEmAndamento();
   let ticks = 0;
   timer = setInterval(() => {
     void liberarProximo();

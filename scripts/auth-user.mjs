@@ -13,7 +13,7 @@
  * Nunca imprime a senha nem o hash.
  */
 import { createHash, randomBytes, randomInt, randomUUID, scrypt as scryptCb } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,8 +105,8 @@ async function principal() {
       process.exit(1);
     }
   }
-  if (senha.length < 8) {
-    console.error("A senha precisa ter pelo menos 8 caracteres.");
+  if (senha.length < 12) {
+    console.error("A senha precisa ter pelo menos 12 caracteres.");
     process.exit(1);
   }
   if (senha.length > 1024) {
@@ -176,7 +176,10 @@ async function principal() {
     tentativas: 0,
   };
 
-  writeFileSync(arquivo, JSON.stringify({ usuarios }, null, 2) + "\n", { mode: 0o600 });
+  // Escrita atômica: um crash no meio não deixa credencial truncada.
+  const tmp = `${arquivo}.${randomUUID()}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ usuarios }, null, 2) + "\n", { mode: 0o600 });
+  renameSync(tmp, arquivo);
   chmodSync(arquivo, 0o600);
   console.log(`Credencial salva em ${arquivo} (modo 0600).`);
 

@@ -99,3 +99,14 @@ test("auditoria: mascara IP e grava JSONL", () => {
 test("validação de configuração: usuário ativo + segredo", () => {
   assert.doesNotThrow(() => auth.validarConfigAuth());
 });
+
+test("reenvio de código: limite dedicado de 3/hora por IP", () => {
+  const ip = "198.51.100.9";
+  assert.equal(auth.checarLimiteReenvio(ip).ok, true);
+  assert.equal(auth.checarLimiteReenvio(ip).ok, true);
+  assert.equal(auth.checarLimiteReenvio(ip).ok, true);
+  const bloqueado = auth.checarLimiteReenvio(ip);
+  assert.equal(bloqueado.ok, false);
+  assert.ok(bloqueado.retryAfter > 0);
+  assert.equal(auth.checarLimiteReenvio("198.51.100.10").ok, true, "outro IP não é afetado");
+});

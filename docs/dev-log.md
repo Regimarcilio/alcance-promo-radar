@@ -1404,3 +1404,92 @@ principal cair, o envio continua sem parar. Sem secundário disponível, o envio
 **Validação**: `typecheck`/`build` limpos; `npm test` **99/99** (11 no rotacao.test.ts: anti-repetição
 entre secundários, envio nunca vai ao principal, fallback para o principal sem secundário, serviço
 sempre no principal, um principal por vez, e os 3 de dedup); smoke OK.
+
+---
+
+## 2026-10-23 | MONITOR-AMZ-01 | Amazon em revisão, mídia 500 e “Testar” inflando o painel
+
+**Sintoma do operador**: 10 recebidas e só 2 encaminhadas; anúncios Amazon não saíam.
+
+**Diagnóstico**:
+- Os 6 eventos `ERRO` eram **3 tentativas de 2 ofertas ML**, não 6 mensagens distintas: a Evolution
+  devolvia `sendMedia 500` porque não conseguia baixar `http2.mlstatic.com` (`EAI_AGAIN`).
+- As 2 Amazon caíram em `REVISAO: AMAZON_TAG não configurado` — o `.env` estava com a tag vazia.
+- O endpoint “Testar” (`dryRun`) registrava evento `ENCAMINHADA` e inflava `recebidas/encaminhadas`.
+
+**Correções**:
+- `src/monitor/webhook.ts` — `dryRun` agora simula o envio **antes** da reserva de dedup e não
+  registra evento; testar não bloqueia a oferta real seguinte.
+- `.env` — `AMAZON_TAG=manodosachadi-20` (arquivo git-ignored); o transformer passou a publicar
+  `?tag=manodosachadi-20`.
+- `src/monitor/webhook.test.ts` (novo) — prova que dois `dryRun` seguidos continuam `ENCAMINHADO` e
+  não alteram contadores nem dedup.
+
+**Validação**: `typecheck`/`build` + `npm test` **111/111**; teste seco dos ASINs `B0GJ7GG3YV` e
+`B0FGDKYGFS` retornou `ENCAMINHADO` com a tag correta. Fila ML zerada e um item real encaminhado em
+02:29:27 (`3EB0D49F73862438187DEE`). Contadores limpos dos dois `dryRun` de diagnóstico: 10
+recebidas / 2 encaminhadas / 2 revisões / 6 erros (histórico real).
+
+---
+
+## 2026-10-23 | MONITOR-LINKS-01 | Links de origem em revisão (link.amazon, shozap, promosdebrother)
+
+**Sintoma**: ofertas de grupos configurados caindo em `REVISAO: sem link de afiliado reconhecido`
+para `link.amazon`, `promosdebrother.com`, `mercadolivre.com` e `oferta.emipefps.com`.
+
+**Diagnóstico**: `curtos.ts` só resolvia encurtadores genéricos e a API do Epipe; esses hosts
+não estavam na allowlist. `link.amazon` faz 302 → `amzlinks.in` → Amazon; `shozap.com.br` faz
+302 → `link.amazon`/`onelink.shein.com`; `mercadolivre.com` faz 301 para o `.com.br`.
+
+**Correção**: `src/monitor/curtos.ts` — allowlist ampliada (`link.amazon`, `amzlinks.in`,
+`shozap.com.br`, `promosdebrother.com`, `mercadolivre.com`) e fallback de `viaEpipe` para
+redirect quando a API falha. Validação real: `amazon.shozap.com.br/48IZM7RCXv` →
+`amazon.com.br/dp/B0H35H7QZZ`; `link.amazon/B01Lne7nO` → Amazon.
+
+**Testes**: `curtos.test.ts` 8 casos; suíte **114/114**. Ainda pendente: Shein (`onelink.shein.com`)
+não é programa suportado e continua em revisão.
+
+---
+
+## 2026-10-23 | MONITOR-SYNC-01 | Sync diário de grupos + fila 60s
+
+**Pedido**: não adicionar grupos manualmente; ter verificação automática diária da lista de
+grupos ativos; reduzir a fila anti-rajada para 60s.
+
+**Implementação**:
+- `src/monitor/sync-grupos.ts`: agenda 06:00 (TZ America/Sao_Paulo), roda no boot se a última
+  execução tem >20h, grava `data/grupos-sync.json`; endpoint `GET/POST /api/monitor/sync-grupos`.
+- `src/monitor/evolution.ts`: `fetchAllGroups` agora consulta TODAS as instâncias ativas e une
+  os grupos (o principal estava `close` e escondia 4 grupos do Celular 2).
+- `src/monitor/grupos-vistos.ts`: webhook registra grupos não monitorados que publicaram
+  link + preço; o sync só adiciona esses (evita grupos pessoais/cursos da conta).
+- `src/monitor/grupos.ts`: `sincronizarOrigens` com `apenasJids`, respeitando limite de 10,
+  sem remover regras e sem usar o destino como origem.
+- `.env`: `MONITOR_FILA_INTERVALO_S=60`, `MONITOR_SYNC_GRUPOS=1`, `MONITOR_SYNC_GRUPOS_HORA=6`,
+  `MONITOR_AUTO_ORIGENS=1`.
+
+**Resultado**: 10 origens ativas (6 antigas + Leleco Tech, Clube dos Achadinhos, RAINHA das
+PROMO, Promoção Bruta), todas para o Mano dos Achadinhos; fila em 60s.
+
+**Testes**: 118/118. Novos: `grupos-sync.test.ts` (2), `grupos-vistos.test.ts` (1),
+`curtos.test.ts` +1 (`link.emipefps.com` via RPC Supabase).
+
+---
+
+## 2026-10-23 | ROT-ENVIO-02 | Envio partilhado por todos os celulares credenciados
+
+**Pedido**: as mensagens devem ser enviadas partilhadas pelos celulares credenciados.
+
+**Problema**: a política anterior reservava o principal para serviço e mandava 100% dos envios
+para os secundários. Com um secundário só, todo o volume ficava num aparelho; o principal ficava
+ocioso mesmo `open`.
+
+**Decisão**: todos os números **ativos e `open`** participam do envio, inclusive o principal, na
+proporção do peso. O principal continua sendo o preferido para operações de serviço
+(`instanciaParaServico`), mas não fica fora do rodízio de mensagens.
+
+**Código**: `src/wa/rotacao.ts` (removida a exclusão do principal no envio); textos da aba Números,
+README, SRS (RF-042/RN-016), backlog (US-27) e ADR-006 atualizados.
+
+**Teste**: `src/wa/rotacao.test.ts` agora valida 3 números no rodízio, incluindo o principal;
+118/118 verdes.

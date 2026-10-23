@@ -3,13 +3,15 @@
  * Fluxo: webhook Evolution → origem monitorada? → parser → transformer →
  *        template → router (destinos) → dedup/anti-loop.
  */
+import { randomUUID } from "node:crypto";
 import { detectar, rotulo, limparTexto, type OfertaDetectada } from "./parser.js";
 import { expandirLink } from "./curtos.js";
 import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
 import { salvarMidia } from "./midia.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
-import { jaMonitorado, marcarMonitorado, registrarEvento } from "./state.js";
+import { registrarOfertaDeGrupo } from "./grupos-vistos.js";
+import { jaMonitorado, reservarMonitorado, registrarEvento } from "./state.js";
 import { enfileirar, tamanhoFila, intervaloFila, ehRajada, entregarItem } from "./fila.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { formatar } from "../wa/formatter.js";
@@ -108,9 +110,17 @@ export async function processar(
   // MONITOR_DRY=1 força modo teste em TUDO (nenhum envio real sai) — rede de
   // segurança para mexer no sistema sem atingir o grupo de verdade.
   const dryRun = process.env.MONITOR_DRY === "1" ? true : opts.dryRun ?? false;
+  // Teste (dryRun) não conta estatística nem consome dedup: simular não pode
+  // inflar o painel nem bloquear a oferta real que chegar depois.
+  const registrar = (ev: Parameters<typeof registrarEvento>[0]): void => {
+    if (!dryRun) registrarEvento(ev);
+  };
 
   // 1) Origem monitorada? (RF-030)
   if (msg.deMim || !ehMonitorado(msg.origem)) {
+    // Grupo novo? Guarda a evidência (link + preço) para o sync diário
+    // adicioná-lo como origem sem precisar de configuração manual.
+    if (!msg.deMim) registrarOfertaDeGrupo(msg.origem, msg.texto);
     return { acao: "IGNORADO", motivo: msg.deMim ? "mensagem própria" : "origem não monitorada" };
   }
 
@@ -133,7 +143,7 @@ export async function processar(
     // Diagnóstico: quais domínios chegaram e não foram reconhecidos? Sem isso
     // o operador só vê "link não reconhecido" e não sabe o que adicionar.
     const doms = [...new Set(oferta.links.map((l) => l.host).filter(Boolean))].slice(0, 3);
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: "desconhecido",
       idProduto: null, linkTransformado: null, destino: null,
       status: "REVISAO",
@@ -153,7 +163,7 @@ export async function processar(
 
   // 4) Dedup 7d (RF-035)
   if (jaMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem)) {
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "DUPLICADO",
@@ -163,7 +173,7 @@ export async function processar(
 
   // 5) Link válido? senão fila de revisão (RN-012)
   if (!tr.ok) {
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: tr.motivo,
@@ -185,7 +195,7 @@ export async function processar(
 
   // 7) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
   if (!carregarMonitor().autoEnviar) {
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "envio direto desligado — aguardando revisão",
@@ -196,7 +206,7 @@ export async function processar(
   // 8) Rotear destinos (RF-033/034 / RN-010 anti-loop)
   const destinos = destinosPara(msg.origem);
   if (destinos.length === 0) {
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
       status: "REVISAO", detalhe: "nenhum grupo de destino configurado",
@@ -204,7 +214,19 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: "sem destinos", mensagem: corpo };
   }
 
-  // 8) Enviar: teste (dryRun) na hora; produção entra na FILA anti-rajada (RF-036)
+  const item = {
+    id: randomUUID(),
+    criadoEm: new Date().toISOString(),
+    origem: msg.origem,
+    programa: oferta.principal.programa,
+    idProduto: idEfetivo,
+    link: tr.url,
+    mensagem: corpo,
+    imagem: foto,
+    fonte: fonteFoto,
+    destinos: destinos.map((d) => d.jid),
+  };
+  // 8) Teste (dryRun): simula o envio sem reservar dedup e sem contar evento.
   if (dryRun) {
     const simulados: { jid: string; messageId: string }[] = [];
     for (const destino of destinos) {
@@ -216,13 +238,6 @@ export async function processar(
       });
       simulados.push({ jid: destino.jid, messageId: r.messageId });
     }
-    registrarEvento({
-      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
-      idProduto: idEfetivo, linkTransformado: tr.url,
-      destino: simulados.map((e) => e.jid).join(","),
-      status: "ENCAMINHADA", messageId: simulados[0]?.messageId,
-      detalhe: `teste (dryRun) · ${fonteFoto}`,
-    });
     return {
       acao: "ENCAMINHADO",
       programa: rotulo(oferta.principal.programa),
@@ -231,23 +246,23 @@ export async function processar(
     };
   }
 
-  const item = {
-    origem: msg.origem,
-    programa: oferta.principal.programa,
-    idProduto: idEfetivo,
-    link: tr.url,
-    mensagem: corpo,
-    imagem: foto,
-    fonte: fonteFoto,
-    destinos: destinos.map((d) => d.jid),
-  };
-  marcarMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem); // reserva (evita duplicar)
+  // Reserva ATÔMICA (sem await entre checar e gravar): duas mensagens do mesmo
+  // produto em paralelo não passam as duas. Substitui o check+mark separados,
+  // que tinham uma janela de corrida entre eles.
+  if (!reservarMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem)) {
+    registrar({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
+      status: "DUPLICADO",
+    });
+    return { acao: "DUPLICADO", programa: rotulo(oferta.principal.programa) };
+  }
 
   // 9) Rajada? Só da 4ª mensagem da MESMA origem no último minuto em diante
   //    entra na fila (liberada 1 a cada 2 min). Até 3, segue na hora.
   if (ehRajada(msg.origem)) {
     enfileirar(item);
-    registrarEvento({
+    registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url,
       destino: destinos.map((d) => d.jid).join(","),

@@ -50,14 +50,16 @@ export async function enviarViaGo(args: {
   legenda: string;
   dryRun: boolean;
 }): Promise<EnvioResult> {
-  if (args.dryRun || !goKey()) {
+  if (args.dryRun) {
     console.log(`[dry-run:go] grupo=${args.grupo} legenda=${args.legenda.length}chars`);
     return { messageId: `dryrun-go-${Date.now()}`, dryRun: true };
   }
+  if (!goKey()) throw new Error("Evolution GO não configurada (EVO_GO_KEY/EVO_KEY) — envio abortado");
   const res = await fetch(sendPath(goInstance()), {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: goKey() },
     body: JSON.stringify({ number: args.grupo, text: args.legenda }),
+    signal: AbortSignal.timeout(45_000),
   });
   const body = await res.text();
   if (res.status === 404) {

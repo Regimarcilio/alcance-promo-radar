@@ -41,8 +41,8 @@ test("MONITOR_EVENTOS_LIMITE=3: mantém só os 3 últimos eventos", async () => 
       s.eventos.map((e: { idProduto: string }) => e.idProduto),
       ["4", "5", "6"],
     );
-    // o contador de recebidas reflete o limite
-    assert.equal(mod.resumo().recebidas, 3);
+    // contador vitalício: 6 recebidas mesmo com buffer de 3 eventos
+    assert.equal(mod.resumo().recebidas, 6);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -67,6 +67,40 @@ test("sem MONITOR_EVENTOS_LIMITE: padrão 500", async () => {
     const s = JSON.parse(readFileSync(join(dir, "monitor-estado.json"), "utf8"));
     assert.equal(s.eventos.length, 500);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reserva atômica: mesma oferta só passa uma vez e liberar devolve", async () => {
+  const { mod, dir } = await carregarCom(null);
+  try {
+    assert.equal(mod.reservarMonitorado("shopee", "SKU1", "https://x"), true);
+    assert.equal(mod.reservarMonitorado("shopee", "SKU1", "https://x"), false);
+    assert.equal(mod.totalHashes(), 1);
+    mod.liberarReserva("shopee", "SKU1", "https://x");
+    assert.equal(mod.totalHashes(), 0);
+    assert.equal(mod.reservarMonitorado("shopee", "SKU1", "https://x"), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dedup expirado é podado na gravação (DEDUP_DIAS=1)", async () => {
+  const { mod, dir } = await carregarCom(null);
+  try {
+    process.env.DEDUP_DIAS = "1";
+    const h = mod.hashMonitor("shopee", "VELHO", "https://x");
+    const antigo = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(
+      join(dir, "monitor-estado.json"),
+      JSON.stringify({ hashes: { [h]: antigo }, eventos: [], totais: {} }),
+    );
+    assert.equal(mod.totalHashes(), 1, "hash antigo ainda é lido");
+    mod.registrarEvento(evento(1));
+    assert.equal(mod.totalHashes(), 0, "gravação poda hash fora da janela");
+  } finally {
+    delete process.env.DEDUP_DIAS;
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -15,6 +15,7 @@
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { instanciaParaServico } from "../wa/rotacao.js";
 
 const CODIGO_MIN = 10;
 const CODIGO_MAX = 10;
@@ -122,8 +123,9 @@ export async function enviarCodigoWhatsApp(
   if (!telefoneValido(d)) return { ok: false, erro: "telefone inválido" };
   const base = (process.env.EVO_URL ?? "").replace(/\/$/, "");
   const key = process.env.EVO_KEY ?? "";
-  const inst = process.env.EVO_INSTANCE ?? "radar-piloto";
   if (!base || !key) return { ok: false, erro: "Evolution não configurada (EVO_URL/EVO_KEY)" };
+  // O principal pode ter sido renomeado no painel; EVO_INSTANCE é só o default de fábrica.
+  const inst = await instanciaParaServico();
 
   const texto = [
     `🔐 *Alcance — verificação de celular*`,
@@ -252,10 +254,12 @@ export async function ensureCodigoVerificacao(
   const codigo = temTexto ? emMemoria!.codigo : gerarCodigo();
   const expiraEm = temTexto ? emMemoria!.expiraEm : Date.now() + EXPIRA_MS;
 
+  // Reenviar NÃO zera o lockout: senão um atacante anularia as 5 tentativas
+  // pedindo um código novo a cada rodada.
   salvarVerificacao(dataDir, usuario.id, telefone, {
     hash: hashCodigo(usuario.id, codigo),
     expiraEm: new Date(expiraEm).toISOString(),
-    tentativas: 0,
+    tentativas: usuario.verificacao?.tentativas ?? 0,
   });
   codigosEmMemoria.set(usuario.id, { codigo, expiraEm });
 

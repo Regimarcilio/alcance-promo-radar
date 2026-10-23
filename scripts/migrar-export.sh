@@ -1,35 +1,40 @@
 #!/usr/bin/env bash
-# Exporta o pacote de migração (COM segredos) para FORA do repo.
-# Uso: ./scripts/migrar-export.sh [destino]
-# Gera: migracao-AAAAMMDD-HHMM.tar.gz + .enc (criptografado, levar este)
-# NUNCA commite estes arquivos (já estão no .gitignore).
+# ==========================================================================
+# migrar-export.sh — exporta o pacote de migração (COM segredos) para FORA
+# do repositório.
+#
+# Uso:
+#   ./scripts/migrar-export.sh [diretório-destino]
+#
+# Inclui TODO o data/ (JSON + midia/), .env e, quando o container existir,
+# pg_dump custom da Evolution. Cifra com age (recomendado) ou
+# AES-256-CTR + HMAC-SHA256 (openssl). Retenção configurável.
+#
+# NUNCA commite os pacotes (o .gitignore cobre migracao-*).
+# Equivalente operacional: ./scripts/backup.sh (mesmo formato).
+# ==========================================================================
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-DEST="${1:-/tmp}"
-STAMP="$(date +%Y%m%d-%H%M)"
-BASE="migracao-${STAMP}"
-TMPD="$(mktemp -d)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-backup.sh
+source "$SCRIPT_DIR/lib-backup.sh"
 
-[ -f .env ] || { echo "ERRO: .env não existe. Nada a exportar."; exit 1; }
+export BACKUP_PREFIX="${BACKUP_PREFIX:-migracao}"
 
-cp .env "$TMPD/.env"
-mkdir -p "$TMPD/data"
-for f in contas.json cestas.json envios.json; do
-  [ -f "data/$f" ] && cp "data/$f" "$TMPD/data/$f"
-done
-# envios.json vai junto para o dedup não reenviar o que já saiu daqui
+DEST="${1:-${BACKUP_DIR:-/tmp}}"
+ARCHIVE="$(create_backup "$DEST" "$BACKUP_PREFIX")"
 
-tar -czf "${DEST}/${BASE}.tar.gz" -C "$TMPD" .env data
-echo "Pacote: ${DEST}/${BASE}.tar.gz"
-echo "Conteúdo (nomes, sem valores):"
-tar -tzf "${DEST}/${BASE}.tar.gz"
+cat <<EOF
 
-echo
-echo "Criptografando (escolha uma senha FORTE e anote)..."
-openssl enc -aes-256-cbc -salt -pbkdf2 -in "${DEST}/${BASE}.tar.gz" -out "${DEST}/${BASE}.tar.gz.enc"
-shred -u "${DEST}/${BASE}.tar.gz" 2>/dev/null || rm -f "${DEST}/${BASE}.tar.gz"
-echo "Leve APENAS este arquivo: ${DEST}/${BASE}.tar.gz.enc"
-echo "Apague o .enc da origem após transferir."
+Migração exportada: $ARCHIVE
+Conteúdo: .env + data/ (JSON e midia/) + MANIFEST.txt + pg_dump (se disponível)
 
-rm -rf "$TMPD"
+No destino:
+  1) clone o repositório e entre na pasta;
+  2) ./scripts/migrar-import.sh "$ARCHIVE"
+  3) revise EVO_URL/EVO_HOST_PORT no .env;
+  4) docker compose up -d --build
+
+Leve APENAS o pacote cifrado. Apague-o da origem após transferir com segurança.
+Guarde a senha/identidade age fora do servidor de origem e do destino.
+EOF

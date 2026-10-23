@@ -1,26 +1,104 @@
+# ==========================================================================
 # Manager do promo-radar-novo em porta separada (8099), compartilhando a rede
-# da Evolution do projeto antigo (automensagemwhats_default) para o webhook funcionar.
-# Suba com:  docker compose -f docker-compose.manager-novo.yml up -d --build
+# da Evolution do projeto antigo (automensagemwhats_default) para o webhook.
+#
+# IMPORTANTE — isolamento de dados:
+#   Esta instância usa volumes NOMEADOS próprios (data/logs). NUNCA aponte
+#   ./data ou ./logs do host para cá: o manager antigo e o novo gravariam
+#   auth-users.json, fila, dedup e mídia no mesmo diretório, corrompendo estado.
+#   Se precisar migrar dados, use scripts/backup.sh e scripts/restore.sh com
+#   destinos distintos.
+#
+# Build explícito da mesma imagem do compose principal:
+#   docker build -t promo-radar-manager:local -f Dockerfile.manager .
+#   docker compose -f docker-compose.manager-novo.yml up -d
+# ==========================================================================
+
 services:
+  manager-novo-init:
+    # One-shot de permissões do volume nomeado (USER node não escreve em
+    # volume criado root:root). Sem rede e com capabilities mínimas.
+    image: promo-radar-manager:${MANAGER_IMAGE_TAG:-local}
+    pull_policy: never  # usa a imagem construída por `manager-novo` (não tenta registry)
+    container_name: promo_radar_manager_init
+    healthcheck:
+      disable: true
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /app/data /app/logs && chown -R 1000:1000 /app/data /app/logs"]
+    volumes:
+      - manager_novo_data:/app/data
+      - manager_novo_logs:/app/logs
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "1"
+
   manager-novo:
-    image: promo-radar-manager:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    image: promo-radar-manager:${MANAGER_IMAGE_TAG:-local}
     container_name: promo_radar_manager
     ports:
       # Bind local até o TLS/reverse proxy estar pronto (evita senha/cookie em HTTP na LAN).
       - "127.0.0.1:${MANAGER_PORT_NOVO:-8099}:8091"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      - MANAGER_PORT=8091
-      - TZ=America/Sao_Paulo
+      HOST: "0.0.0.0"
+      MANAGER_PORT: "8091"
+      ALCANCE_DATA_DIR: /app/data
+      TZ: America/Sao_Paulo
       # mesma rede => a Evolution atende pelo hostname "evolution"
-      - EVO_URL=http://evolution:8080
+      EVO_URL: http://evolution:8080
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      # Volumes nomeados: sem compartilhamento com o ./data do manager principal.
+      - manager_novo_data:/app/data
+      - manager_novo_logs:/app/logs
     networks:
       - automensagem_default
+    depends_on:
+      manager-novo-init:
+        condition: service_completed_successfully
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
+
+volumes:
+  manager_novo_data:
+  manager_novo_logs:
 
 networks:
   automensagem_default:

@@ -5,9 +5,10 @@
  * só vai para os destinos daquela origem (não vira "tudo para todos").
  * Persistência em data/monitor.json (git-ignored, chmod 600).
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { dataDirAtual } from "../config/paths.js";
+import { gravarJsonAtomico } from "../store/json.js";
 
 export const MAX_MONITOR_GRUPOS = 10; // máx de origens
 export const MAX_DESTINOS_POR_ORIGEM = 10;
@@ -38,9 +39,7 @@ export interface MonitorStore {
   criadoEm: string;
 }
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "monitor.json");
+const file = join(dataDirAtual(), "monitor.json");
 
 function blank(): MonitorStore {
   return { regras: [], autoEnviar: false, foto: "origem", criadoEm: new Date().toISOString() };
@@ -138,13 +137,7 @@ export function carregarMonitor(): MonitorStore {
 }
 
 function salvar(s: MonitorStore): void {
-  mkdirSync(dataDir, { recursive: true });
-  writeFileSync(file, JSON.stringify(s, null, 2));
-  try {
-    chmodSync(file, 0o600);
-  } catch {
-    /* windows */
-  }
+  gravarJsonAtomico(file, s);
 }
 
 /**
@@ -231,6 +224,109 @@ export function definirFoto(v: FonteFoto): void {
   const s = carregarMonitor();
   s.foto = v === "produto" ? "produto" : "origem";
   salvar(s);
+}
+
+
+/** Destino padrão para novas origens: primeiro destino ativo das regras,
+ *  depois MONITOR_DESTINO_PADRAO. Nunca usa a própria origem como destino. */
+export function destinoPadraoMonitor(): GrupoMonitor | null {
+  const s = carregarMonitor();
+  for (const r of s.regras) {
+    const d = r.destinos.find((x) => x.ativo && x.jid !== r.origem.jid);
+    if (d) return { ...d };
+  }
+  const env = normalizarJid(process.env.MONITOR_DESTINO_PADRAO ?? "");
+  return env ? novoGrupo(env, env) : null;
+}
+
+export interface GrupoDescoberto {
+  jid: string;
+  nome: string;
+}
+
+export interface ResultadoSyncOrigens {
+  total: number;
+  adicionados: string[];
+  atualizados: string[];
+  ignorados: string[];
+  destinoPadrao: string | null;
+}
+
+/**
+ * Sincroniza a lista de grupos da conta com as origens monitoradas.
+ *
+ * Regras de segurança:
+ * - nunca adiciona o próprio destino como origem (anti-loop RN-010);
+ * - respeita MAX_MONITOR_GRUPOS;
+ * - só adiciona automaticamente se MONITOR_AUTO_ORIGENS != "0";
+ * - não remove nem desativa regras existentes (falha transitória da Evolution
+ *   não pode apagar a configuração do operador).
+ */
+export function sincronizarOrigens(
+  grupos: GrupoDescoberto[],
+  opts: { autoAdicionar?: boolean; destinoPadrao?: GrupoMonitor | null; apenasJids?: Set<string> | string[] } = {},
+): ResultadoSyncOrigens {
+  const s = carregarMonitor();
+  const auto = opts.autoAdicionar ?? process.env.MONITOR_AUTO_ORIGENS !== "0";
+  const permitidos = opts.apenasJids
+    ? new Set(Array.isArray(opts.apenasJids) ? opts.apenasJids : [...opts.apenasJids])
+    : null;
+  const destino = opts.destinoPadrao === undefined ? destinoPadraoMonitor() : opts.destinoPadrao;
+  const destinos = new Set<string>();
+  for (const r of s.regras) for (const d of r.destinos) destinos.add(d.jid);
+
+  const out: ResultadoSyncOrigens = {
+    total: grupos.length,
+    adicionados: [],
+    atualizados: [],
+    ignorados: [],
+    destinoPadrao: destino?.jid ?? null,
+  };
+  let mudou = false;
+  const vistos = new Set<string>();
+
+  for (const g of grupos) {
+    const jid = normalizarJid(g.jid ?? "");
+    if (!jid || vistos.has(jid)) continue;
+    vistos.add(jid);
+
+    // Destino (ou qualquer destino já configurado) nunca vira origem.
+    if (destinos.has(jid) || jid === destino?.jid) {
+      out.ignorados.push(jid);
+      continue;
+    }
+
+    const regra = s.regras.find((r) => r.origem.jid === jid);
+    if (regra) {
+      const nome = (g.nome ?? "").trim();
+      if (nome && nome !== regra.origem.nome) {
+        regra.origem.nome = nome;
+        out.atualizados.push(jid);
+        mudou = true;
+      }
+      continue;
+    }
+
+    if (!auto || !destino || (permitidos && !permitidos.has(jid))) {
+      out.ignorados.push(jid);
+      continue;
+    }
+    if (s.regras.length >= MAX_MONITOR_GRUPOS) {
+      out.ignorados.push(jid);
+      continue;
+    }
+
+    s.regras.push({
+      origem: novoGrupo(jid, g.nome),
+      destinos: [{ ...destino, criadoEm: new Date().toISOString() }],
+      criadoEm: new Date().toISOString(),
+    });
+    out.adicionados.push(jid);
+    mudou = true;
+  }
+
+  if (mudou) salvar(s);
+  return out;
 }
 
 export function listarRegras(): Regra[] {

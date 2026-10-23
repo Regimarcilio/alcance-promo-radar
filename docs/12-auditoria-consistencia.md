@@ -1,5 +1,12 @@
 # 12 — Auditoria de Consistência — promo-radar-novo / **Alcance**
 
+> **RETRATO HISTÓRICO — 2026-10-19 (commit `74254c2`).**
+> Este documento foi preservado como evidência da auditoria daquele dia. Ele **não** descreve o
+> estado atual: na época havia zero testes, nenhum remoto Git e documentação parada na v0.3. Desde
+> então foram adicionados 99 testes em 17 arquivos, o remoto `github.com/Regimarcilio/alcance-promo-radar`
+> e a documentação vigente passou a ser o `docs/SRS-v0.4.md`. Para o estado atual, use
+> `docs/00-INDICE.md`, `docs/SRS-v0.4.md` e `CHANGELOG.md`. O conteúdo abaixo **não foi reescrito**.
+
 **Data:** 2026-10-19 · **Branco:** `develop` @ `74254c2` · **Auditor:** planmaster
 **Método:** inspeção do código (`src/`, 6.374 LOC em 30 módulos), docs (`docs/`), dados (`data/`),
 git, CI e runtime (containers, endpoints, logs) — sem alterar nada.

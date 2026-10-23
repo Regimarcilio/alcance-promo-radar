@@ -83,3 +83,16 @@ test("CSV: cabeçalho + uma linha por publicação", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("CSV: neutraliza formula injection em campos livres", async () => {
+  const { mod, dir } = await carregar();
+  try {
+    mod.registrarPublicacao({ ...P, titulo: "=HYPERLINK(\"http://evil\")", tag: "@cmd" });
+    const csv = mod.publicacoesCsv({});
+    assert.match(csv, /"'=HYPERLINK/);
+    assert.match(csv, /"'@cmd"/);
+    assert.doesNotMatch(csv, /;"=HYPERLINK/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -1,5 +1,10 @@
 # 05 — Backlog Scrum — promo-radar-novo [v0.3 AUTOMÁTICO + MONITOR]
 
+> **RETRATO HISTÓRICO (v0.3, 2026-10-17).** Plano da época, antes de auth/clientes/multi-número/
+> temas. O backlog vigente é [`05-backlog-v0.4.md`](05-backlog-v0.4.md), que cobre 100% dos RF do
+> [`SRS-v0.4.md`](SRS-v0.4.md). Aqui a numeração US-01..US-20 é preservada como referência; não
+> replanejar esforço a partir deste arquivo.
+
 > v0.3 | 2026-10-17 | Velocidade: 12 pts/sprint | Épicos E1–E5 mantidos + **E6 Monitor (novo)**
 
 ## Épicos (v0.1/v0.2 mantidos + novo)

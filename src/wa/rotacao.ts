@@ -9,14 +9,14 @@
  * - a conta do Mercado Livre NÃO muda: o celular é só o remetente;
  * - peso por número (1..10) para dar mais volume a um número mais "quente".
  *
- * POLÍTICA PRINCIPAL × SECUNDÁRIOS (acordo com o operador):
- * - o **PRINCIPAL** é usado nas operações de SERVIÇO (adicionar contatos ao
- *   grupo, permissões de grupo, permissões de grupo) — o número "de casa";
- * - os **SECUNDÁRIOS** assumem integralmente o **ENVIO DE MENSAGENS** para os
- *   grupos: se o principal cair, o envio continua sem parar;
- * - se TODOS os secundários estiverem fora, o envio volta para o principal
- *   (nada fica sem enviar);
- * - entre os secundários, o envio alterna (rodízio ponderado + anti-repetição).
+ * POLÍTICA DE ENVIO (atualizada com o operador):
+ * - TODOS os números ativos e com conexão "open" participam do ENVIO,
+ *   inclusive o principal; o peso define a fatia de cada aparelho;
+ * - o **PRINCIPAL** continua sendo o preferido para as operações de SERVIÇO
+ *   (adicionar contatos, permissões de grupo) — o número "de casa";
+ * - se um número falha, o dispatch repete em outro; se nenhum estiver open,
+ *   ainda sorteia um ativo (nada fica sem enviar);
+ * - o rodízio é ponderado + anti-repetição para não concentrar volume.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -30,7 +30,7 @@ export interface InstanciaWhats {
   enviadas: number;
   ultimaEm: string | null;
   criadaEm: string;
-  /** principal = reservado às operações de serviço (adicionar contatos, permissões) */
+  /** principal = preferido para operações de serviço (também participa do envio) */
   principal?: boolean;
 }
 
@@ -213,7 +213,7 @@ export function ultimaInstanciaUsada(): string | null {
   return ultimaUsada;
 }
 
-export async function proximaInstancia(): Promise<string> {
+export async function proximaInstancia(excluir: string[] = []): Promise<string> {
   const s = carregar();
   const ativos = s.itens.filter((i) => i.ativo);
   if (ativos.length === 0) return padrao();
@@ -223,13 +223,16 @@ export async function proximaInstancia(): Promise<string> {
   const abertos = comEstado.filter((x) => x.e === "open").map((x) => x.i);
   let candidatos = abertos.length > 0 ? abertos : ativos;
 
-  // ENVIO DE MENSAGENS: os SECUNDÁRIOS assumem integralmente. O principal só
-  // volta se nenhum secundário estiver disponível (para nada parar).
-  const principal = instanciaPrincipal();
-  if (principal) {
-    const secundarios = candidatos.filter((i) => i.instancia !== principal.instancia);
-    if (secundarios.length > 0) candidatos = secundarios;
+  // Falhou agora (ex.: upload "Connection Closed")? não sorteia de novo na
+  // mesma entrega; se só sobrar ele, o fallback abaixo mantém o envio vivo.
+  if (excluir.length > 0) {
+    const restantes = candidatos.filter((i) => !excluir.includes(i.instancia));
+    if (restantes.length > 0) candidatos = restantes;
   }
+
+  // ENVIO DE MENSAGENS: todos os números abertos participam, inclusive o
+  // principal. O peso de cada um define a fatia no rodízio. O principal só
+  // tem prioridade nas operações de serviço (instanciaParaServico), não aqui.
 
   // anti-repetição: tira a última usada (com probabilidade) se houver outra
   if (candidatos.length > 1 && ultimaUsada && Math.random() < evitaRepeticao()) {
@@ -253,8 +256,8 @@ export async function proximaInstancia(): Promise<string> {
 
 /**
  * Instância para OPERAÇÕES DE SERVIÇO (adicionar contatos ao grupo, permissões
- * de grupo): sempre o principal, para não dispersar essas ações e para que os
- * secundários fiquem exclusivos com o envio de mensagens.
+ * de grupo): sempre o principal, para não dispersar essas ações administrativas.
+ * O envio de mensagens é separado e usa todos os números abertos.
  */
 export async function instanciaParaServico(): Promise<string> {
   const p = instanciaPrincipal();

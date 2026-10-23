@@ -68,7 +68,7 @@ export async function runAuto(o: AutoOpts): Promise<string[]> {
   const log: string[] = [];
   const catName = CATS.find((c) => c.id === o.category)?.name ?? o.category;
   if (existsSync(KILL)) return [`KILL-SWITCH ativo (data/AUTO_OFF existe) — nada enviado. Remova o arquivo para retomar.`];
-  if (!dentroDaJanela()) return [`Fora da janela ${process.env.JANELA_INICIO ?? 8}h–${process.env.JANELA_FIM ?? 22}h — nada enviado.`];
+  if (!dentroDaJanela()) return [`Fora da janela ${process.env.JANELA_INICIO ?? 8}h–${process.env.JANELA_FIM ?? 23}h — nada enviado.`];
   // Sem limite diário (removido a pedido).
 
   const { url, candidatos, mock } = await hunt(o);

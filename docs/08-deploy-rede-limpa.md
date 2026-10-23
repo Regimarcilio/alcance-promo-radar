@@ -1,5 +1,11 @@
 # Migração completa — rede restrita → rede limpa (automação total)
 
+> **RUNBOOK HISTÓRICO (2026-10-13).** Escrito para o projeto `autoMensagemWhats`; os caminhos,
+> nomes de imagem e a estrutura de `data/` podem estar defasados em relação ao estado atual
+> (**Alcance Promo Radar v0.8.0**). Confirme nomes de container/imagem em `docker-compose.yml` e
+> `docker-compose.manager-novo.yml` antes de executar. Visão vigente: [`SRS-v0.4.md`](SRS-v0.4.md).
+> A regra de segurança (seção 0) permanece não negociável.
+
 > Objetivo: levar segredos + vínculos + cestas para outra máquina em
 > **1 pacote criptografado**, sem nada disso passar pelo repositório.
 > Testado ida-e-volta em 2026-10-13 (export → import restaurando

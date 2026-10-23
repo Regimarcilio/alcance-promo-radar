@@ -1,5 +1,11 @@
 # 15 — Plano de Sincronização Documental (SRS v0.4 + ADRs 005–008)
 
+> **STATUS: em execução (2026-10-22).** Plano aprovado e em grande parte executado; ver
+> [§9 Status de execução](#9-status-de-execução-2026-10-22) para o que foi concluído e o que resta.
+> **Atenção:** a numeração de RF/ADR/épico **proposta** em §3 foi **superada** pela numeração final
+> adotada em [`SRS-v0.4.md`](SRS-v0.4.md) (ex.: o RF de rotação é **RF-042**, não RF-041; contatos é
+> **RF-045**). Onde divergir, vale o SRS v0.4.
+
 > Criado: 2026-10-21 · Branch `develop` · Responsável: planmaster
 > Objetivo: alinhar a documentação ao produto que já roda, restaurando rastreabilidade requisito → código → teste → evidência.
 > Documento de referência do estado atual: `docs/14-relatorio-geral.md`.
@@ -185,3 +191,45 @@ Consequência: um novo desenvolvedor não consegue responder “qual requisito c
 1. Aprovar os RFs/NFRs propostos (ou ajustar).
 2. Criar as 4 issues de documentação no repositório.
 3. Executar Sprint D1 e abrir PR de `docs/srs-v0.4` para `develop`.
+
+---
+
+## 9. Status de execução (2026-10-22)
+
+### Concluído
+
+| Item | Arquivo | Observação |
+| --- | --- | --- |
+| Índice mestre de documentos | `docs/00-INDICE.md` | Tabela documento × versão × status × substitui |
+| SRS consolidado | `docs/SRS-v0.4.md` | RF-001..RF-056, RN-001..RN-027, NFRs, matriz de rastreabilidade, cobertura de 99 testes, riscos e glossário |
+| Banners de histórico | `docs/12-…`, `docs/14-…`, `docs/06-…`, `docs/08-…` | Conteúdo preservado; status “retrato histórico” |
+| ADRs das decisões estruturais | `docs/04-ADRs/ADR-005`, `ADR-006`, `ADR-007`, `ADR-008` | Títulos e escopos conforme mapeamento aprovado pelo usuário |
+| Índice de ADRs | `docs/04-ADRs/README.md` | Status atual + mapa ADR × RF × RN |
+| Padrão de mensagem | `docs/11-padrao-emipe.md` | v2 (histórica) + **RN-001 v3** real, fiel a `src/wa/formatter.ts` |
+| CHANGELOG | `CHANGELOG.md` | Keep a Changelog + SemVer; `0.8.0` + `[Unreleased]` |
+| Backlog v0.4 | `docs/05-backlog-v0.4.md` | US-21+, DoR/DoD, estados e matriz RF → US cobrindo 100% dos RF |
+| README | `README.md` | Nome Alcance, quickstart real, dois fluxos Docker, persistência JSON, 99 testes |
+
+### Divergências de numeração (plano §3 → SRS v0.4 final)
+
+| Tema | ID no plano (§3) | ID final no SRS v0.4 |
+| --- | --- | --- |
+| Rotação multi-número | RF-041 | **RF-042** |
+| Sincronizar contatos/listas | RF-042 | **RF-045** |
+| Fila anti-rajada do monitor | RF-043 | **RF-043** (coincide) |
+| Temas/títulos por painel | RF-045 | **RF-048** (views/títulos) e **RF-049** (temas) |
+| Rate-limit/auditoria | (não previsto) | **RF-041** |
+
+Os ADRs 005–008 foram redigidos já com a numeração **final** do SRS v0.4 para não propagar IDs
+fantasma.
+
+### Pendente
+
+- [x] **Backlog v0.4** (`docs/05-backlog-v0.4.md`) com épicos E7–E13, US-21+ e status + evidência.
+- [ ] **`docs/01-visao-e-escopo.md`** para a versão Alcance.
+- [ ] Revisão final do **checklist §5** e abertura das issues/milestone no repositório.
+- [ ] Commits de documentação em `develop` (Conventional Commits `docs(plan): …`).
+- [ ] (Opcional) Finalizar os itens de `[Unreleased]` do CHANGELOG: comentários de código com RF
+      desatualizado (`src/jobs/auto.ts` “22h”; `src/monitor/fila.ts` “RF-036”).
+
+> Itens de código (não-docs) estão fora do escopo deste plano e não foram tocados.

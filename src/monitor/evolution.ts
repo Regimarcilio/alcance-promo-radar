@@ -6,12 +6,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { instanciaParaServico } from "../wa/rotacao.js";
+import { instanciaParaServico, listarInstancias } from "../wa/rotacao.js";
 
 export interface GrupoWhats {
   jid: string;
   nome: string;
   tamanho: number | null;
+  /** Instâncias em que o grupo aparece (união multi-número). */
+  instancias?: string[];
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -26,8 +28,16 @@ function key(): string {
   return process.env.EVO_KEY ?? "";
 }
 
-function inst(): string {
-  return process.env.EVO_INSTANCE ?? "radar-piloto";
+/**
+ * Instância usada nas operações de serviço (grupos, estado, webhook).
+ *
+ * NUNCA use `EVO_INSTANCE` direto aqui: ele é só o nome de fábrica da PRIMEIRA
+ * instância. Depois que o operador cadastra/pareia um número, a fonte da
+ * verdade é `instancias.json` (principal). Sem isso, o painel continuava
+ * chamando uma instância antiga e recebia 404 em /group/fetchAllGroups.
+ */
+async function instAtual(): Promise<string> {
+  return instanciaParaServico();
 }
 
 async function evoGet<T = any>(path: string, timeoutMs = 60000): Promise<T> {
@@ -42,7 +52,8 @@ async function evoGet<T = any>(path: string, timeoutMs = 60000): Promise<T> {
 /** Estado da conexão: open | connecting | close. */
 export async function estadoConexao(): Promise<string> {
   try {
-    const j = await evoGet<any>(`/instance/connectionState/${inst()}`);
+    const alvo = await instAtual();
+    const j = await evoGet<any>(`/instance/connectionState/${alvo}`);
     return j?.instance?.state ?? "?";
   } catch {
     return "erro";
@@ -52,7 +63,8 @@ export async function estadoConexao(): Promise<string> {
 /** Número/titular pareado (best-effort). */
 export async function contaPareada(): Promise<{ jid: string | null; nome: string | null }> {
   try {
-    const arr = await evoGet<any[]>(`/instance/fetchInstances?instanceName=${inst()}`);
+    const alvo = await instAtual();
+    const arr = await evoGet<any[]>(`/instance/fetchInstances?instanceName=${alvo}`);
     const i = Array.isArray(arr) ? arr[0] : null;
     return { jid: i?.ownerJid ?? null, nome: i?.profileName ?? null };
   } catch {
@@ -98,20 +110,54 @@ function salvarCacheGrupos(dados: GrupoWhats[]): void {
   }
 }
 
-/** Busca a lista direto na Evolution (e grava o cache em disco). */
+/**
+ * Busca direto na Evolution, em TODAS as instâncias ativas, e devolve a união.
+ *
+ * Cada celular participa de grupos diferentes. Consultar só o principal
+ * escondia grupos que só o secundário vê (ex.: Leleco Tech, Clube dos
+ * Achadinhos). Se uma instância falhar, as demais continuam valendo.
+ */
 async function buscarGruposNaEvolution(): Promise<GrupoWhats[]> {
-  const arr = await evoGet<any[]>(`/group/fetchAllGroups/${inst()}?getParticipants=false`, 120000);
-  if (!Array.isArray(arr)) throw new Error("resposta inesperada de fetchAllGroups");
-  const dados = arr
-    .map((g) => ({
-      jid: String(g.id ?? ""),
-      // `||` (e não `??`): grupo sem nome vem com subject "" — `??` manteria o vazio
-      // e a opção apareceria sem rótulo na aba Monitor.
-      nome: String(g.subject || g.id || "(sem nome)"),
-      tamanho: typeof g.size === "number" ? g.size : null,
-    }))
-    .filter((g) => g.jid.endsWith("@g.us"))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const alvos = listarInstancias().filter((i) => i.ativo).map((i) => i.instancia);
+  if (alvos.length === 0) alvos.push(await instAtual());
+
+  const resultados = await Promise.allSettled(
+    alvos.map(async (alvo) => {
+      const arr = await evoGet<any[]>(`/group/fetchAllGroups/${alvo}?getParticipants=false`, 120000);
+      if (!Array.isArray(arr)) throw new Error(`resposta inesperada de fetchAllGroups (${alvo})`);
+      return { alvo, arr };
+    }),
+  );
+
+  const mapa = new Map<string, GrupoWhats>();
+  const erros: string[] = [];
+  for (const r of resultados) {
+    if (r.status === "rejected") {
+      erros.push(String(r.reason?.message ?? r.reason));
+      continue;
+    }
+    for (const g of r.value.arr) {
+      const jid = String(g.id ?? "");
+      if (!jid.endsWith("@g.us")) continue;
+      const nome = String(g.subject || g.id || "(sem nome)");
+      const atual = mapa.get(jid);
+      if (atual) {
+        if (!atual.instancias?.includes(r.value.alvo)) atual.instancias?.push(r.value.alvo);
+      } else {
+        mapa.set(jid, {
+          jid,
+          nome,
+          tamanho: typeof g.size === "number" ? g.size : null,
+          instancias: [r.value.alvo],
+        });
+      }
+    }
+  }
+
+  if (mapa.size === 0 && erros.length > 0) throw new Error(erros[0]);
+  if (erros.length) console.warn(`[grupos] ${erros.length} instância(s) falharam: ${erros.join("; ")}`);
+
+  const dados = [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   cacheGrupos = { em: Date.now(), dados };
   salvarCacheGrupos(dados);
   return dados;
@@ -155,7 +201,8 @@ export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
 
 /** Força reconexão do socket (destrava instância presa em "connecting"). */
 export async function reiniciar(): Promise<void> {
-  const res = await fetch(`${base()}/instance/restart/${inst()}`, {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/instance/restart/${alvo}`, {
     method: "POST",
     headers: { apikey: key(), "Content-Type": "application/json" },
     body: "{}",
@@ -168,7 +215,8 @@ export async function reiniciar(): Promise<void> {
  * NÃO apaga a instância — depois use /instance/connect para um QR novo.
  */
 export async function desconectar(): Promise<void> {
-  const res = await fetch(`${base()}/instance/logout/${inst()}`, {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/instance/logout/${alvo}`, {
     method: "DELETE",
     headers: { apikey: key() },
   });
@@ -280,8 +328,9 @@ export async function buscarPermissaoGrupo(groupJid: string): Promise<PermissaoG
   const jid = String(groupJid ?? "").trim();
   if (!jid.endsWith("@g.us")) return null;
   try {
+    const alvo = await instAtual();
     const res = await fetch(
-      `${base()}/group/findGroupInfos/${inst()}?groupJid=${encodeURIComponent(jid)}`,
+      `${base()}/group/findGroupInfos/${alvo}?groupJid=${encodeURIComponent(jid)}`,
       { headers: { apikey: key() }, signal: AbortSignal.timeout(30000) },
     );
     if (!res.ok) return null;
@@ -335,7 +384,8 @@ export async function definirPermissaoGrupo(
 
 /** Garante o webhook messages.upsert apontando para o manager. */
 export async function configurarWebhook(url: string, webhookKey: string): Promise<void> {
-  const res = await fetch(`${base()}/webhook/set/${inst()}`, {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/webhook/set/${alvo}`, {
     method: "POST",
     headers: { apikey: key(), "Content-Type": "application/json" },
     body: JSON.stringify({

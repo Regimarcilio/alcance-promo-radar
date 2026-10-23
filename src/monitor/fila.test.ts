@@ -66,3 +66,23 @@ test("fila: reenfileirar preserva os destinos restantes", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("fila: recuperarEmAndamento devolve item interrompido no boot", async () => {
+  const { mod, dir } = await carregarFila();
+  try {
+    const criado = mod.enfileirar(ITEM);
+    const fs = await import("node:fs");
+    const s = JSON.parse(fs.readFileSync(join(dir, "monitor-fila.json"), "utf8"));
+    s.itens = [];
+    s.emAndamento = { item: criado, desde: new Date().toISOString() };
+    fs.writeFileSync(join(dir, "monitor-fila.json"), JSON.stringify(s, null, 2));
+
+    assert.equal(mod.tamanhoFila(), 0);
+    assert.equal(mod.recuperarEmAndamento(), 1);
+    assert.equal(mod.tamanhoFila(), 1);
+    assert.equal(mod.itensFila()[0].id, criado.id);
+    assert.equal(mod.recuperarEmAndamento(), 0, "não duplica na segunda chamada");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

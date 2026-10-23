@@ -1,9 +1,76 @@
-FROM node:22-slim
+# syntax=docker/dockerfile:1.7
+#
+# Imagem base fixada por tag + digest (índice multi-arch, verificado em
+# 2026-10-22). Renove o digest junto com a tag ao atualizar a base:
+#   docker buildx imagetools inspect node:22-bookworm-slim
+#   (ou: docker manifest inspect -v node:22-bookworm-slim)
+ARG NODE_IMAGE=node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
+
+# ---------------------------------------------------------------------------
+# builder: instala devDependencies, compila TS -> dist/
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+
+# npm sem telemetria/auditoria no build (auditoria roda no CI).
+ENV npm_config_audit=false \
+    npm_config_fund=false
+
+COPY package.json package-lock.json ./
+# DevDeps são necessárias apenas aqui (typescript/tsx/@types).
+RUN npm ci --ignore-scripts
+
 COPY tsconfig.json ./
 COPY src ./src
-RUN npx tsc -p tsconfig.json
+RUN npm run build \
+ && find dist -type f \( -name '*.test.js' -o -name '*.test.d.ts' -o -name '*.d.ts' \) -delete
+
+# ---------------------------------------------------------------------------
+# runtime: somente dependências de produção + artefatos compilados
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+LABEL org.opencontainers.image.title="alcance-promo-radar-manager" \
+      org.opencontainers.image.description="Manager web do alcance-promo-radar" \
+      org.opencontainers.image.source="https://github.com/Regimarcilio/alcance-promo-radar" \
+      org.opencontainers.image.licenses="UNLICENSED"
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    MANAGER_PORT=8091 \
+    npm_config_audit=false \
+    npm_config_fund=false
+
+COPY package.json package-lock.json ./
+# --omit=dev garante que typescript/tsx/@types não vão para produção.
+# --ignore-scripts evita scripts arbitrários de dependências no runtime.
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+ && npm cache clean --force
+
+# dist/ já contém os JSONs importados (categorias.json/amazon), mas copiamos
+# também src/ porque o server lê o login.html em runtime e há caminhos que
+# resolvem arquivos a partir de /app/src.
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node --from=builder /app/src/manager/login.html ./src/manager/login.html
+COPY --chown=node:node --from=builder /app/src/categorias.json ./src/categorias.json
+COPY --chown=node:node --from=builder /app/src/amazon/categorias.json ./src/amazon/categorias.json
+
+# data/ e logs/ são bind mounts no compose; criamos com o dono correto para
+# funcionar também sem volume (execução avulsa).
+RUN mkdir -p /app/data /app/logs \
+ && chown node:node /app/data /app/logs
+
+# O app roda como usuário sem privilégios. `init: true` fica no compose
+# (PID 1 = tini) para reaproveitar sinais e evitar zumbis.
+USER node
+
 EXPOSE 8091
+STOPSIGNAL SIGTERM
+
+# Rota /healthz é a sonda canônica do manager (criada no código do server).
+# Usa o fetch nativo do Node 20+, sem depender de curl/wget na imagem.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "const p=process.env.MANAGER_PORT||8091;fetch('http://127.0.0.1:'+p+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
 CMD ["node", "dist/manager/server.js"]

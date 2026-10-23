@@ -3,9 +3,10 @@
  * com mapa categoria → conta. Segredos em data/contas.json (git-ignored,
  * nunca exposto pela API — só nome + tag mascarada).
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { dataDirAtual } from "../config/paths.js";
+import { gravarJsonAtomico } from "../store/json.js";
 
 export interface Conta {
   nome: string;
@@ -26,9 +27,7 @@ interface Store {
   mapa: Record<string, Destino | string>; // categoryId -> destino (string = formato antigo: só conta)
 }
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
-const file = join(dataDir, "contas.json");
+const file = join(dataDirAtual(), "contas.json");
 
 function envCreds(): { tag: string | null; cookie: string | null } {
   const tag = process.env.TAG_ML?.trim() || null;
@@ -55,13 +54,7 @@ export function carregar(): Store {
 }
 
 function salvar(s: Store): void {
-  mkdirSync(dataDir, { recursive: true });
-  writeFileSync(file, JSON.stringify(s, null, 2));
-  try {
-    chmodSync(file, 0o600);
-  } catch {
-    /* windows */
-  }
+  gravarJsonAtomico(file, s);
 }
 
 /** Migra TAG/COOKIE do .env como conta "principal" (1ª vez). */

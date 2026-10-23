@@ -1,5 +1,5 @@
 /**
- * Rotação de números: anti-repetição, política PRINCIPAL × SECUNDÁRIOS e dedup.
+ * Rotação de números: anti-repetição, todos os abertos no envio e dedup.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Ambiente de rotação: 1 principal + 2 secundários (padrão).
+ * Ambiente de rotação: 3 números ativos (1 marcado como principal).
  * O estado de conexão é "erro" (Evolution fora) → o sorteio cai nos ATIVOS.
  */
 async function carregarRotacao(repeticao = "1", itens?: unknown[]) {
@@ -31,15 +31,18 @@ async function carregarRotacao(repeticao = "1", itens?: unknown[]) {
   return { mod, dir };
 }
 
-test("rotação: com 2 secundários, nunca repete o anterior (anti-repetição 100%)", async () => {
+test("rotação: com 3 números, nunca repete o anterior (anti-repetição 100%)", async () => {
   const { mod, dir } = await carregarRotacao("1");
   try {
-    const a = await mod.proximaInstancia();
-    const b = await mod.proximaInstancia();
-    const c = await mod.proximaInstancia();
-    assert.notEqual(a, b, "não deveria repetir o mesmo número em sequência");
-    assert.notEqual(b, c, "não deveria repetir o mesmo número em sequência");
-    assert.equal(a, c, "deve alternar entre os dois secundários");
+    const vistos = new Set<string>();
+    let anterior: string | null = null;
+    for (let i = 0; i < 30; i++) {
+      const atual = await mod.proximaInstancia();
+      if (anterior) assert.notEqual(atual, anterior, "não deveria repetir o mesmo número em sequência");
+      vistos.add(atual);
+      anterior = atual;
+    }
+    assert.equal(vistos.size, 3, "os três números devem entrar no rodízio");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -49,8 +52,8 @@ test("rotação: sem anti-repetição (0) pode repetir — sorteio puro por peso
   const { mod, dir } = await carregarRotacao("0");
   try {
     const sorteios = new Set<string>();
-    for (let i = 0; i < 40; i++) sorteios.add(await mod.proximaInstancia());
-    assert.equal(sorteios.size, 2, "com 2 secundários os dois devem aparecer");
+    for (let i = 0; i < 60; i++) sorteios.add(await mod.proximaInstancia());
+    assert.equal(sorteios.size, 3, "com 3 números os três devem aparecer");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -66,7 +69,7 @@ test("rotação: registra a última usada para a UI", async () => {
   }
 });
 
-/* ---------------- política PRINCIPAL × SECUNDÁRIOS ----------------------- */
+/* ---------------- política de envio × serviço --------------------------- */
 
 test("principal: é a marcada; senão a que casa com EVO_INSTANCE", async () => {
   const { mod, dir } = await carregarRotacao("1");
@@ -77,19 +80,18 @@ test("principal: é a marcada; senão a que casa com EVO_INSTANCE", async () => 
   }
 });
 
-test("envio de mensagens: usa os SECUNDÁRIOS, nunca o principal", async () => {
+test("envio de mensagens: usa todos os abertos, inclusive o principal", async () => {
   const { mod, dir } = await carregarRotacao("1");
   try {
-    for (let i = 0; i < 12; i++) {
-      const escolhida = await mod.proximaInstancia();
-      assert.notEqual(escolhida, "cel-1", "o envio não deve ir para o principal");
-    }
+    const vistos = new Set<string>();
+    for (let i = 0; i < 60; i++) vistos.add(await mod.proximaInstancia());
+    assert.deepEqual([...vistos].sort(), ["cel-1", "cel-2", "cel-3"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("sem secundário disponível: o envio volta ao principal (nada para)", async () => {
+test("sem outro número disponível: o envio usa o principal (nada para)", async () => {
   const { mod, dir } = await carregarRotacao("1", [
     { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
   ]);

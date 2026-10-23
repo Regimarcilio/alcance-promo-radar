@@ -252,8 +252,30 @@ export function registrarTentativa(ip: string): void {
   registrarChave(GLOBAL);
 }
 
+const reenvios = new Map<string, number[]>();
+const REENVIO_MAX = 3;
+const REENVIO_JANELA_MS = 60 * 60_000;
+
+/**
+ * Rate-limit dedicado do reenvio de código: 3 por hora por IP.
+ * Separado do login para um abuso de reenvio não bloquear o acesso normal.
+ */
+export function checarLimiteReenvio(ip: string): { ok: boolean; retryAfter: number } {
+  const agora = Date.now();
+  const arr = (reenvios.get(ip) ?? []).filter((t) => agora - t < REENVIO_JANELA_MS);
+  if (arr.length >= REENVIO_MAX) {
+    return { ok: false, retryAfter: Math.ceil((arr[0] + REENVIO_JANELA_MS - agora) / 1000) };
+  }
+  arr.push(agora);
+  reenvios.set(ip, arr);
+  return { ok: true, retryAfter: 0 };
+}
+
 export function limparLimite(ip: string): void {
   limites.delete(ip);
+  // O bucket global também precisa ser liberado no sucesso; senão 30 falhas
+  // (de qualquer origem) bloqueiam o login de todo mundo até a janela expirar.
+  limites.delete(GLOBAL);
 }
 
 /* ------------------------------ sessão ---------------------------------- */
@@ -288,7 +310,8 @@ export function criarSessao(
     usuarioId: u.id,
     criadoEm: agora,
     vistoEm: agora,
-    ipHash: createHash("sha256").update(ip, "utf8").digest("hex").slice(0, 16),
+    // /24 (IPv4) e /48 (IPv6): tolera troca de IP na mesma rede móvel.
+    ipHash: createHash("sha256").update(mascararIp(ip), "utf8").digest("hex").slice(0, 16),
     ua: String(ua ?? "").slice(0, 160),
   });
   limitarSessoes(u.id, chave);
@@ -306,7 +329,7 @@ function limitarSessoes(usuarioId: string, chaveNova: string): void {
 
 export type SessaoValida = { sid: string; usuario: Usuario };
 
-export function validarSessao(valor: string | undefined): SessaoValida | null {
+export function validarSessao(valor: string | undefined, ip?: string, ua?: string): SessaoValida | null {
   if (!valor) return null;
   const ponto = valor.lastIndexOf(".");
   if (ponto <= 0) return null;
@@ -320,6 +343,19 @@ export function validarSessao(valor: string | undefined): SessaoValida | null {
   if (!s) return null;
   const agora = Date.now();
   if (agora - s.criadoEm > ttlAbsolutoMs() || agora - s.vistoEm > ttlIdleMs()) {
+    sessoes.delete(chave);
+    return null;
+  }
+  // Sessão amarrada à rede (/24) e ao user-agent: cookie roubado não é
+  // reutilizável de outra máquina/navegador.
+  if (typeof ip === "string" && ip) {
+    const ipHash = createHash("sha256").update(mascararIp(ip), "utf8").digest("hex").slice(0, 16);
+    if (ipHash !== s.ipHash) {
+      sessoes.delete(chave);
+      return null;
+    }
+  }
+  if (typeof ua === "string" && ua && s.ua !== ua.slice(0, 160)) {
     sessoes.delete(chave);
     return null;
   }
@@ -357,19 +393,28 @@ export function lerCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
+function cookieSecure(): string {
+  // Default seguro em produção; em dev/teste só com opt-in.
+  const prod = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+  const ligado = process.env.AUTH_COOKIE_SECURE === "1" || (prod && process.env.AUTH_COOKIE_SECURE !== "0");
+  return ligado ? "; Secure" : "";
+}
+
 export function cookieSessao(valor: string, maxAge: number): string {
-  const secure = process.env.AUTH_COOKIE_SECURE === "1" ? "; Secure" : "";
-  return `${COOKIE}=${valor}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`;
+  return `${COOKIE}=${valor}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${cookieSecure()}`;
 }
 
 export function cookieExpirado(): string {
-  const secure = process.env.AUTH_COOKIE_SECURE === "1" ? "; Secure" : "";
-  return `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`;
+  return `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieSecure()}`;
 }
 
 export function sessaoDoRequest(req: any): SessaoValida | null {
   const cookies = lerCookies(req.headers?.cookie);
-  return validarSessao(cookies[COOKIE]);
+  return validarSessao(
+    cookies[COOKIE],
+    ipDoRequest(req),
+    String(req.headers?.["user-agent"] ?? ""),
+  );
 }
 
 /* ----------------------------- auditoria -------------------------------- */

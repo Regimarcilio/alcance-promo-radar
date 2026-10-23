@@ -1,33 +1,55 @@
 #!/usr/bin/env bash
-# Importa o pacote de migração na máquina DESTINO (rede limpa).
+# ==========================================================================
+# migrar-import.sh — importa o pacote de migração na máquina DESTINO.
+#
 # Uso (já dentro da pasta do projeto clonado):
-#   ./scripts/migrar-import.sh /caminho/migracao-AAAAMMDD-HHMM.tar.gz.enc
+#   RESTORE_CONFIRM=1 ./scripts/migrar-import.sh /caminho/migracao-....tar.gz.enc
+#   ./scripts/migrar-import.sh /caminho/migracao-....tar.gz.age --yes
+#
+# Restaura TODO o data/ (JSON + midia/) e o .env, valida HMAC/age, hashes e
+# JSONs, e opcionalmente o pg_dump (RESTORE_PG=auto|1|0). O estado atual é
+# salvo antes em <BACKUP_DIR>/pre-restore/<timestamp>.
+# ==========================================================================
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-ENC="${1:?Uso: $0 /caminho/migracao-....tar.gz.enc}"
-[ -f "$ENC" ] || { echo "ERRO: arquivo não encontrado: $ENC"; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-backup.sh
+source "$SCRIPT_DIR/lib-backup.sh"
 
-TMPD="$(mktemp -d)"
-cp "$ENC" "$TMPD/pacote.tar.gz.enc"
+ARCHIVE="${1:-}"
+[ -n "$ARCHIVE" ] || die "Uso: $0 /caminho/migracao-....tar.gz.{enc,age} [--yes]"
+shift || true
+[ -f "$ARCHIVE" ] || die "arquivo não encontrado: $ARCHIVE"
 
-echo "Digite a senha da criptografia:"
-openssl enc -d -aes-256-cbc -pbkdf2 -in "$TMPD/pacote.tar.gz.enc" -out "$TMPD/pacote.tar.gz"
-tar -xzf "$TMPD/pacote.tar.gz" -C "$TMPD"
+YES=0
+for arg in "$@"; do
+  case "$arg" in
+    --yes) YES=1 ;;
+    *) die "argumento desconhecido: $arg" ;;
+  esac
+done
 
-[ -f "$TMPD/.env" ] || { echo "ERRO: pacote sem .env"; exit 1; }
-cp "$TMPD/.env" .env
-chmod 600 .env
-mkdir -p data
-[ -f "$TMPD/data/contas.json" ] && cp "$TMPD/data/contas.json" data/contas.json
-[ -f "$TMPD/data/cestas.json" ] && cp "$TMPD/data/cestas.json" data/cestas.json
-[ -f "$TMPD/data/envios.json" ] && cp "$TMPD/data/envios.json" data/envios.json
-chmod 600 data/contas.json 2>/dev/null || true
+if [ "$YES" != "1" ] && [ "${RESTORE_CONFIRM:-0}" != "1" ]; then
+  cat >&2 <<EOF
+A importação sobrescreve $ROOT/data e $ROOT/.env (e o banco ${PG_DB}, se houver
+dump e o container ${PG_CONTAINER} estiver ativo). O estado atual será salvo
+antes em \${BACKUP_DIR:-...}/pre-restore/<timestamp>.
 
-echo "Ajuste os endereços para esta máquina (se necessário):"
-grep -E "^(EVO_URL|EVO_SERVER_URL|EVO_HOST_PORT)" .env || true
-echo
-echo "OK. Próximo: docker compose up -d && npm install && npm run build && npm run manager &"
-echo "Depois: npm start -- evo:qr  →  LIGA TUDO na tela."
+Confirme com: RESTORE_CONFIRM=1 $0 "$ARCHIVE"
+          ou: $0 "$ARCHIVE" --yes
+EOF
+  exit 3
+fi
 
-rm -rf "$TMPD"
+restore_archive "$ARCHIVE"
+
+cat <<EOF
+
+Importação concluída. Ajuste endereços desta máquina no .env, se necessário:
+  grep -E "^(EVO_URL|EVO_SERVER_URL|EVO_HOST_PORT|MANAGER_BIND)" .env || true
+
+Próximos passos:
+  docker compose up -d --build
+  curl -fsS http://127.0.0.1:\${MANAGER_PORT:-8091}/healthz
+  # depois abra o painel e clique em START (PILOTO_AUTORELIGA=0 por segurança)
+EOF

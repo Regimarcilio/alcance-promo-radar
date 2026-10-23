@@ -66,6 +66,8 @@ check() {
   echo "ok $metodo $url -> $code"
 }
 
+check 200 /healthz
+check 200 /readyz
 check 200 /login
 check 302 /
 check 401 /api/contas
