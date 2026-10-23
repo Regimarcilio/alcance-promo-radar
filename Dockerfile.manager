@@ -45,8 +45,13 @@ ENV NODE_ENV=production \
 COPY package.json package-lock.json ./
 # --omit=dev garante que typescript/tsx/@types não vão para produção.
 # --ignore-scripts evita scripts arbitrários de dependências no runtime.
+# Depois do install, removemos o npm/corepack do runtime: a aplicação só roda
+# `node`, e o npm embutido na imagem base carrega dependências próprias que o
+# Trivy sinaliza (brace-expansion, pacote, sigstore...). Sem npm, sem essas CVEs.
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
- && npm cache clean --force
+ && npm cache clean --force \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # dist/ já contém os JSONs importados (categorias.json/amazon), mas copiamos
 # também src/ porque o server lê o login.html em runtime e há caminhos que

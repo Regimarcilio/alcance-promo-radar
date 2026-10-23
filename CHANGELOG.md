@@ -20,6 +20,8 @@ do histórico do git (`git log`), sem tags formais.
   em `img-src`.
 - **Falha fechada** no dispatch quando `EVO_URL/EVO_KEY` ausentes (fora de dry-run), com timeouts.
 - **Dedup atômico** no webhook (reserva antes de qualquer `await`), sem corrida entre mensagens.
+- **Imagem sem npm**: o runtime remove npm/corepack após o `npm ci`; a aplicação só usa `node`.
+  Isso elimina as CVEs HIGH das dependências internas do npm que o Trivy bloqueava no CI.
 
 ### Correções
 - **404 em `/group/fetchAllGroups`**: grupos, estado da conta, logout/QR, 2FA e sync de
