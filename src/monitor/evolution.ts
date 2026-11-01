@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { instanciaParaServico, listarInstancias } from "../wa/rotacao.js";
+import { instanciaParaServico, instanciasParaServico, listarInstancias, marcarInstanciaRuim } from "../wa/rotacao.js";
 
 export interface GrupoWhats {
   jid: string;
@@ -280,19 +280,38 @@ export async function adicionarUmParticipante(
 
   const esperas = Number(opts.esperas ?? 45000);
   const maxTentativas = Math.max(1, Number(opts.tentativas ?? 3));
+  // Ordem de candidatas para a operação de serviço: a principal vai primeiro,
+  // mas se ela estiver "zumbi" (connectionState open + Connection Closed nas
+  // chamadas reais) a próxima tentativa já sai por outro número — sem esperar
+  // o ciclo inteiro de 60s. Ver instanciasParaServico().
+  const candidatas = instanciasParaServico();
+  let idx = 0;
+  let tentativa = 0;
   let ultimoErro = "";
   let instancia: string | undefined;
 
-  for (let t = 0; t < maxTentativas; t++) {
-    if (t > 0) {
+  /** Erro que indica instância inutilizável (não do participante). */
+  const trocarInstancia = (motivo: string, http = 0): boolean => {
+    const foraDoAr =
+      http === 404 ||
+      /Connection Closed|Connection closed|ECONNRESET|ECONNREFUSED|socket hang up|other side closed/i.test(motivo);
+    if (!foraDoAr || idx >= candidatas.length - 1) return false;
+    const antes = candidatas[idx];
+    marcarInstanciaRuim(antes); // não insiste nela nos próximos contatos do lote
+    idx += 1;
+    console.log(`[grupo] ${antes} falhou (${motivo.slice(0, 60)}) — tentando ${candidatas[idx]}`);
+    return true;
+  };
+
+  while (tentativa < maxTentativas) {
+    if (tentativa > 0) {
       console.log(
-        `[grupo] nova tentativa em ${Math.round(esperas / 1000)}s (${t + 1}/${maxTentativas}) — ${ultimoErro.slice(0, 80)}`,
+        `[grupo] nova tentativa em ${Math.round(esperas / 1000)}s (${tentativa + 1}/${maxTentativas}) — ${ultimoErro.slice(0, 80)}`,
       );
       await new Promise((r) => setTimeout(r, esperas));
     }
+    instancia = candidatas[Math.min(idx, candidatas.length - 1)];
     try {
-      // Operação de SERVIÇO → sempre no número principal.
-      instancia = await instanciaParaServico();
       const res = await fetch(
         `${base()}/group/updateParticipant/${instancia}?groupJid=${encodeURIComponent(jid)}`,
         {
@@ -322,19 +341,29 @@ export async function adicionarUmParticipante(
 
         const detalhe = String(item?.content?.error ?? item?.error ?? item?.content?.[0]?.attrs?.error ?? "recusado");
         ultimoErro = `participante ${status || "?"}: ${detalhe}`;
-        if (status === 408) continue; // timeout: retry
+        if (status === 408) {
+          tentativa++;
+          continue; // timeout: retry
+        }
+        if (trocarInstancia(detalhe)) continue; // instância zumbi → outro número
         // 403 (privacidade), 404 (sem WhatsApp), 400/422 etc: terminal.
         return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
       }
 
       ultimoErro = `Evolution ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ""}`;
-      if (transitorioAdicao(txt, res.status)) continue;
+      if (trocarInstancia(txt, res.status)) continue;
+      if (transitorioAdicao(txt, res.status)) {
+        tentativa++;
+        continue;
+      }
       return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
     } catch (e) {
       ultimoErro = String((e as Error)?.message ?? e);
+      if (trocarInstancia(ultimoErro)) continue;
       if (!transitorioAdicao(ultimoErro)) {
         return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
       }
+      tentativa++;
     }
   }
 

@@ -255,24 +255,59 @@ export async function proximaInstancia(excluir: string[] = []): Promise<string> 
 }
 
 /**
- * Instância para OPERAÇÕES DE SERVIÇO (adicionar contatos ao grupo, permissões
- * de grupo): sempre o principal, para não dispersar essas ações administrativas.
- * O envio de mensagens é separado e usa todos os números abertos.
+ * Candidatas para OPERAÇÕES DE SERVIÇO (adicionar contatos, permissões de
+ * grupo), em ordem de preferência: principal → demais ativas (peso maior
+ * primeiro) → principal como último recurso.
+ *
+ * Não consultamos `connectionState` de propósito: ele MENTE. Em 01/11 a
+ * instância `radar-47992521346-3ga` respondia `state:"open"` e devolvia
+ * `Connection Closed` em toda operação real. Por isso a troca de instância é
+ * feita por quem chama: se a chamada falhar por conexão, tenta a próxima
+ * desta lista. O envio de mensagens continua no rodízio separado.
  */
-export async function instanciaParaServico(): Promise<string> {
+export function instanciasParaServico(): string[] {
+  const itens = carregar().itens.filter((i) => i.ativo);
   const p = instanciaPrincipal();
-  if (p) {
-    const estado = await estadoInstancia(p.instancia);
-    // Se o principal estiver fechado, ainda assim usamos ele (a operação de
-    // serviço depende dele) — mas avisamos no log.
-    if (estado !== "open") {
-      console.log(
-        `[rotacao] principal "${p.nome}" está ${estado} — operação de serviço pode falhar`,
-      );
-    }
-    return p.instancia;
+  const ordem: string[] = [];
+  const add = (nome?: string | null) => {
+    if (nome && !ordem.includes(nome)) ordem.push(nome);
+  };
+
+  if (p && p.ativo) add(p.instancia);
+  for (const i of [...itens].sort((a, b) => (Number(b.peso) || 1) - (Number(a.peso) || 1))) {
+    add(i.instancia);
   }
-  return padrao();
+  // Nenhuma ativa: mantém o comportamento antigo (tenta a principal mesmo assim).
+  if (!ordem.length && p) add(p.instancia);
+  if (!ordem.length) add(padrao());
+
+  // Instâncias que acabaram de falhar por conexão vão para o fim (sort estável),
+  // para o lote seguinte não pagar de novo o timeout da instância zumbi.
+  return [...ordem].sort((a, b) => Number(instanciaRuim(a)) - Number(instanciaRuim(b)));
+}
+
+const ruins = new Map<string, number>();
+
+/** Marca a instância como "zumbi" por um tempo (default 5 min). */
+export function marcarInstanciaRuim(instancia: string, ttlMs = 5 * 60_000): void {
+  if (!instancia) return;
+  ruins.set(instancia, Date.now() + Math.max(1000, ttlMs));
+}
+
+/** true se a instância falhou por conexão recentemente. */
+export function instanciaRuim(instancia: string): boolean {
+  const expira = ruins.get(instancia);
+  if (!expira) return false;
+  if (Date.now() > expira) {
+    ruins.delete(instancia);
+    return false;
+  }
+  return true;
+}
+
+/** Primeira candidata de serviço (compatibilidade). */
+export async function instanciaParaServico(): Promise<string> {
+  return instanciasParaServico()[0] ?? padrao();
 }
 
 export function registrarEnvio(instancia: string): void {

@@ -173,3 +173,44 @@ test("dedup: janela em dias configurável (DEDUP_DIAS)", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("serviço: principal primeiro, depois as ativas por peso (inativas ficam fora)", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "off", nome: "Desligada", ativo: false, peso: 10, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 7, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 1, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-3", nome: "Celular 3", ativo: true, peso: 3, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    assert.deepEqual(mod.instanciasParaServico(), ["cel-1", "cel-2", "cel-3"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("serviço: sem nenhuma ativa, cai na principal (não devolve lista vazia)", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: false, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    assert.deepEqual(mod.instanciasParaServico(), ["cel-1"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("serviço: instância marcada como ruim vai para o fim da lista", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 1, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-3", nome: "Celular 3", ativo: true, peso: 3, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    assert.deepEqual(mod.instanciasParaServico(), ["cel-1", "cel-2", "cel-3"]);
+    mod.marcarInstanciaRuim("cel-1");
+    assert.equal(mod.instanciaRuim("cel-1"), true);
+    assert.deepEqual(mod.instanciasParaServico(), ["cel-2", "cel-3", "cel-1"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

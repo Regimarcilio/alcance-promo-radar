@@ -91,7 +91,8 @@ test("adiciona participante: HTTP 400 com Connection Closed faz retry", async ()
   process.env.EVO_URL = "http://evo.test";
   process.env.EVO_KEY = "k";
   process.env.EVO_INSTANCE = "inst-teste";
-  ambiente("inst-teste");
+  // instância própria: o teste marca a principal como "ruim" (rebaixada)
+  ambiente("inst-400");
   let chamadas = 0;
   const m = mockFetch(async () => {
     chamadas++;
@@ -390,5 +391,58 @@ test("grupos: consulta todas as instâncias ativas e une os grupos", async () =>
   } finally {
     m.restaurar();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("adiciona participante: principal zumbi (400 Connection Closed) troca de número na hora", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-zumbi");
+  const urls: string[] = [];
+  const m = mockFetch(async (url) => {
+    urls.push(url);
+    if (url.includes("/updateParticipant/inst-zumbi?")) {
+      return new Response(
+        JSON.stringify({ status: 400, error: "Bad Request", response: { message: ["Error: Connection Closed"] } }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+    return resJson({ updateParticipants: [{ status: "200", content: { tag: "participant" } }] });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 2 });
+    assert.equal(r.ok, true, "deve entrar pela instância secundária");
+    assert.equal(r.instancia, "secundario-1");
+    assert.equal(urls.length, 2, "uma tentativa na principal e uma na secundária (sem espera extra)");
+    assert.match(urls[1], /updateParticipant\/secundario-1\?/);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("instância zumbi é rebaixada: o segundo contato vai direto na secundária", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-zumbi-2");
+  const urls: string[] = [];
+  const m = mockFetch(async (url) => {
+    urls.push(url);
+    if (url.includes("/updateParticipant/inst-zumbi-2?")) {
+      return new Response("Connection Closed", { status: 400 });
+    }
+    return resJson({ updateParticipants: [{ status: "200", content: { tag: "participant" } }] });
+  });
+  try {
+    const r1 = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 2 });
+    assert.equal(r1.ok, true);
+    const antes = urls.length;
+    const r2 = await adicionarUmParticipante(GRUPO, "5511888888888", { esperas: 0, tentativas: 2 });
+    assert.equal(r2.ok, true);
+    assert.equal(urls.length - antes, 1, "a zumbi não deve ser tentada de novo");
+    assert.match(urls[urls.length - 1], /updateParticipant\/secundario-1\?/);
+  } finally {
+    m.restaurar();
   }
 });

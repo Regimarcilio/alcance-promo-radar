@@ -1610,3 +1610,49 @@ serviço; recuperar a lista do lote e rodar o piloto de 30.
 - `npm audit`: 1 high em `zod <4.6.6` (GHSA-mrhx-c7xc-m3w5, exaustão de memória em
   coleções com constraint). Vetor mitigado por `lerCorpo` limitar corpo a 1 MB; upgrade para
   zod 4 é breaking e fica como tarefa separada.
+
+---
+
+## 2026-11-01 | FALLBACK-INSTANCIA-01 | planmaster | Adição travada na instância zumbi + deploy
+
+**Sintoma**: o lote de 14:12 não adicionou ninguém (0 registros em `boas-vindas.json`
+entre 14:12 e 14:32). Log: `[rotacao] principal "47997136647" está close` seguido de
+`Evolution 400 ... Connection Closed` a cada 60s, 5 tentativas por contato.
+
+**Causa raiz (evidência)**
+- `instanciaParaServico()` devolvia **sempre** a principal, mesmo `close`; o log avisava,
+  mas a chamada seguia.
+- `connectionState` **mente**: em 01/11 `radar-47992521346-3ga` respondia `state:"open"` e
+  devolvia `404/400 Connection Closed` em toda operação real (confirmado com
+  `/group/findGroupInfos`). Enquanto isso `radar-celular-1-qzl` lia o grupo normalmente.
+- Consequência: cada contato pagava 5×60s antes de desistir; em 20 min (limite de
+  acompanhamento do painel) só ~3-4 contatos eram tentados.
+
+**Correções**
+- `src/wa/rotacao.ts`: nova `instanciasParaServico()` — principal → demais ativas por peso
+  → principal (último recurso). Sem consultar `connectionState`.
+- `marcarInstanciaRuim()`/`instanciaRuim()`: instância que falha por conexão vai para o fim
+  da fila por 5 min, então os contatos seguintes do lote não pagam o mesmo timeout.
+- `src/monitor/evolution.ts`: `adicionarUmParticipante()` percorre as candidatas e troca de
+  número **na hora** em erro de instância (400/404 `Connection Closed`, ECONNRESET etc.),
+  sem consumir tentativa nem esperar 60s.
+
+**Testes**: `npm test` **163/163** (5 novos: ordem das candidatas, rebaixamento, troca na
+zumbi, segundo contato direto na secundária); `npm run typecheck` limpo; smoke OK.
+
+**Deploy**: `docker compose build manager && up -d manager` às 20:16 e 20:24 BRT.
+- imagem `promo-radar-manager:local` recriada; container **healthy**;
+- `/healthz` 200, `/image/logo.png` **401** (rota nova presente);
+- `resolverMidia`, `instanciasParaServico` e `legendaOverride` confirmados no `dist` do
+  container.
+
+**Piloto real (3 contatos fora do grupo, 20:18 BRT)**
+- `5519999153975`, `559691927632`, `554784159115` → **3/3 adicionados**, **3 boas-vindas
+  ok**, 0 falhas (`boas-vindas.json`), todas por `radar-celular-1-qzl`.
+- Log comprova o fallback: `radar-47992521346-3ga falhou (...) — tentando radar-celular-1-qzl`.
+
+**Pendências**
+- `radar-47992521346-3ga` continua zumbi (`open` falso): reconectar/refazer pareamento.
+- `radar-47997136647-m28` em `close` (device_removed).
+- Painel acompanha o job por no máximo 20 min (`600×2s`) — lote real pode passar disso.
+- `/group/fetchAllGroups` com 500 nas duas instâncias instáveis; `clientes.json` de 31/10.
