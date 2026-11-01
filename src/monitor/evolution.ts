@@ -233,20 +233,45 @@ export async function desconectar(): Promise<void> {
  * o grupo tiver o "link de convite" habilitado. Fora dessas condições a API
  * devolve erro — o chamador deve reportar sem quebrar a interface.
  */
+export interface ResultadoAdicao {
+  ok: boolean;
+  jaNoGrupo: boolean;
+  limitado: boolean;
+  erro?: string;
+  /** instância que atendeu a chamada (para a boas-vindas sair pelo mesmo número) */
+  instancia?: string;
+  /** true = o WhatsApp devolveu status 200/201 (entrou) ou 409 (já estava) */
+  confirmado?: boolean;
+}
+
+/** Erro de rede/conexão que vale repetir. */
+function transitorioAdicao(msg: string, http = 0): boolean {
+  if (http === 408 || http === 429 || http >= 500) return true;
+  const instavel =
+    /Connection Closed|fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|other side closed|rate-overlimit|too many/i;
+  if (http === 400 && instavel.test(msg)) return true;
+  return instavel.test(msg);
+}
+
+function ehLimite(msg: string): boolean {
+  return /rate-overlimit|too many|429|limite/i.test(msg);
+}
+
 /**
- * Adiciona UM participante ao grupo, com retry quando o WhatsApp limita.
+ * Adiciona UM participante ao grupo.
  *
- * O WhatsApp recusa operações de grupo em rajada (rate-overlimit). Por isso:
- * um por vez, com pausa entre chamadas (no job) e espera maior entre tentativas.
- *
- * Resposta do Evolution: 201 com `updateParticipants[]` — cada item traz o
- * status por participante (ex.: 409 = já está no grupo).
+ * Regras aprendidas com o teste controlado (2026-10-31):
+ * - status 200 = entrou; 409 = já estava; 403 = privacidade do alvo (terminal,
+ *   NÃO adianta repetir); 404 = número sem WhatsApp (terminal); 408 = timeout
+ *   (retry); 400 "Connection Closed" = instância morta (retry).
+ * - `updateParticipants` vazio/sem status NÃO é sucesso: sem confirmação, o
+ *   chamador não pode dizer que o contato entrou nem mandar boas-vindas.
  */
 export async function adicionarUmParticipante(
   groupJid: string,
   numero: string,
   opts: { esperas?: number; tentativas?: number } = {},
-): Promise<{ ok: boolean; jaNoGrupo: boolean; limitado: boolean; erro?: string }> {
+): Promise<ResultadoAdicao> {
   const jid = String(groupJid ?? "").trim();
   if (!jid.endsWith("@g.us")) return { ok: false, jaNoGrupo: false, limitado: false, erro: "grupo inválido" };
   const digitos = String(numero ?? "").replace(/\D/g, "");
@@ -254,21 +279,22 @@ export async function adicionarUmParticipante(
   const participante = `+${digitos}`;
 
   const esperas = Number(opts.esperas ?? 45000);
-  const maxTentativas = Number(opts.tentativas ?? 3);
+  const maxTentativas = Math.max(1, Number(opts.tentativas ?? 3));
   let ultimoErro = "";
+  let instancia: string | undefined;
 
   for (let t = 0; t < maxTentativas; t++) {
     if (t > 0) {
       console.log(
-        `[grupo] WhatsApp limitou — nova tentativa em ${Math.round(esperas / 1000)}s (${t + 1}/${maxTentativas})`,
+        `[grupo] nova tentativa em ${Math.round(esperas / 1000)}s (${t + 1}/${maxTentativas}) — ${ultimoErro.slice(0, 80)}`,
       );
       await new Promise((r) => setTimeout(r, esperas));
     }
     try {
       // Operação de SERVIÇO → sempre no número principal.
-      const alvo = await instanciaParaServico();
+      instancia = await instanciaParaServico();
       const res = await fetch(
-        `${base()}/group/updateParticipant/${alvo}?groupJid=${encodeURIComponent(jid)}`,
+        `${base()}/group/updateParticipant/${instancia}?groupJid=${encodeURIComponent(jid)}`,
         {
           method: "POST",
           headers: { apikey: key(), "Content-Type": "application/json" },
@@ -277,27 +303,45 @@ export async function adicionarUmParticipante(
         },
       );
       const txt = await res.text().catch(() => "");
+
       if (res.ok) {
         // 201: a API responde 201 mesmo com erro por participante
-        const j = (JSON.parse(txt || "{}") as any)?.updateParticipants;
-        const item = Array.isArray(j) ? j[0] : null;
-        const status = Number(item?.status ?? 0);
-        if (status === 409) return { ok: true, jaNoGrupo: true, limitado: false }; // já estava
-        if (status && status >= 400) {
-          ultimoErro = `participante ${status}: ${item?.content?.error ?? item?.error ?? "recusado"}`;
-          return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+        const lista = (JSON.parse(txt || "{}") as any)?.updateParticipants;
+        const item = Array.isArray(lista) ? lista[0] : null;
+        if (!item) {
+          return {
+            ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false,
+            erro: "resposta sem updateParticipants — adição não confirmada",
+          };
         }
-        return { ok: true, jaNoGrupo: false, limitado: false };
+        const status = Number(item?.status ?? 0);
+        if (status === 409) return { ok: true, jaNoGrupo: true, limitado: false, instancia, confirmado: true };
+        if (status === 200 || status === 201) {
+          return { ok: true, jaNoGrupo: false, limitado: false, instancia, confirmado: true };
+        }
+
+        const detalhe = String(item?.content?.error ?? item?.error ?? item?.content?.[0]?.attrs?.error ?? "recusado");
+        ultimoErro = `participante ${status || "?"}: ${detalhe}`;
+        if (status === 408) continue; // timeout: retry
+        // 403 (privacidade), 404 (sem WhatsApp), 400/422 etc: terminal.
+        return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
       }
+
       ultimoErro = `Evolution ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ""}`;
-      if (/rate-overlimit|too many|429/i.test(txt) || res.status === 429) continue; // espera e repete
-      return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+      if (transitorioAdicao(txt, res.status)) continue;
+      return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
     } catch (e) {
       ultimoErro = String((e as Error)?.message ?? e);
-      return { ok: false, jaNoGrupo: false, limitado: false, erro: ultimoErro };
+      if (!transitorioAdicao(ultimoErro)) {
+        return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
+      }
     }
   }
-  return { ok: false, jaNoGrupo: false, limitado: true, erro: ultimoErro || "rate limit do WhatsApp" };
+
+  return {
+    ok: false, jaNoGrupo: false, limitado: ehLimite(ultimoErro), instancia, confirmado: false,
+    erro: ultimoErro || "falha ao adicionar",
+  };
 }
 
 /**

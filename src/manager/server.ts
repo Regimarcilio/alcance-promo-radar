@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants as fsConstants, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { accessSync, constants as fsConstants, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, join, extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
@@ -34,6 +34,7 @@ import {
   estadoFilaClientes, limparFilaClientes, iniciarClientesWorker, pararClientesWorker,
 } from "../clientes/clientes.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
+import { resolverMidia } from "./midia.js";
 import { logger } from "../observability/logger.js";
 import { detectar as detectarOferta, rotulo as rotuloPrograma } from "../monitor/parser.js";
 import { expandirLink } from "../monitor/curtos.js";
@@ -43,6 +44,7 @@ import {
   type AcaoGrupo,
 } from "../monitor/evolution.js";
 import { estadoAdicao, iniciarAdicaoGrupo } from "../monitor/grupo-add.js";
+import { enviarBoasVindas, estadoBoasVindas } from "../clientes/boas-vindas.js";
 import {
   estadoSyncGrupos, iniciarSyncGruposDiario, pararSyncGruposDiario, sincronizarGruposAgora,
 } from "../monitor/sync-grupos.js";
@@ -175,6 +177,43 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       json(200, { ok: true, dataDir: "writable" });
     } catch {
       json(503, { ok: false, erro: "data dir não gravável" });
+    }
+    return;
+  }
+
+  // ---------- mídia estática (preview de imagens do painel) ----------
+  // Serve SOMENTE imagens de /image/ (marca) e /data/ (upload do usuário),
+  // com sessão obrigatória, sem subdiretórios e sem path traversal.
+  if ((metodo === "GET" || metodo === "HEAD") && (caminho.startsWith("/image/") || caminho.startsWith("/data/"))) {
+    if (!sessaoDoRequest(req)) {
+      json(401, { erro: "não autenticado" });
+      return;
+    }
+    const ehData = caminho.startsWith("/data/");
+    const base = ehData ? dataDir : join(root, "image");
+    const prefixo = ehData ? "/data/" : "/image/";
+    let nome = "";
+    try {
+      nome = decodeURIComponent(caminho.slice(prefixo.length));
+    } catch {
+      json(400, { erro: "caminho inválido" });
+      return;
+    }
+    const midia = resolverMidia(base, nome);
+    if (!midia.ok) {
+      json(404, { erro: "não encontrado" });
+      return;
+    }
+    try {
+      const buf = readFileSync(midia.alvo);
+      res.writeHead(200, {
+        "Content-Type": midia.mime,
+        "Content-Length": String(buf.byteLength),
+        "Cache-Control": "private, max-age=30",
+      });
+      res.end(metodo === "HEAD" ? undefined : buf);
+    } catch {
+      json(404, { erro: "não encontrado" });
     }
     return;
   }
@@ -913,6 +952,95 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     json(200, { ok: true, job: estadoAdicao() });
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/clientes/boas-vindas/status") {
+    json(200, { ok: true, ...estadoBoasVindas() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/boas-vindas/config") {
+    // Salva configuração de legenda e imagem override para adição ao grupo
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const legenda = typeof b.legenda === "string" ? b.legenda.trim() : "";
+      const imagem = typeof b.imagem === "string" ? b.imagem.trim() : "";
+      // Validação simples
+      if(legenda && legenda.length > 1024){
+        json(400, { ok: false, erro: "legenda acima de 1024 caracteres" });
+        return;
+      }
+      json(200, { ok: true, legenda, imagem: imagem || undefined });
+    } catch (e: any) {
+      json(400, { ok: false, erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/boas-vindas") {
+    // Teste manual: manda a DM de boas-vindas para um número (força o reenvio).
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const r = await enviarBoasVindas(String(b.numero ?? ""), { forcar: b.forcar !== false });
+      json(r.ok ? 200 : 400, { ...r });
+    } catch (e: any) {
+      json(400, { ok: false, erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/boas-vindas/upload") {
+    // Upload de imagem personalizada para boas-vindas (base64 ou multipart)
+    try {
+      const ct = req.headers.get("content-type") || "";
+      let caminho: string | null = null;
+      const extOK = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+      
+      if (ct.includes("application/json")) {
+        const b = JSON.parse(await lerCorpo(req));
+        if (typeof b.base64 === "string" && typeof b.filename === "string") {
+          const ext = extname(b.filename).toLowerCase();
+          if (!extOK.has(ext)) {
+            json(400, { ok: false, erro: "formato de imagem não suportado" });
+            return;
+          }
+          // Remove header base64 se houver
+          const b64 = b.base64.replace(/^data:image\/[a-z+;]+;base64,/, "");
+          const buf = Buffer.from(b64, "base64");
+          const dataDir = join(dirname(fileURLToPath(import.meta.url)), "../../data");
+          mkdirSync(dataDir, { recursive: true });
+          const filePath = join(dataDir, "bw-custom.png");
+          writeFileSync(filePath, buf);
+          caminho = "data/bw-custom.png";
+        }
+      } else if (ct.includes("multipart")) {
+        // Multipart/form-data - não implementado ainda
+        json(400, { ok: false, erro: "multipart não suportado, use JSON com base64" });
+        return;
+      }
+      
+      if (!caminho) {
+        json(400, { ok: false, erro: "imagem não fornecida" });
+        return;
+      }
+      
+      json(200, { ok: true, caminho });
+    } catch (e: any) {
+      json(500, { ok: false, erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "DELETE" && url.pathname === "/api/clientes/boas-vindas/upload") {
+    // Remove imagem customizada
+    try {
+      const dataDir = join(dirname(fileURLToPath(import.meta.url)), "../../data");
+      const filePath = join(dataDir, "bw-custom.png");
+      if (existsSync(filePath)) {
+        rmSync(filePath);
+        json(200, { ok: true });
+      } else {
+        json(200, { ok: true, msg: "sem imagem customizada" });
+      }
+    } catch (e: any) {
+      json(500, { ok: false, erro: String(e.message ?? e) });
+    }
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/clientes/grupo") {
     // Adiciona os contatos selecionados como participantes de um grupo
     // (Evolution updateParticipant action=add). Exige conta ADMIN + link de
@@ -935,9 +1063,21 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         json(400, { erro: "contatos não encontrados (rode 'Puxar contatos' de novo)" });
         return;
       }
+      // Legenda opcional: se fornecida, cada contato recém-adicionado recebe
+      // essa mensagem (com marshalling {%nome%}) logo após entrar no grupo.
+      let legendaOverride: { legenda?: string; imagem?: string } = {};
+      if (b.legendaOverride && typeof b.legendaOverride === "object") {
+        if (typeof b.legendaOverride.legenda === "string") {
+          legendaOverride.legenda = b.legendaOverride.legenda.trim();
+        }
+        if (typeof b.legendaOverride.imagem === "string" && b.legendaOverride.imagem.trim()) {
+          legendaOverride.imagem = b.legendaOverride.imagem.trim();
+        }
+      }
       // Job em BACKGROUND: cada adição pode levar até 60s quando o WhatsApp
       // limita (rate-overlimit) — travar o request deixaria a tela pendurada.
-      const job = iniciarAdicaoGrupo(grupoJid, numeros);
+      const opts = Object.keys(legendaOverride).length ? { legendaOverride } : {};
+      const job = iniciarAdicaoGrupo(grupoJid, numeros, opts);
       json(200, { ok: true, job, ...estadoAdicao() });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
@@ -1815,7 +1955,67 @@ body{padding:0;max-width:none;margin:0}
     <option value="">— escolha o grupo —</option>
   </select>
   <button class="mbtn ok" onclick="adicionarAoGrupo()">✔ Adicionar</button>
+  <button class="mbtn" onclick="testarBoasVindas()" title="Envia a DM de boas-vindas (imagem + link do TikTok) para um número">🎁 Testar boas-vindas</button>
   <span class="mini" id="cliaddmsg"></span>
+  <!-- ===== Opções de boas-vindas ===== -->
+  <div style="margin-top:8px;padding:6px 8px;background:var(--card);border-radius:8px;width:100%;box-sizing:border-box">
+    <label style="display:block;font-size:11px;color:#8ea0a8;margin-bottom:4px;">Legenda da boas-vindas (DM ao novo membro)</label>
+    <textarea id="clilegenda" rows="3" style="width:100%;font-size:12px;" placeholder="Texto que será enviado por DM..."></textarea>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      <label style="flex:1;cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border-strong);border-radius:6px;padding:6px">
+        <input type="file" id="cliimagemInput" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="previewImagemBoasVindas(event)">
+        <span class="mbtn" style="width:auto;margin:0" onclick="$('cliimagemInput')?.click()">🖼 Imagem</span>
+        <span id="cliimgstatus" class="mini" style="color:#8ea0a8;overflow:hidden;flex:1;text-overflow:ellipsis">padrão</span>
+      </label>
+      <button class="mbtn" style="width:auto;margin:0" onclick="abrirPreviewBoasVindas()">👁 Preview</button>
+    </div>
+  </div>
+  <!-- Modal de preview -->
+  <div id="modalPreview" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--card);border-radius:12px;max-width:400px;width:90%;max-height:90%;overflow:auto;box-shadow:0 4px 24px rgba(0,0,0,.3)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border-strong);display:flex;justify-content:space-between;align-items:center">
+        <b>Preview da boas-vindas</b>
+        <button class="mbtn" style="width:auto;margin:0" onclick="$('modalPreview').style.display='none'">✕</button>
+      </div>
+      <div style="padding:16px">
+        <div style="background:#0b141a;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="background:#1f2c34;padding:8px 12px 6px;display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:50%;background:#ffd400;border:1px solid #2a3942"></div>
+            <div style="flex:1">
+              <div style="color:#e9edef;font-weight:600;font-size:14px">Mano dos Achadinhos</div>
+              <div style="color:#8696a0;font-size:11px">conta comercial</div>
+            </div>
+          </div>
+          <div style="padding:12px;background:#111b21;display:flex;gap:12px">
+            <div id="previewImgContainer" style="flex:1;text-align:center">
+              <img id="previewImg" src="/image/Mano%20dos%20Achadinhos_%20Ofertas%20Tech%20e%20Lifestyle.png" alt="Imagem boas-vindas" style="max-width:100%;max-height:120px;border-radius:6px" />
+            </div>
+          </div>
+          <div style="padding:10px 12px;background:#182229">
+            <div id="previewLegenda" style="font-size:13px;color:#e9edef;line-height:1.4;white-space:pre-wrap;word-wrap:break-word">
+                🎉 <b>Bem-vindo ao Mano dos Achadinhos!</b>
+
+As melhores ofertas de <b>tech, beleza, games e casa</b>, todos os dias, com desconto real e link direto.
+
+🛒 Ofertas selecionadas
+🚚 Entrega segura
+✅ Compra confiável
+
+Me segue no TikTok:
+👉 https://www.tiktok.com/@mano.dos.achadinh
+
+Tem achadinho novo todos os dias. 🔥
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:12px 16px 16px;border-top:1px solid var(--border-strong)">
+        <button class="mbtn ok" style="width:auto;margin:0 4px" onclick="salvarImagemBoasVindas()">💾 Salvar imagem</button>
+        <button class="mbtn" style="width:auto;margin:0 4px" onclick="resetarImagemBoasVindas()">↺ Padrão</button>
+        <button class="mbtn" style="width:auto;margin:0" onclick="$('modalPreview').style.display='none'">Fechar</button>
+      </div>
+    </div>
+  </div>
 </div>
 <div id="clilist" style="max-height:240px;overflow:auto;border:1px solid var(--border-strong);border-radius:10px;padding:4px;margin-top:8px"></div>
 <div id="clilistas" style="margin-top:10px;font-size:13px"></div>
@@ -2466,13 +2666,129 @@ async function adicionarAoGrupo(){
   const nomeGrupo=$('cligrupoalvo').options[$('cligrupoalvo').selectedIndex].textContent;
   if(!confirm('Adicionar '+SELECAO.size+' contato(s) em "'+nomeGrupo+'"?\\n\\nSó funciona se esta conta for ADMIN do grupo e o grupo tiver link de convite ativo.\\n\\nO envio é feito um a um (o WhatsApp limita adições em rajada) e pode levar alguns minutos.'))return;
   $('cliaddmsg').innerHTML='<span class="mini">iniciando…</span>';
-  const r=await (await fetch('/api/clientes/grupo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupoJid:grupo,jids:[...SELECAO]})})).json();
+  const legendaOverride=$('clilegenda')?.value?.trim();
+  const body = {grupoJid:grupo,jids:[...SELECAO]};
+  if(legendaOverride || caminhoImagemBoasVindas){
+    body.legendaOverride = {};
+    if(legendaOverride) body.legendaOverride.legenda = legendaOverride;
+    if(caminhoImagemBoasVindas) body.legendaOverride.imagem = caminhoImagemBoasVindas;
+  }
+  const r=await (await fetch('/api/clientes/grupo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
   if(r.erro){$('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(r.erro)+'</span>';return;}
   SELECAO.clear();
   renderContatos();
   atualizarCaixaAdicionar();
   await acompanharAdicaoGrupo();
 }
+// Teste manual da DM de boas-vindas (mesma mensagem enviada após o add).
+async function testarBoasVindas(){
+  const numero=prompt('Número com DDD para receber a boas-vindas (ex.: 5511999999999):');
+  if(!numero)return;
+  $('cliaddmsg').innerHTML='<span class="mini">enviando boas-vindas…</span>';
+  try{
+    const r=await (await fetch('/api/clientes/boas-vindas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:numero.trim(),forcar:true})})).json();
+    if(r.ok)$('cliaddmsg').innerHTML='<span style="color:var(--ok-tx)">boas-vindas enviada ✓</span> <span class="mini">('+esc(r.numero||'')+')</span>';
+    else $('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(r.erro||'falha no envio')+'</span>';
+  }catch(e){
+    $('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(String(e))+'</span>';
+  }
+}
+// ===== Preview e upload de imagem de boas-vindas =====
+let caminhoImagemBoasVindas = null; // null = padrão, ou caminho relativo
+function previewImagemBoasVindas(event){
+  const file = event?.target?.files?.[0];
+  if(!file)return;
+  const preview = $('previewImg');
+  if(!preview)return;
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  $('cliimgstatus').textContent = 'Arquivo: '+file.name;
+  // Atualiza preview legenda também
+  atualizarPreviewLegenda();
+}
+async function salvarImagemBoasVindas(){
+  const file = $('cliimagemInput')?.files?.[0];
+  if(!file)return alert('Selecione uma imagem primeiro');
+  const preview = $('previewImg');
+  if(!preview)return alert('Imagem não carregada');
+  $('cliaddmsg').innerHTML='<span class="mini">salvando imagem…</span>';
+  try{
+    // Converte para base64
+    const reader = new FileReader();
+    reader.onload = async function(e){
+      const base64 = e.target.result;
+      const r = await (await fetch('/api/clientes/boas-vindas/upload',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({base64, filename: file.name})
+      })).json();
+      if(r.ok){
+        caminhoImagemBoasVindas = r.caminho;
+        $('cliimgstatus').textContent = 'Usando: '+r.caminho;
+        alert('Imagem salva com sucesso! Agora clique em "Abrir" para preview.');
+        // Atualiza preview com a imagem salva
+        preview.src = '/'+r.caminho+'?t='+Date.now();
+      }else{
+        $('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(r.erro||'falha no upload')+'</span>';
+      }
+    };
+    reader.readAsDataURL(file);
+  }catch(e){
+    $('cliaddmsg').innerHTML='<span style="color:var(--danger-tx)">erro: '+esc(String(e))+'</span>';
+  }
+}
+async function resetarImagemBoasVindas(){
+  // Remove a imagem customizada e volta ao padrão
+  try{
+    const r = await (await fetch('/api/clientes/boas-vindas/upload',{method:'DELETE'})).json();
+    caminhoImagemBoasVindas = null;
+    $('cliimgstatus').textContent = 'padrão';
+    const preview = $('previewImg');
+    if(preview) preview.src = '/image/Mano%20dos%20Achadinhos_%20Ofertas%20Tech%20e%20Lifestyle.png';
+    alert('Imagem redefinida ao padrão');
+  }catch(e){
+    alert('Erro ao redefinir: '+String(e));
+  }
+}
+function abrirPreviewBoasVindas(){
+  const modal = $('modalPreview');
+  if(!modal)return;
+  // Carrega legenda padrão ou customizada
+  const legendaCustom = $('clilegenda')?.value?.trim();
+  const previewLegenda = $('previewLegenda');
+  const previewImg = $('previewImg');
+  if(previewLegenda){
+    previewLegenda.textContent = legendaCustom || "🎉 *Bem-vindo ao Mano dos Achadinhos!*\\n\\nAs melhores ofertas de *tech, beleza, games e casa*, todos os dias, com desconto real e link direto.\\n\\n🛒 Ofertas selecionadas\\n🚚 Entrega segura\\n✅ Compra confiável\\n\\nMe segue no TikTok:\\n👉 https://www.tiktok.com/@mano.dos.achadinh\\n\\nTem achadinho novo todos os dias. 🔥";
+  }
+  // Atualiza imagem se houver customizada
+  if(previewImg && caminhoImagemBoasVindas){
+    previewImg.src = '/'+caminhoImagemBoasVindas+'?t='+Date.now();
+  }
+  modal.style.display = 'flex';
+}
+function atualizarPreviewLegenda(){
+  const legendaCustom = $('clilegenda')?.value?.trim();
+  const previewLegenda = $('previewLegenda');
+  if(!previewLegenda)return;
+  if(legendaCustom){
+    previewLegenda.textContent = legendaCustom;
+  }else{
+    previewLegenda.textContent = "🎉 *Bem-vindo ao Mano dos Achadinhos!*\\n\\nAs melhores ofertas de *tech, beleza, games e casa*, todos os dias, com desconto real e link direto.\\n\\n🛒 Ofertas selecionadas\\n🚚 Entrega segura\\n✅ Compra confiável\\n\\nMe segue no TikTok:\\n👉 https://www.tiktok.com/@mano.dos.achadinh\\n\\nTem achadinho novo todos os dias. 🔥";
+  }
+}
+// Carrega legenda padrão na inicialização
+window.addEventListener('DOMContentLoaded', function(){
+  const legendaDefault = "🎉 *Bem-vindo ao Mano dos Achadinhos!*\\n\\nAs melhores ofertas de *tech, beleza, games e casa*, todos os dias, com desconto real e link direto.\\n\\n🛒 Ofertas selecionadas\\n🚚 Entrega segura\\n✅ Compra confiável\\n\\nMe segue no TikTok:\\n👉 https://www.tiktok.com/@mano.dos.achadinh\\n\\nTem achadinho novo todos os dias. 🔥";
+  if($('clilegenda'))$('clilegenda').value = legendaDefault;
+  // Se já existe imagem customizada salva (data/bw-custom.png), reflete no preview
+  // e passa a usá-la como override nas adições desta sessão.
+  fetch('/data/bw-custom.png',{method:'HEAD'}).then(function(r){
+    if(!r.ok)return;
+    caminhoImagemBoasVindas='data/bw-custom.png';
+    const p=$('previewImg'); if(p)p.src='/data/bw-custom.png?t='+Date.now();
+    const st=$('cliimgstatus'); if(st)st.textContent='customizada';
+  }).catch(function(){});
+});
 // Acompanha o job em background (a adição é 1 por vez e pode levar minutos).
 async function acompanharAdicaoGrupo(){
   for(let i=0;i<600;i++){
@@ -2480,7 +2796,7 @@ async function acompanharAdicaoGrupo(){
     const j=d.job||{};
     if(j.rodando){
       const extra=j.limitado?' · ⚠️ WhatsApp limitou, aguardando janela livre':'';
-      $('cliaddmsg').innerHTML='<span class="mini">adicionando… '+j.feitos+'/'+j.total+' · '+j.adicionados+' no grupo'+(j.jaNoGrupo?(' · '+j.jaNoGrupo+' já estavam'):'')+extra+'</span>';
+      $('cliaddmsg').innerHTML='<span class="mini">adicionando… '+j.feitos+'/'+j.total+' · '+j.adicionados+' no grupo'+(j.jaNoGrupo?(' · '+j.jaNoGrupo+' já estavam'):'')+(j.boasVindas?(' · '+j.boasVindas+' boas-vindas'):'')+extra+'</span>';
       await new Promise(r=>setTimeout(r,2000));
       continue;
     }
@@ -2488,6 +2804,7 @@ async function acompanharAdicaoGrupo(){
       const extra=j.limitado?' <span style="color:var(--danger-tx)">· o WhatsApp limitou algumas adições</span>':'';
       $('cliaddmsg').innerHTML='<span style="color:var(--ok-tx)">'+j.adicionados+' adicionado(s) ✓</span>'
         +(j.jaNoGrupo?(' <span class="mini">· '+j.jaNoGrupo+' já estavam no grupo</span>'):'')
+        +(j.boasVindas?(' <span class="mini">· '+j.boasVindas+' boas-vindas</span>'):'')
         +(j.falhos&&j.falhos.length?(' <span style="color:var(--danger-tx)">· '+j.falhos.length+' não entraram</span>'):'')
         +extra;
       return;

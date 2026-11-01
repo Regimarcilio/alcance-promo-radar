@@ -37,12 +37,71 @@ test("adiciona participante: normaliza para +código e envia action=add", async 
   const m = mockFetch(async (url, init) => {
     assert.match(url, /\/group\/updateParticipant\/inst-teste\?groupJid=120363000000000000%40g\.us/);
     corpo = String(init?.body);
-    return resJson({ updateParticipants: [] });
+    return resJson({ updateParticipants: [{ status: "200", content: { tag: "participant" } }] });
   });
   try {
     const r = await adicionarUmParticipante(GRUPO, "5511999999999");
     assert.equal(r.ok, true);
+    assert.equal(r.confirmado, true);
     assert.deepEqual(JSON.parse(corpo), { action: "add", participants: ["+5511999999999"] });
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: resposta vazia NÃO é sucesso (sem falso positivo)", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  const m = mockFetch(async () => resJson({ updateParticipants: [] }));
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999");
+    assert.equal(r.ok, false);
+    assert.equal(r.confirmado, false);
+    assert.match(r.erro ?? "", /não confirmada/);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: status 403 do participante é terminal (privacidade), sem retry", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    return resJson({
+      updateParticipants: [{ status: "403", content: { error: "403" } }],
+    });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 5 });
+    assert.equal(r.ok, false);
+    assert.equal(r.confirmado, false);
+    assert.equal(chamadas, 1, "403 de privacidade não deve repetir");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("adiciona participante: HTTP 400 com Connection Closed faz retry", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    if (chamadas === 1) return new Response("Connection Closed", { status: 400 });
+    return resJson({ updateParticipants: [{ status: "200", content: { tag: "participant" } }] });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 2 });
+    assert.equal(r.ok, true);
+    assert.equal(chamadas, 2);
   } finally {
     m.restaurar();
   }
@@ -59,7 +118,7 @@ test("adiciona participante: rate-overlimit faz retry", async () => {
     if (chamadas === 1) {
       return resJson({ message: ["Error updating participants", "Error: rate-overlimit"] }, 400);
     }
-    return resJson({ updateParticipants: [] });
+    return resJson({ updateParticipants: [{ status: "200", content: { tag: "participant" } }] });
   });
   try {
     const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 3 });
@@ -140,6 +199,67 @@ test("erro da API (403): devolve erro com status, sem lançar", async () => {
     const r = await adicionarUmParticipante(GRUPO, "5511999999999");
     assert.equal(r.ok, false);
     assert.match(r.erro ?? "", /Evolution 403/);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("400 sem 'Connection Closed' é terminal (não repete)", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    return new Response("Bad Request", { status: 400 });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 3 });
+    assert.equal(r.ok, false);
+    assert.equal(r.limitado, false);
+    assert.equal(chamadas, 1, "400 genérico não deve repetir");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("HTTP 403 é terminal (não repete)", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    return new Response("Forbidden", { status: 403 });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 3 });
+    assert.equal(r.ok, false);
+    assert.equal(r.limitado, false);
+    assert.equal(chamadas, 1, "403 não deve repetir");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("retry: erro 408 (timeout) faz retry até esgotar tentativas", async () => {
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.EVO_INSTANCE = "inst-teste";
+  ambiente("inst-teste");
+  let chamadas = 0;
+  const m = mockFetch(async () => {
+    chamadas++;
+    return new Response("Request Timeout", { status: 408 });
+  });
+  try {
+    const r = await adicionarUmParticipante(GRUPO, "5511999999999", { esperas: 0, tentativas: 3 });
+    // 408 é retryable, mas é timeout — não é limite do WhatsApp.
+    assert.equal(r.ok, false);
+    assert.equal(r.limitado, false, "timeout não é rate limit");
+    assert.equal(chamadas, 3, "deveria tentar 3 vezes com 408");
   } finally {
     m.restaurar();
   }

@@ -72,6 +72,9 @@ check 200 /login
 check 302 /
 check 401 /api/contas
 check 401 /api/webhook/evolution POST
+# preview de mídia exige sessão (nada de imagem da marca pública)
+check 401 /image/logo.png
+check 401 /data/bw-custom.png
 check 404 /rota-inexistente
 
 echo "smoke manager OK (porta $PORT)"

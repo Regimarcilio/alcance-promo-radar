@@ -60,6 +60,8 @@ COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/src/manager/login.html ./src/manager/login.html
 COPY --chown=node:node --from=builder /app/src/categorias.json ./src/categorias.json
 COPY --chown=node:node --from=builder /app/src/amazon/categorias.json ./src/amazon/categorias.json
+# Imagem da marca usada na DM de boas-vindas (src/clientes/boas-vindas.ts).
+COPY --chown=node:node image ./image
 
 # data/ e logs/ são bind mounts no compose; criamos com o dono correto para
 # funcionar também sem volume (execução avulsa).

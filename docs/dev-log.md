@@ -1493,3 +1493,120 @@ README, SRS (RF-042/RN-016), backlog (US-27) e ADR-006 atualizados.
 
 **Teste**: `src/wa/rotacao.test.ts` agora valida 3 números no rodízio, incluindo o principal;
 118/118 verdes.
+
+---
+
+## 2026-10-31 | GRUPO-ADD-01 | planmaster | Diagnóstico e teste controlado da adição de contatos ao grupo
+
+**Contexto**: 697 de 705 contatos falhavam ao entrar no grupo `120363412937047408@g.us`.
+Hipótese inicial: retry insuficiente. Investigação mostrou três causas distintas.
+
+**Evidências**
+- `updateParticipants` por participante: `200` entrou, `403`+`add_request` (convite pendente,
+  alvo com privacidade fechada), `408` timeout, `409` já no grupo. O HTTP geral é `201` mesmo
+  quando o participante falha.
+- `400 Connection Closed`: instância principal `radar-47997136647-m28` caindo por
+  `conflict/device_removed`; não é o número-alvo.
+- Nenhum `rate-overlimit` real no histórico (os "429" nos logs eram JIDs de grupo).
+- Tabela `Contact` da Evolution = 0 linhas e `syncFullHistory:false` em todas as instâncias.
+
+**Teste controlado** (`scripts/teste-add-403.mjs`, evidência em `data/teste-add-403.json`)
+- 10 contatos fora do grupo, 1 tentativa cada, 60s entre eles, principal com fallback à secundária.
+- Resultado: **3 entraram** (556191711454, 555195319916, 5521990418498), **4 convites 403**
+  (5517996238631, 558191495543, 558189970733, 5511984661873), **3 timeouts 408**
+  (559492467649, 558296931936, 557996635390).
+- Grupo passou de **39 para 42 participantes** — confirma as 3 entradas.
+- A principal caiu em **4 dos 10** testes; o fallback resolveu 2 entradas/1 convite/1 timeout.
+
+**Decisões**
+- Ritmo de 1/min melhora o resultado, mas não vence privacidade: `403/add_request` é convite
+  pendente e não deve ser retentado.
+- Retry apenas para `408`, `429`, `5xx` e `Connection Closed`.
+- Fallback de instância de serviço é obrigatório (`instanciaParaServico` ainda insiste na
+  principal mesmo `close`).
+- Falso positivo a corrigir: `updateParticipants` vazio/sem `status` hoje conta como sucesso.
+
+**Arquivos**: `src/monitor/evolution.ts` (retry para 403/408/400 e erros de rede — a revisar
+conforme decisões acima), `scripts/teste-add-403.mjs`, `data/teste-add-403.json`.
+
+**Próximo**: classificar `403` como convite pendente, retry seletivo, fallback de instância,
+corrigir falso positivo e só então rodar lote maior.
+
+---
+
+## 2026-10-31 | BOAS-VINDAS-01 | planmaster | DM de boas-vindas ao contato confirmado (Opção 1 aprovada)
+
+**Contexto**: adição 6h–22h e ofertas até 23h; quem entra às 6h pode ficar horas sem
+estímulo e sair (~10% de churn). Aprovado o protótipo
+`docs/prototipos/boas-vindas-novos-membros/opcao-1.html`: imagem da marca + legenda com o
+link do TikTok, enviada por DM assim que a entrada é confirmada.
+
+**Implementado**
+- `src/clientes/boas-vindas.ts`: envio via `/message/sendMedia/{instancia}` (base64),
+  validação da imagem (dentro do projeto, PNG/JPG/WEBP, ≤8 MB), dedup por número (30 dias),
+  retry só em erro transitório e histórico em `data/boas-vindas.json`.
+- `src/monitor/evolution.ts`: `adicionarUmParticipante` devolve `instancia` e `confirmado`;
+  `updateParticipants` vazio/sem status = **não confirmado** (fim do falso positivo);
+  `403` de participante é terminal (privacidade); `408`/`429`/`5xx`/`Connection Closed`
+  continuam com retry.
+- `src/monitor/grupo-add.ts`: boas-vindas só com `r.ok && !r.jaNoGrupo && r.confirmado`,
+  pelo mesmo número que adicionou; falha da DM não derruba a adição; contadores
+  `boasVindas`/`boasVindasFalhas`.
+- `src/manager/server.ts`: `GET /api/clientes/boas-vindas/status`,
+  `POST /api/clientes/boas-vindas` (teste manual) e botão "🎁 Testar boas-vindas".
+- `Dockerfile.manager`: copia `image/` para o runtime (antes só existia no container por
+  cópia manual).
+- `.env`/`.env.example`: `BOAS_VINDAS_ATIVO`, `BOAS_VINDAS_IMAGEM`, `BOAS_VINDAS_REENVIO_DIAS`.
+
+**Testes**: `src/clientes/boas-vindas.test.ts` (7 casos) + `src/monitor/evolution.test.ts`
+ajustado (falso positivo, 403 terminal, 400 Connection Closed). `npm test`: **153/153**.
+
+**Deploy e teste real (2026-11-01 01:49)**
+- `docker compose build manager` + `docker compose up -d manager`: container recriado, `healthy`.
+- `GET /api/clientes/boas-vindas/status`: `ativo=true`, `imagemOk=true`, legenda com TikTok.
+- DM real enviada de `radar-47992521346-3ga` (secundária, `open`) para `554792521346`;
+  `messageId=3EB048A14C1788AAEE6BF5`, registrada em `data/boas-vindas.json`.
+- A principal `radar-47997136647-m28` estava `close` de novo no momento do teste — o problema
+  operacional de `device_removed` continua e é o próximo bloqueio a resolver.
+
+**Pendências**: janela 6h–22h + cadência 1/10 min nos 3 números; fallback de instância de
+serviço; recuperar a lista do lote e rodar o piloto de 30.
+
+---
+
+## 2026-11-01 | BOAS-VINDAS-02 | planmaster | Painel parado: causa raiz e rota de mídia
+
+**Sintoma**: o painel inteiro deixou de funcionar (script #2 não parseava) e o teste
+`pagina.test.ts` falhava com `Missing initializer in const declaration`.
+
+**Diagnóstico (evidência)**
+- Renderizei o template `PAGINA` e compilei cada `<script>` com `vm.Script`, o que dá a
+  linha exata — o `new Function` do teste não dava.
+- Causa 1: `const body: any = {...}` — **anotação TypeScript vazou para o JS do navegador**
+  dentro de `adicionarAoGrupo()`. O parser TS aceita (é TS), o V8 recusa; por isso o erro
+  aparecia como sintaxe inválida.
+- Causa 2: `if(!preview)return return alert(...)` — `return return` é inválido e derrubava
+  o parse do bloco.
+- Observação: os `\n` das legendas de boas-vindas já estavam corretos (`\\n` no template).
+
+**Correções**
+- `src/manager/server.ts`: removidos `: any` e o `return return`.
+- Novo `src/manager/midia.ts` + `src/manager/midia.test.ts`: resolução segura de imagem
+  (sem `..`, sem subdiretório, sem NUL, só PNG/JPG/WEBP, confinada à base).
+- Rota `GET|HEAD /image/*` e `/data/*`: **exige sessão** (401 sem login), 404 para traversal
+  ou extensão inválida, `Content-Type` correto. Antes não existia rota estática: o
+  `<img src="../../../image/...">` do preview dava 404.
+- Painel: preview passou a usar `/image/...` e `/data/bw-custom.png` (com cache-bust) e o
+  `DOMContentLoaded` detecta imagem customizada já salva (HEAD) e a adota como override.
+
+**Testes**: `npm test` **158/158** (5 novos de mídia/traversal); `npm run typecheck` limpo;
+`npm run smoke:manager` OK, incluindo `401` em `/image/*` e `/data/*`.
+
+**Pendências**
+- A imagem enviada em `data/bw-custom.png` só entra no envio via `legendaOverride` do job;
+  o "Testar boas-vindas" manual ainda usa `BOAS_VINDAS_IMAGEM`/padrão. Unificar depois.
+- Continua o bloqueio operacional: principal `radar-47997136647-m28` caindo por
+  `conflict/device_removed`.
+- `npm audit`: 1 high em `zod <4.6.6` (GHSA-mrhx-c7xc-m3w5, exaustão de memória em
+  coleções com constraint). Vetor mitigado por `lerCorpo` limitar corpo a 1 MB; upgrade para
+  zod 4 é breaking e fica como tarefa separada.
