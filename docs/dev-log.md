@@ -1687,3 +1687,37 @@ zumbi, segundo contato direto na secundária); `npm run typecheck` limpo; smoke 
 
 **Pendência**: `ML_ACCESS_TOKEN` vazio — se o hub algum dia exigir OAuth, renovar via
 `scripts/ml-oauth.ts`. Hoje o hub usa apenas `COOKIE_ML` (renovável no navegador).
+
+---
+
+## 2026-11-01 | DISPATCH-ZUMBI-01 | planmaster | Monitor não encaminha: sendMedia 500 na instância zumbi
+
+**Sintoma**: regras do monitor salvas (10 regras, 6 ativas, `autoEnviar: true`), fila
+processando, mas nada chega ao destino. `monitor-fila.json` vazio e `ultimoEnvio` 12:58Z.
+
+**Evidência**
+- `docker logs`: `[dispatch] erro transitório (Evolution sendMedia 500 ...) — repetindo em 2s (2/3)`
+  em 00:00, 00:04, 00:05 e 00:06 UTC, sem nenhum envio concluído.
+- Teste direto por instância (`POST /message/sendMedia/<inst>` com número inexistente):
+  - `radar-celular-1-qzl` → **400** (número não existe: instância ok);
+  - `radar-47997136647-m28` → **400** (ok);
+  - `radar-47992521346-3ga` → **500 Connection Closed**.
+- `connectionState` diz **`open` para as três** — inclusive a `3ga` (que está morta) e a
+  `m28` (que já estava `close` no teste real). O retry do `comRetry` exclui só a instância
+  que falhou **naquela entrega**, então o item seguinte voltava a sortear as zumbis.
+
+**Correção**
+- `src/wa/rotacao.ts`: `proximaInstancia()` descarta do sorteio as instâncias marcadas como
+  ruins (`instanciaRuim`, TTL 5 min) quando ainda sobra alguma saudável.
+- `src/wa/dispatch.ts`: erro transitório agora chama `marcarInstanciaRuim(instancia)` e o
+  log passa a mostrar **qual número** falhou.
+- Resultado prático: com duas zumbis, todo o envio converge para `radar-celular-1-qzl`.
+
+**Testes**: `npm test` **164/164** (novo: instância marcada não é sorteada);
+`typecheck` limpo; deploy às 21:14 com `healthz` 200.
+
+**Observação**: os envios do piloto já vinham subindo antes do patch (4→8 e 2→4 às 21:14),
+por sorteio; o patch elimina os 500 intermitentes.
+
+**Pendência**: reconectar `3ga` e `m28` — enquanto isso, todo envio e toda adição passam
+pelo celular pessoal.

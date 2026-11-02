@@ -214,3 +214,16 @@ test("serviço: instância marcada como ruim vai para o fim da lista", async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("envio: instância marcada como ruim não é sorteada", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, principal: true, enviadas: 0, ultimaEm: null, criadaEm: "" },
+    { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    mod.marcarInstanciaRuim("cel-1");
+    for (let i = 0; i < 25; i++) assert.equal(await mod.proximaInstancia(), "cel-2");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

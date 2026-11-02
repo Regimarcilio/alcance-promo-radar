@@ -234,6 +234,11 @@ export async function proximaInstancia(excluir: string[] = []): Promise<string> 
   // principal. O peso de cada um define a fatia no rodízio. O principal só
   // tem prioridade nas operações de serviço (instanciaParaServico), não aqui.
 
+  // Instâncias que falharam por conexão há pouco saem do sorteio (se sobrar
+  // alguma). O connectionState delas pode dizer "open" mesmo mortas.
+  const saudaveis = candidatos.filter((i) => !instanciaRuim(i.instancia));
+  if (saudaveis.length > 0) candidatos = saudaveis;
+
   // anti-repetição: tira a última usada (com probabilidade) se houver outra
   if (candidatos.length > 1 && ultimaUsada && Math.random() < evitaRepeticao()) {
     const outras = candidatos.filter((i) => i.instancia !== ultimaUsada);

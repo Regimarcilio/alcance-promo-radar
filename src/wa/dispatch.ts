@@ -1,5 +1,5 @@
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
-import { proximaInstancia, registrarEnvio } from "./rotacao.js";
+import { marcarInstanciaRuim, proximaInstancia, registrarEnvio } from "./rotacao.js";
 import { marcarEnvioAtivo } from "../monitor/envio-lock.js";
 import { ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
 
@@ -33,9 +33,12 @@ async function comRetry<T>(fn: (instancia: string) => Promise<T>, tentativas = 3
       falhas.push(instancia);
       const msg = String(e?.message ?? e);
       if (i === tentativas - 1 || !ehErroTransitorio(msg)) throw e;
+      // Instância instável (ex.: "Connection Closed" com state open) sai do
+      // sorteio por 5 min: sem isso o próximo item cai nela de novo.
+      marcarInstanciaRuim(instancia);
       const espera = 2000 * (i + 1); // 2s, 4s
       console.log(
-        `[dispatch] erro transitório (${msg.slice(0, 80)}) — repetindo em ${espera / 1000}s (${i + 2}/${tentativas})`
+        `[dispatch] erro transitório em ${instancia} (${msg.slice(0, 80)}) — repetindo em ${espera / 1000}s (${i + 2}/${tentativas})`
       );
       await new Promise((r) => setTimeout(r, espera));
     }
