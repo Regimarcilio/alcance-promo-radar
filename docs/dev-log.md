@@ -1721,3 +1721,44 @@ por sorteio; o patch elimina os 500 intermitentes.
 
 **Pendência**: reconectar `3ga` e `m28` — enquanto isso, todo envio e toda adição passam
 pelo celular pessoal.
+
+---
+
+## 2026-11-01 | MONITOR-CEGO-01 | planmaster | Monitor não recebia: sessão Baileys zumbi na 3ga
+
+**Sintoma**: regras salvas, grupos de origem publicando, mas o monitor "não tratava nem
+reenviava". `data/monitor-estado.json` com último evento às 19:12 BRT e `monitor-fila.json`
+vazio desde 09:58.
+
+**Diagnóstico (evidência)**
+- Webhooks da Evolution estão configurados nas **três** instâncias para
+  `http://promo_radar_manager:8091/api/webhook/evolution`, evento `MESSAGES_UPSERT`,
+  com `X-Webhook-Key` — config correta.
+- Mesmo assim, nas últimas 2h só **2 POSTs** chegaram ao manager.
+- Cruzando as 10 regras com os grupos de cada instância (`fetchAllGroups`):
+  - `radar-celular-1-qzl` (Enzo, 554797595849): 10 grupos, **0** de origem;
+  - `radar-47997136647-m28` (Eletrônica, 554797136647): 33 grupos, **0** de origem;
+  - `radar-47992521346-3ga` (Reginaldo, 554792521346): `fetchAllGroups` → **500 Connection
+    Closed**, com `connectionState` dizendo `open`.
+- Ou seja: a única conta que está nos 10 grupos de origem era a `3ga`, e a sessão Baileys
+  dela morreu sem o state atualizar. Ninguém recebia as mensagens → nada entrava na fila.
+
+**Correção (infra, sem código)**
+- `POST /instance/restart/radar-47992521346-3ga` → devolve `open`, mas `fetchAllGroups`
+  continuava 500 (não resolve).
+- `docker restart evolution_api_radar` (preserva a sessão salva) → **resolveu**:
+  `fetchAllGroups` 200 e **cobertura 10/10** dos grupos de origem.
+
+**Validação (3 min depois)**
+- `recebidas` 52 → **132**; 256 POSTs de webhook no período.
+- `ENCAMINHADA` voltando a acontecer (30), `ENFILEIRADA` 20, `DUPLICADO` 54.
+- `monitor-fila.json.ultimoEnvio` atualizado para 00:36Z (21:36 BRT), 16 itens na fila.
+- `[dispatch]` sem nenhum erro nos últimos 5 min.
+
+**Pendências**
+- `revisao: 29` no período: ofertas de `oferta.emipefps.com`, `promosdebrother.com`,
+  `tidd.ly` (programa não suportado) e MLB sem `ML_CONVERSOR_URL` configurado.
+- `m28` continua `close` de verdade (state mente `open`); só não atrapalha porque o envio
+  marca instância ruim e o serviço usa fallback.
+- Watchdog: o zumbi da 3ga só foi detectado testando o grupo. Vale um alerta quando
+  `fetchAllGroups` falhar 3x seguidas.
