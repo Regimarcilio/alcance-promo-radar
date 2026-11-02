@@ -30,7 +30,7 @@
 **Definition of Done (DoD)** — uma US só fecha com:
 1. Código integrado em `develop` via PR revisado.
 2. Critério de aceite Gherkin atendido, com teste automatizado correspondente verde (`node:test`).
-3. Suíte completa verde (**118 testes em 21 arquivos**) e sem regressão.
+3. Suíte completa verde (**181 testes em 28 arquivos**) e sem regressão.
 4. `kalimaster-sast` limpo no diff do PR.
 5. **Entrada no `docs/dev-log.md`** com `task_id`, decisões, arquivos e resultado dos testes.
 6. RF/RN citados no código/PR; `CHANGELOG.md` atualizado quando a mudança é visível ao operador.

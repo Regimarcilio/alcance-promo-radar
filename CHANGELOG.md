@@ -56,7 +56,7 @@ do histórico do git (`git log`), sem tags formais.
   multi-stage non-root e Compose com healthcheck/limites/loopback.
 
 ### Testes
-- `pretest` compila antes da suíte (fim do falso verde sem `dist/`); **118 testes** em 21 arquivos,
+- `pretest` compila antes da suíte (fim do falso verde sem `dist/`); **181 testes** em 28 arquivos,
   incluindo SSRF/path traversal, reserva atômica, CSV injection e recuperação de fila.
 
 ### Documentação

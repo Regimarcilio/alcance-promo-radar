@@ -622,7 +622,7 @@ por programa/categoria/grupo/dias/via; CSV com cabeçalho e uma linha por public
 | ID | Requisito | Métrica / verificação | Status |
 |---|---|---|---|
 | NFR-001 | Build e tipos limpos | `npm run typecheck` e `npm run build` com exit 0 | Implementado |
-| NFR-002 | Testes automatizados | `npm test` com 118 testes em 21 arquivos (node:test) | Implementado |
+| NFR-002 | Testes automatizados | `npm test` com 181 testes em 28 arquivos (node:test) | Implementado |
 | NFR-003 | Persistência durável e atômica | JSON gravado em `tmp` + `rename`; estado sobrevive a restart | Implementado |
 | NFR-004 | Segurança de acesso | default-deny, scrypt, cookie HttpOnly/SameSite, rate-limit, auditoria | Implementado |
 | NFR-005 | Resiliência de envio | retry 3x para erro transitório; fila persistida; rotação em cada tentativa | Implementado |
@@ -787,7 +787,7 @@ por programa/categoria/grupo/dias/via; CSV com cabeçalho e uma linha por public
 | RF-055 | Implementado | `src/ml/piloto.ts` | `ml/piloto.test.ts` |
 | RF-056 | Implementado | `src/monitor/evolution.ts` | `monitor/evolution.test.ts` |
 
-### 7.1 Cobertura automatizada por arquivo (118 testes)
+### 7.1 Cobertura automatizada por arquivo (181 testes)
 
 | Arquivo | Testes |
 |---|---:|

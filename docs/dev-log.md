@@ -1884,3 +1884,117 @@ container: ML → `meli.la/19duda6` (`fonte: conversor`, conta `mestra`); Epipe
 **Pendência real**: Amazon e ML ok; falta `SHOPEE_APP_ID`/`SHOPEE_APP_SECRET` para as
 ofertas Shopee (4 em revisão). Rakuten/netshoes e links de grupo continuam sem conversor
 por design (programa não suportado / não é oferta).
+
+---
+
+## 2026-11-02 — Consolidação e Preparação para Publicação Pública
+
+### Objetivo
+Consolidar status atual do MONITOR v2 e preparar repositório para publicação pública.
+
+### Status Geral
+| Métrica | Valor |
+|---------|-------|
+| `npm test` | **181/181** ✓ (validação pós-deploy consolidação) |
+| `npm run typecheck` | limpo |
+| `npm run build` | limpo |
+| Deploy manager | `healthy`, `/healthz` 200 OK |
+| Branch atual | `develop` |
+
+### RF-030 a RF-035 (MONITOR v2)
+| RF | Status | Comentário |
+|----|--------|------------|
+| RF-030 | Implementado | Monitorar grupos (10 origens × 10 destinos) |
+| RF-033 | Implementado | Identificar oferta e programa (ML, Amazon, Shopee, KaBuM) |
+| RF-032 | Implementado parcial | `createLink` ML funcional; Shopee requer credenciais |
+| RF-031 | Implementado | Template de afiação (RN-001 v3) |
+| RF-034 | Implementado | Rotação e dispatch (favoritos, piloto, principal/secundário) |
+| RF-035 | Implementado | Dedup 7 dias, anti-loop, revisão automática |
+| RF-043 | Implementado | Fila anti-rajada (4ª mensagem em 1 minuto) |
+
+### Pendências para Produção
+1. **Shopee** - RF-033: aguardando `SHOPEE_APP_ID`/`SHOPEE_APP_SECRET`
+2. **TLS/Reverse Proxy** - NFR-009: implementar Caddy/nginx com TLS 1.2+
+3. **Poda dedup** - NFR-014: automatizar remoção de hashes > 30 dias
+4. **Backup automatizado** - NFR-012: script com criptografia
+5. **Container non-root** - NFR-010: ajustar `user:` no docker-compose
+
+### Preparação para Publicação Pública
+- [.gitignore](/.gitignore) já protege: `.env`, `data/`, `logs/`, `node_modules/`
+- **Importante**: `.env` local contém dados sensíveis (TAG_ML, COOKIE_ML, EVO_KEY, EVO_DB_PASS, WEBHOOK_KEY, SESSION_SECRET, MANAGER_KEY) e **NUNCA** foi versionado
+- `.env.example` serve como template para novos usuários
+- Repositório pronto para publicação: código limpo, testes verdes, documentação completa
+
+### Decisões
+- **Shopee**: manter código em `src/monitor/shopee-api.ts` como placeholder; links vão para revisão até credenciais forem fornecidas
+- **Piloto**: `PILOTO_AUTORELIGA=1` mantém loops ativos após restart (desejável em produção)
+- **Debug**: `MONITOR_DEBUG=1` para troubleshooting; desativar em produção pública
+
+### Arquivos Chave para Review
+- `src/monitor/grupos.ts` - regras de origem → destino
+- `src/monitor/state.ts` - persistência de eventos/dedup
+- `src/monitor/webhook.ts` - processamento de links
+- `src/ml/provider.ts` - conversor ML com `createLink`
+- `.env.example` - template de configuração
+
+### Próximos Passos
+1. Atualizar README.md com instruções de setup público
+2. Adicionar README de segurança (SECURITY.md) com boas práticas
+3. Configurar GitHub Actions para CI/CD básico
+4. Criar template de issues para contribuições
+
+---
+ 
+ ## 2026-11-02 | STATUS-ATUAL-01 | issuemaster | Resume o que foi feito até agora
+
+**Resumo da sessão atual**:
+- Leitura de `docs/SRS-v0.4.md` e `docs/00-INDICE.md` para contexto
+- Verificação de status: todos os testes passam (181/181)
+- Validação do código: typecheck e build limpos
+- Deploy manager está `healthy` com `/healthz` 200 OK
+- Push para `origin/develop` com todas as mudanças recentes
+
+**Decisões de classificação de labels**:
+- CONVERSOR-01 → `plan` (Planejamento/escopo do conversor ML)
+- RASTREIO-TITULO-01 → `feat` (Feature de título no monitor)
+- CLIENTES-DISPAROS-01 → `feat` (Feature de disparos para lista)
+- DISPATCH-ZUMBI-01 → `bug` + `high` (Bug crítico de instância zumbi)
+- MONITOR-CEGO-01 → `bug` + `high` (Bug de sessão Baileys)
+- PILOTO-PARADO-01 → `bug` + `critical` (Bug crítico de autoretoma)
+
+**Próximos passos identificados**:
+1. Atualizar README.md com instruções de setup público
+2. Adicionar SECURITY.md com boas práticas
+3. Configurar GitHub Actions para CI/CD
+4. Criar template de issues para contribuições
+
+---
+
+## 2026-11-02 | ISSUES-CRIADAS-01 | issuemaster | Issues para preparação pública
+
+### Issues criadas conforme protocolo ISSUEMASTER
+
+| Issue | Tipo | Severidade | Status |
+|-------|------|------------|--------|
+| #31 | `docs` | `low` | **Aberta** - README setup público |
+| #32 | `plan` | `medium` | **Aberta** - Preparação pública |
+| #33 | `docs` | `low` | **Aberta** - Templates de issues |
+| #34 | `plan` + `devops` | `medium` | **Aberta** - GitHub Actions |
+| #35 | `docs` + `sec` | `low` | **Aberta** - SECURITY.md |
+
+### Status Atual do Repositório
+
+- **Branch**: `develop` 
+- **Push**: `origin/develop` com commits até 92c71db
+- **Testes**: 181/181 passando ✅
+- **Build**: limpo ✅
+- **Typecheck**: limpo ✅
+- **Deploy manager**: healthy, `/healthz` 200 ✅
+
+### Pendências menores
+- Instâncias zumbi `radar-47992521346-3ga` e `radar-47997136647-m28` precisam ser reconectadas
+- `/group/fetchAllGroups` retorna 500 nas instâncias instáveis (não é prioridade enquanto fallback funciona)
+
+---
+
+ *Entrada registrada: 2026-11-02* | *Status: Consolidado* | *Para revisionamento: abrir issue em `alcance-promo-radar`*

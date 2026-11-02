@@ -104,7 +104,7 @@ O template completo está em `.env.example`.
 ```bash
 npm run typecheck
 npm run build
-npm test                 # 118 testes em 21 arquivos (node:test)
+npm test                 # 181 testes em 28 arquivos (node:test)
 npm run smoke:manager    # sobe o manager com estado temporário e valida o gate
 ```
 
