@@ -1997,4 +1997,4 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 
 ---
 
- *Entrada registrada: 2026-11-02* | *Status: Consolidado* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
+  *Entrada registrada: 2026-11-02 23:30* | *Status: Finalizado* | *Commit: 67b3590* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
