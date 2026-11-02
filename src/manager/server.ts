@@ -1182,7 +1182,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   }
   if (req.method === "POST" && url.pathname === "/api/clientes/enviar") {
     try {
-      const b = JSON.parse(await lerCorpo(req));
+      const b = JSON.parse(await lerCorpo(req, 8 * 1024 * 1024));
       const imagem = String(b.imagem ?? "");
       if (imagem) validarImagem(imagem);
       const pendentes = enfileirarCampanha({
@@ -1204,7 +1204,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     // Upload de imagem/vídeo para o disparo. JSON base64 (o painel lê o
     // arquivo local; multipart exigiria parser e não traz ganho aqui).
     try {
-      const b = JSON.parse(await lerCorpo(req));
+      const b = JSON.parse(await lerCorpo(req, 24 * 1024 * 1024));
       const nome = String(b.filename ?? "");
       const mime = String(b.mimetype ?? "").toLowerCase() || MIME_UPLOAD[extname(nome).toLowerCase()] || "";
       if (!MIME_ACEITO.has(mime)) {
