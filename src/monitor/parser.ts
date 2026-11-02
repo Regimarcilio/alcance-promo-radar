@@ -20,11 +20,15 @@ export interface OfertaDetectada {
 
 /** Allowlist de domínios por programa (RN-008). */
 const DOMINIOS: { programa: Programa; hosts: string[] }[] = [
-  { programa: "mercadolivre", hosts: ["mercadolivre.com.br", "meli.la", "mercadolibre.com"] },
+  { programa: "mercadolivre", hosts: ["mercadolivre.com.br", "meli.la", "mercadolivre.com"] },
   { programa: "shopee", hosts: ["shopee.com.br", "shope.ee", "s.shopee.com.br"] },
   { programa: "kabum", hosts: ["kabum.com.br", "kabum.com"] },
   { programa: "amazon", hosts: ["amazon.com.br", "amzn.to", "amzn.com.br"] },
 ];
+
+// Programas sem suporte no conversor ML (não podemos gerar links afiliados).
+// Envia para REVISAO mas sem poluir o painel: ignorar para agilizar operações.
+export const IGNORAR_REVISAO: RegExp[] = [/shopee\.com/];
 
 const RE_URL = /https?:\/\/[^\s<>"')\]]+/gi;
 

@@ -4,7 +4,7 @@
  *        template → router (destinos) → dedup/anti-loop.
  */
 import { randomUUID } from "node:crypto";
-import { detectar, rotulo, limparTexto, type OfertaDetectada } from "./parser.js";
+import { detectar, rotulo, limparTexto, IGNORAR_REVISAO, type OfertaDetectada } from "./parser.js";
 import { expandirLink } from "./curtos.js";
 import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
@@ -151,12 +151,17 @@ export async function processar(
     // Guarda o link cru: sem ele o operador só vê o host e não consegue
     // distinguir "programa não suportado" de "link expirado".
     const cru = oferta.links.find((l) => l.programa === "desconhecido")?.url ?? "";
+    const detalhe = (doms.length ? `sem link de afiliado reconhecido (${doms.join(", ")})` : "sem link de afiliado reconhecido")
+      + (cru ? ` — ${cru.slice(0, 140)}` : "");
+    // Programas sem suporte (ex.: Shopee): não polui o painel.
+    if (IGNORAR_REVISAO.some((r) => r.test(detalhe))) {
+      return { acao: "IGNORADO", motivo: "programa sem suporte no conversor" };
+    }
     registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: "desconhecido",
       idProduto: null, linkTransformado: null, destino: null,
       status: "REVISAO",
-      detalhe: (doms.length ? `sem link de afiliado reconhecido (${doms.join(", ")})` : "sem link de afiliado reconhecido")
-        + (cru ? ` — ${cru.slice(0, 140)}` : ""),
+      detalhe,
     });
     return { acao: "REVISAO", motivo: doms.length ? `link não reconhecido (${doms.join(", ")})` : "link não reconhecido" };
   }
