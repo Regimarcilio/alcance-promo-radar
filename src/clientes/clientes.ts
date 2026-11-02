@@ -14,6 +14,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { instanciaParaServico } from "../wa/rotacao.js";
+import {
+  cancelarDisparo,
+  registrarResultadoDisparo,
+  textoComLink,
+  type MidiaDisparo,
+} from "./disparos.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -43,12 +49,17 @@ interface Store {
   ultimoSync: string | null;
 }
 
-interface ItemCampanha {
+export interface ItemCampanha {
   id: string;
   jid: string;
   nome: string;
   texto: string;
+  /** caminho local da mídia (data/midia/...) ou URL */
   imagem: string;
+  /** disparo de origem (grid com CRUD em disparos.ts) */
+  disparoId?: string | null;
+  /** mídia tipada (imagem/vídeo) do upload */
+  midia?: MidiaDisparo | null;
   criadoEm: string;
 }
 
@@ -383,10 +394,23 @@ export function estadoFilaClientes(): { pendentes: number; enviados: number; err
   return { pendentes: s.itens.length, enviados: s.enviados, erros: s.erros, intervalo: intervaloClientes() };
 }
 
+export interface CampanhaArgs {
+  texto: string;
+  imagem?: string;
+  jids: string[];
+  /** vínculo com o registro do grid (data/disparos.json) */
+  disparoId?: string | null;
+  /** link opcional anexado no fim da mensagem */
+  link?: string | null;
+  /** mídia tipada (upload de imagem/vídeo) */
+  midia?: MidiaDisparo | null;
+}
+
 /** Coloca 1 mensagem por contato na fila (não envia na hora). */
-export function enfileirarCampanha(args: { texto: string; imagem?: string; jids: string[] }): number {
-  const texto = String(args.texto ?? "").trim();
-  if (!texto) throw new Error("escreva a propaganda");
+export function enfileirarCampanha(args: CampanhaArgs): number {
+  const texto = textoComLink(args.texto, args.link);
+  const midia = args.midia ?? null;
+  if (!texto && !midia) throw new Error("escreva a propaganda ou escolha uma mídia");
   const jids = [...new Set((args.jids ?? []).filter(Boolean))];
   if (!jids.length) throw new Error("selecione pelo menos 1 contato");
   const s = carregarFila();
@@ -398,7 +422,9 @@ export function enfileirarCampanha(args: { texto: string; imagem?: string; jids:
       jid,
       nome: c?.nome || c?.telefone || jid.split("@")[0],
       texto,
-      imagem: String(args.imagem ?? "").trim(),
+      imagem: midia?.arquivo || String(args.imagem ?? "").trim(),
+      disparoId: args.disparoId ?? null,
+      midia,
       criadoEm: new Date().toISOString(),
     });
   }
@@ -406,11 +432,44 @@ export function enfileirarCampanha(args: { texto: string; imagem?: string; jids:
   return s.itens.length;
 }
 
+/** Remove da fila tudo que pertence a um disparo (excluir/cancelar). */
+export function removerItensDaFila(disparoId: string): number {
+  const s = carregarFila();
+  const n = s.itens.length;
+  s.itens = s.itens.filter((i) => i.disparoId !== disparoId);
+  if (s.itens.length !== n) salvarFila(s);
+  return n - s.itens.length;
+}
+
+/** Atualiza texto/link/mídia dos itens ainda na fila (edição de pendente). */
+export function atualizarItensDaFila(
+  disparoId: string,
+  patch: { texto: string; link?: string | null; midia?: MidiaDisparo | null },
+): number {
+  const s = carregarFila();
+  const texto = textoComLink(patch.texto, patch.link);
+  let n = 0;
+  for (const item of s.itens) {
+    if (item.disparoId !== disparoId) continue;
+    item.texto = texto;
+    if (patch.midia !== undefined) {
+      item.midia = patch.midia;
+      item.imagem = patch.midia?.arquivo ?? "";
+    }
+    n++;
+  }
+  if (n) salvarFila(s);
+  return n;
+}
+
 export function limparFilaClientes(): number {
   const s = carregarFila();
   const n = s.itens.length;
+  // Os disparos que tinham itens na fila viram CANCELADO no grid.
+  const ids = [...new Set(s.itens.map((i) => i.disparoId).filter(Boolean))] as string[];
   s.itens = [];
   salvarFila(s);
+  for (const id of ids) cancelarDisparo(id, "fila cancelada pelo usuário");
   return n;
 }
 
@@ -427,14 +486,24 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
 
   const dry = process.env.MONITOR_DRY === "1";
   try {
-    const r = await enviarParaGrupo({ grupo: item.jid, imagem: item.imagem, legenda: item.texto, dryRun: dry });
+    const r = await enviarParaGrupo({
+      grupo: item.jid,
+      imagem: item.imagem,
+      legenda: item.texto,
+      dryRun: dry,
+      mediatype: item.midia?.tipo === "video" ? "video" : undefined,
+      mimetype: item.midia?.mime,
+    });
     s.enviados++;
     salvarFila(s);
+    if (item.disparoId) registrarResultadoDisparo(item.disparoId, true);
     console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId}`);
   } catch (e: any) {
     s.erros++;
     salvarFila(s);
-    console.log(`[clientes] ERRO para ${item.nome} (${item.jid}): ${String(e?.message ?? e).slice(0, 120)}`);
+    const msg = String(e?.message ?? e);
+    if (item.disparoId) registrarResultadoDisparo(item.disparoId, false, msg);
+    console.log(`[clientes] ERRO para ${item.nome} (${item.jid}): ${msg.slice(0, 120)}`);
   }
   return item;
 }

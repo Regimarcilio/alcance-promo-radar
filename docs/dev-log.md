@@ -1795,3 +1795,43 @@ Dois defeitos vizinhos no mesmo bloco: `programa` de ML virava `desconhecido` e
 **Limite conhecido**: as ~4.799 publicações antigas já gravadas não têm o texto
 guardado, então não há como recuperar o título — só as novas (e as 16 da fila, na
 entrega) passam a ter.
+
+## 2026-11-01 | CLIENTES-DISPAROS-01 | planmaster | Enviar para lista com link + imagem/vídeo e grid de disparos
+
+**Demanda**: na tela Clientes, abaixo da lista salva, disparar uma mensagem com
+**link opcional + imagem ou vídeo enviados do computador**; cada disparo fica num
+**grid com CRUD** (editar enquanto pendente, duplicar/reenviar, excluir).
+
+**Decisões (question)**: (1) a lista salva **envia mensagem aos contatos**; (2) o grid é
+o **registro de disparos/campanhas**; (3) mídia por **upload local** (não URL);
+(4) grid **na própria tela Clientes**.
+
+**Implementação**
+- `src/clientes/disparos.ts` (+ `disparos.test.ts`): store em `data/disparos.json`
+  (limite 500), status `PENDENTE/ENVIANDO/CONCLUIDO/PARCIAL/ERRO/CANCELADO`,
+  `criar/editar(só pendente)/excluir/duplicar/cancelar/registrarResultado/resumo`,
+  `textoComLink()` centraliza a composição do link.
+- `src/clientes/clientes.ts`: `ItemCampanha` com `disparoId`/`midia`;
+  `enfileirarCampanha` aceita só-mídia; `removerItensDaFila` e `atualizarItensDaFila`
+  mantêm a fila em sincronia com o grid; `limparFilaClientes` cancela disparos;
+  `liberarProximoCliente` envia `mediatype`/`mimetype` e grava o resultado.
+- `src/wa/dispatch.ts`: `enviarParaGrupo` com `imagem` opcional + `mediatype`
+  (image/video/document) + `mimetype`; novo `validarMidiaArquivo()` (URL http(s) segura,
+  data URI coerente com o tipo, arquivo local só UUID em `data/midia`, MP4 incluído).
+- `src/manager/server.ts`: `POST /api/clientes/midia` (base64 JSON, JPG/PNG/WEBP/GIF/MP4,
+  ≤16 MB), `GET/POST /api/disparos`, `PATCH/DELETE /api/disparos/{id}`,
+  `POST /api/disparos/{id}/duplicar` (rollback do disparo se a fila falhar),
+  `GET /media/<arquivo>` com sessão + **Range 206** (vídeo no preview sem baixar 16 MB),
+  `disparos`/`disparosResumo` no `GET /api/clientes`; UI com select de lista, textarea,
+  link, upload com preview, botão de envio, grid com chips de status e ações.
+- Protótipo: `docs/prototipos/clientes-disparos/proposta.html` (aprovado pelo usuário).
+
+**Validação**: `npm test` **179/179** (o teste de "cada `<script>` é JS válido" pegou um
+regex com `\/` comido pelo template string — corrigido); build limpo; deploy do manager
+(`healthy`, `/healthz` 200). Smoke com `ALCANCE_DATA_DIR` temporário e `ALCANCE_SMOKE=1`:
+upload (`selo.png` 70 B), lista com 2 contatos, criação (PENDENTE, total 2), grid no
+`/api/clientes`, `GET /media` 200 `image/png` e Range 206, PATCH de texto/link, duplicar,
+DELETE dos dois → grid vazio. Nada foi enviado de verdade (worker desligado no smoke).
+
+**Limites conhecidos**: vídeo acima de ~16 MB o WhatsApp recusa (disparo termina `ERRO`,
+visível no grid); edição só em disparo `PENDENTE` sem envios (o resto é duplicar).

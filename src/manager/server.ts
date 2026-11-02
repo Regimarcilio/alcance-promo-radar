@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants as fsConstants, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, join, extname, isAbsolute, relative, resolve } from "node:path";
+import { accessSync, constants as fsConstants, createReadStream, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { basename, dirname, join, extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
@@ -32,7 +32,13 @@ import {
   listarContatos, listarListas, criarLista, removerLista, adicionarContato, renomearContato,
   removerContato, sincronizar as sincronizarClientes, estadoSync, enfileirarCampanha,
   estadoFilaClientes, limparFilaClientes, iniciarClientesWorker, pararClientesWorker,
+  removerItensDaFila, atualizarItensDaFila,
 } from "../clientes/clientes.js";
+import {
+  listarDisparos, resumoDisparos, criarDisparo, editarDisparo, excluirDisparo,
+  duplicarDisparo, type MidiaDisparo,
+} from "../clientes/disparos.js";
+import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { resolverMidia } from "./midia.js";
 import { logger } from "../observability/logger.js";
@@ -67,6 +73,35 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
 const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const cacheFile = join(dataDir, "ultima-busca.json");
+
+/** MIME aceito no upload de mídia do disparo (imagem ou vídeo). */
+const MIME_UPLOAD: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".mp4": "video/mp4",
+};
+const MIME_ACEITO = new Set(Object.values(MIME_UPLOAD));
+const UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Valida a mídia vinda do grid (arquivo já salvo em data/midia pelo upload).
+ * Nunca confia no que o navegador manda: só aceita UUID dentro de data/midia.
+ */
+function midiaDoBody(m: any): MidiaDisparo | null {
+  if (m === null) return null;
+  if (!m || typeof m !== "object" || !m.arquivo) return null;
+  const arquivo = String(m.arquivo);
+  if (!ehArquivoMidia(arquivo)) throw new Error("mídia inválida — faça o upload novamente");
+  const ext = extname(arquivo).toLowerCase();
+  const tipo: "image" | "video" = ext === ".mp4" ? "video" : "image";
+  const mime = MIME_UPLOAD[ext] ?? String(m.mime ?? "image/jpeg");
+  if (!MIME_ACEITO.has(mime)) throw new Error("formato de mídia não suportado");
+  return { arquivo, mime, tipo, nome: m.nome ? String(m.nome).slice(0, 120) : undefined };
+}
+
 const CATS = catsJson as { id: string; name: string }[];
 const CATS_AMAZON = CATEGORIAS_AMAZON;
 const PORT = Number(process.env.MANAGER_PORT ?? 8091);
@@ -177,6 +212,66 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       json(200, { ok: true, dataDir: "writable" });
     } catch {
       json(503, { ok: false, erro: "data dir não gravável" });
+    }
+    return;
+  }
+
+  // ---------- mídia de disparo (preview de imagem/vídeo do upload) ----------
+  // Serve SOMENTE arquivos de data/midia com nome UUID, com sessão obrigatória.
+  // Suporta Range para o <video> conseguir buscar/arrastar sem baixar 16 MB.
+  if ((metodo === "GET" || metodo === "HEAD") && caminho.startsWith("/media/")) {
+    if (!sessaoDoRequest(req)) {
+      json(401, { erro: "não autenticado" });
+      return;
+    }
+    let nome = "";
+    try {
+      nome = decodeURIComponent(caminho.slice("/media/".length));
+    } catch {
+      json(400, { erro: "caminho inválido" });
+      return;
+    }
+    const alvo = join(midiaDir, nome);
+    if (!ehArquivoMidia(alvo)) {
+      json(404, { erro: "não encontrado" });
+      return;
+    }
+    const mime = MIME_UPLOAD[extname(nome).toLowerCase()] ?? "application/octet-stream";
+    try {
+      const total = statSync(alvo).size;
+      const range = String(req.headers.range ?? "");
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (m) {
+        const ini = m[1] ? Number(m[1]) : 0;
+        const fim = m[2] ? Math.min(Number(m[2]), total - 1) : Math.min(ini + 2_000_000, total - 1);
+        if (!Number.isFinite(ini) || ini >= total || fim < ini) {
+          res.writeHead(416, { "Content-Range": `bytes */${total}` });
+          res.end();
+          return;
+        }
+        res.writeHead(206, {
+          "Content-Type": mime,
+          "Content-Length": String(fim - ini + 1),
+          "Content-Range": `bytes ${ini}-${fim}/${total}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "private, max-age=30",
+        });
+        createReadStream(alvo, { start: ini, end: fim }).pipe(res);
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": mime,
+        "Content-Length": String(total),
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=30",
+      });
+      if (metodo === "HEAD") {
+        res.end();
+        return;
+      }
+      createReadStream(alvo).pipe(res);
+    } catch {
+      json(404, { erro: "não encontrado" });
     }
     return;
   }
@@ -893,6 +988,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   if (req.method === "GET" && url.pathname === "/api/clientes") {
     json(200, {
       contatos: listarContatos(), listas: listarListas(), sync: estadoSync(), fila: estadoFilaClientes(),
+      disparos: listarDisparos(), disparosResumo: resumoDisparos(),
     });
     return;
   }
@@ -1103,6 +1199,122 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   if (req.method === "POST" && url.pathname === "/api/clientes/fila/limpar") {
     json(200, { ok: true, removidos: limparFilaClientes(), fila: estadoFilaClientes() });
     return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/midia") {
+    // Upload de imagem/vídeo para o disparo. JSON base64 (o painel lê o
+    // arquivo local; multipart exigiria parser e não traz ganho aqui).
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const nome = String(b.filename ?? "");
+      const mime = String(b.mimetype ?? "").toLowerCase() || MIME_UPLOAD[extname(nome).toLowerCase()] || "";
+      if (!MIME_ACEITO.has(mime)) {
+        json(400, { erro: "formato não suportado (use JPG, PNG, WEBP, GIF ou MP4)" });
+        return;
+      }
+      const b64 = String(b.base64 ?? "").replace(/^data:[^;]+;base64,/, "");
+      if (!b64) {
+        json(400, { erro: "arquivo não enviado" });
+        return;
+      }
+      const bytes = Buffer.from(b64, "base64");
+      if (!bytes.byteLength) {
+        json(400, { erro: "arquivo vazio" });
+        return;
+      }
+      if (bytes.byteLength > UPLOAD_MAX_BYTES) {
+        json(413, { erro: "arquivo acima de 16 MB" });
+        return;
+      }
+      const arquivo = salvarMidia(bytes.toString("base64"), mime);
+      if (!arquivo) throw new Error("falha ao salvar a mídia");
+      json(200, {
+        ok: true,
+        arquivo,
+        mime,
+        tipo: mime.startsWith("video") ? "video" : "image",
+        nome: nome.slice(0, 120),
+        bytes: bytes.byteLength,
+      });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/disparos") {
+    json(200, { disparos: listarDisparos(), resumo: resumoDisparos(), fila: estadoFilaClientes() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/disparos") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const listaId = String(b.listaId ?? "").trim();
+      let jids: string[] = Array.isArray(b.jids) ? b.jids.map(String) : [];
+      let listaNome: string | null = null;
+      if (listaId) {
+        const l = listarListas().find((x) => x.id === listaId);
+        if (!l) throw new Error("lista não encontrada");
+        jids = l.contatos;
+        listaNome = l.nome;
+      }
+      const d = criarDisparo({
+        texto: String(b.texto ?? ""),
+        link: String(b.link ?? ""),
+        midia: b.midia === undefined ? null : midiaDoBody(b.midia),
+        listaId: listaId || null,
+        listaNome,
+        jids,
+      });
+      try {
+        enfileirarCampanha({
+          texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+        });
+      } catch (e) {
+        excluirDisparo(d.id); // rollback: não deixa disparo sem fila
+        throw e;
+      }
+      json(200, { ok: true, disparo: d, fila: estadoFilaClientes() });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
+    return;
+  }
+  const mDisparo = url.pathname.match(/^\/api\/disparos\/([^/]+)(\/duplicar)?$/);
+  if (mDisparo) {
+    const id = decodeURIComponent(mDisparo[1]);
+    const acao = mDisparo[2];
+    if (req.method === "PATCH" && !acao) {
+      try {
+        const b = JSON.parse(await lerCorpo(req));
+        const patch: { texto?: string; link?: string | null; midia?: MidiaDisparo | null } = {};
+        if (b.texto !== undefined) patch.texto = String(b.texto);
+        if (b.link !== undefined) patch.link = String(b.link ?? "");
+        if (b.midia !== undefined) patch.midia = midiaDoBody(b.midia);
+        const d = editarDisparo(id, patch);
+        const atualizados = atualizarItensDaFila(id, { texto: d.texto, link: d.link, midia: d.midia });
+        json(200, { ok: true, disparo: d, filaAtualizada: atualizados });
+      } catch (e: any) {
+        json(400, { erro: String(e?.message ?? e) });
+      }
+      return;
+    }
+    if (req.method === "DELETE" && !acao) {
+      const removidos = removerItensDaFila(id);
+      const ok = excluirDisparo(id);
+      json(ok ? 200 : 404, ok ? { ok: true, removidos } : { erro: "disparo não encontrado" });
+      return;
+    }
+    if (req.method === "POST" && acao === "/duplicar") {
+      try {
+        const d = duplicarDisparo(id);
+        enfileirarCampanha({
+          texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+        });
+        json(200, { ok: true, disparo: d, fila: estadoFilaClientes() });
+      } catch (e: any) {
+        json(400, { erro: String(e?.message ?? e) });
+      }
+      return;
+    }
   }
   if (req.method === "GET" && url.pathname === "/api/monitor/grupos") {
     const s = carregarMonitor();
@@ -2019,6 +2231,38 @@ Tem achadinho novo todos os dias. 🔥
 </div>
 <div id="clilist" style="max-height:240px;overflow:auto;border:1px solid var(--border-strong);border-radius:10px;padding:4px;margin-top:8px"></div>
 <div id="clilistas" style="margin-top:10px;font-size:13px"></div>
+<!-- ===== Enviar para uma lista salva (link + imagem/vídeo) ===== -->
+<div class="mbox" style="margin-top:12px">
+<label>📤 Enviar para uma lista salva</label>
+<select id="dlista" style="width:100%"><option value="">— escolha a lista —</option></select>
+<textarea id="dtexto" rows="3" style="width:100%;margin-top:6px" placeholder="Mensagem que cada contato vai receber…"></textarea>
+<input id="dlink" placeholder="Link (opcional)" style="width:100%;margin-top:6px">
+<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+<input type="file" id="dmedia" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" style="display:none" onchange="escolherMidiaDisparo(event)">
+<button class="mbtn" style="width:auto;margin:0" onclick="$('dmedia')?.click()">📎 Imagem/vídeo</button>
+<span class="mini" id="dmediastatus">sem mídia (até 16 MB)</span>
+<button class="mbtn" style="width:auto;margin:0" title="remover mídia" onclick="limparMidiaDisparo()">✕</button>
+</div>
+<div id="dpreview" style="margin-top:6px"></div>
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+<button class="buscar" style="margin-top:0;width:auto" onclick="enviarParaLista()">🚀 Enviar para a lista</button>
+<span class="mini" id="daviso">a fila envia 1 por vez (anti-bloqueio)</span></div>
+</div>
+<!-- ===== Grid de disparos (CRUD) ===== -->
+<div style="margin-top:12px">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+<b style="font-size:13px">📊 Disparos</b><span class="mini" id="dresumo"></span></div>
+<div id="dgrid" style="overflow-x:auto"></div>
+</div>
+<div id="modalDisparo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;padding:16px">
+<div style="background:var(--card);border-radius:12px;max-width:460px;width:100%;padding:16px">
+<b>✏️ Editar disparo</b>
+<textarea id="dedtexto" rows="4" style="width:100%;margin-top:8px" placeholder="Mensagem"></textarea>
+<input id="dedlink" placeholder="Link (opcional)" style="width:100%;margin-top:8px">
+<div style="display:flex;gap:8px;margin-top:10px">
+<button class="mbtn ok" style="width:auto;margin:0" onclick="salvarEdicaoDisparo()">Salvar</button>
+<button class="mbtn" style="width:auto;margin:0" onclick="$('modalDisparo').style.display='none'">Cancelar</button>
+</div></div></div>
 <div class="mbox" style="margin-top:10px">
 <label>✉️ Propaganda para a seleção</label>
 <textarea id="clitexto" rows="3" style="width:100%;" placeholder="Texto da propaganda (pode colar o link no meio)…"></textarea>
@@ -2491,7 +2735,7 @@ async function carregarClientes(){
     grupoSel.innerHTML='<option value="">👥 Todos os grupos ('+(CLIENTES.contatos||[]).length+')</option>'
       +nomesGrupos.map(function(g){return '<option value="'+esc(g)+'">📍 '+esc(g)+'</option>';}).join('');
     if(nomesGrupos.indexOf(grupoAtual)>=0) grupoSel.value=grupoAtual;
-    renderContatos(); renderListas();
+    renderContatos(); renderListas(); renderListasDestino(); renderDisparos();
   }catch(e){}
 }
 function filtroContatos(){
@@ -2531,6 +2775,115 @@ function renderListas(){
       +'<button class="mbtn" data-act="sell" data-jid="'+esc(l.id)+'">selecionar</button>'
       +'<button class="mbtn" data-act="dell" data-jid="'+esc(l.id)+'">🗑</button></div>';
   }).join('');
+}
+// ===== Disparos para lista salva (link + imagem/vídeo) =====
+var DMEDIA=null, DMEDIAURL=null, DEDIT=null;
+function renderListasDestino(){
+  var sel=$('dlista'); if(!sel)return;
+  var atual=sel.value, ls=CLIENTES.listas||[];
+  sel.innerHTML='<option value="">— escolha a lista —</option>'+ls.map(function(l){
+    return '<option value="'+esc(l.id)+'">'+esc(l.nome)+' ('+l.contatos.length+')</option>';
+  }).join('');
+  if(ls.some(function(l){return l.id===atual;}))sel.value=atual;
+}
+var DCHIP={PENDENTE:'#b7791f',ENVIANDO:'#0e7490',CONCLUIDO:'#15803d',PARCIAL:'#b45309',ERRO:'#b91c1c',CANCELADO:'#5b6b73'};
+function renderDisparos(){
+  var arr=CLIENTES.disparos||[], r=CLIENTES.disparosResumo||{};
+  if($('dresumo'))$('dresumo').textContent=(r.total||0)+' disparo(s) · '+(r.enviados||0)+' enviado(s) · '+(r.falhas||0)+' falha(s)';
+  var box=$('dgrid'); if(!box)return;
+  box.onclick=function(ev){
+    var b=ev.target&&ev.target.closest?ev.target.closest('button[data-dact]'):null; if(!b)return;
+    var id=b.getAttribute('data-id'), act=b.getAttribute('data-dact');
+    if(act==='ed')editarDisparo(id);
+    else if(act==='dup')duplicarDisparo(id);
+    else if(act==='del')excluirDisparo(id);
+  };
+  if(!arr.length){box.innerHTML='<div class="mini" style="padding:8px">nenhum disparo ainda — o primeiro envio aparece aqui.</div>';return;}
+  box.innerHTML='<div style="min-width:760px">'
+    +'<div style="display:flex;gap:8px;padding:4px 2px;border-bottom:1px solid var(--border-strong);font-size:11px;color:#5b6b73">'
+    +'<span style="width:118px">quando</span><span style="width:140px">lista</span><span style="flex:1">mensagem</span>'
+    +'<span style="width:76px">mídia</span><span style="width:92px">status</span><span style="width:96px">envios</span><span style="width:104px"></span></div>'
+    +arr.map(function(d){
+      var cor=DCHIP[d.status]||'#5b6b73';
+      var m=d.midia?(d.midia.tipo==='video'?'🎬 vídeo':'🖼 imagem'):'—';
+      var pode=d.status==='PENDENTE'&&!d.enviados&&!d.falhas;
+      return '<div style="display:flex;gap:8px;padding:5px 2px;border-bottom:1px solid var(--border);align-items:center">'
+        +'<span class="mini" style="width:118px;white-space:nowrap">'+esc(new Date(d.em).toLocaleString('pt-BR'))+'</span>'
+        +'<span style="width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(d.listaNome||'')+'">'+esc(d.listaNome||'—')+' <span class="mini">'+d.total+'</span></span>'
+        +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(d.texto||'')+'">'+esc((d.texto||'').slice(0,60)||'(sem texto)')+(d.link?' <span class="mini">🔗</span>':'')+'</span>'
+        +'<span class="mini" style="width:76px">'+m+'</span>'
+        +'<span style="width:92px;color:'+cor+';font-weight:700;font-size:11px">'+esc(d.status)+'</span>'
+        +'<span class="mini" style="width:96px">'+d.enviados+'/'+d.total+(d.falhas?' · '+d.falhas+'✗':'')+'</span>'
+        +'<span style="width:104px;display:flex;gap:4px">'
+        +(pode?'<button class="mbtn" style="width:auto;margin:0" title="editar" data-dact="ed" data-id="'+esc(d.id)+'">✏️</button>':'')
+        +'<button class="mbtn" style="width:auto;margin:0" title="duplicar e reenviar" data-dact="dup" data-id="'+esc(d.id)+'">⧉</button>'
+        +'<button class="mbtn" style="width:auto;margin:0" title="excluir" data-dact="del" data-id="'+esc(d.id)+'">🗑</button>'
+        +'</span></div>';
+    }).join('')+'</div>';
+}
+function escolherMidiaDisparo(ev){
+  var f=ev&&ev.target&&ev.target.files?ev.target.files[0]:null; if(!f)return;
+  if(f.size>16*1024*1024){alert('Arquivo acima de 16 MB — use um vídeo/imagem menor.');ev.target.value='';return;}
+  if(!/^(image\\/(png|jpe?g|webp|gif)|video\\/mp4)$/.test(f.type)){alert('Formato não suportado: use JPG, PNG, WEBP, GIF ou MP4.');ev.target.value='';return;}
+  DMEDIA=f;
+  if(DMEDIAURL)URL.revokeObjectURL(DMEDIAURL);
+  DMEDIAURL=URL.createObjectURL(f);
+  $('dmediastatus').textContent=(f.type.indexOf('video')===0?'vídeo · ':'imagem · ')+f.name+' ('+Math.round(f.size/1024)+' KB)';
+  $('dpreview').innerHTML=(f.type.indexOf('video')===0
+    ? '<video src="'+DMEDIAURL+'" controls muted playsinline style="max-width:240px;max-height:150px;border-radius:8px"></video>'
+    : '<img src="'+DMEDIAURL+'" alt="prévia" style="max-width:240px;max-height:150px;border-radius:8px">');
+}
+function limparMidiaDisparo(){
+  DMEDIA=null; if(DMEDIAURL){URL.revokeObjectURL(DMEDIAURL);DMEDIAURL=null;}
+  if($('dmedia'))$('dmedia').value='';
+  if($('dmediastatus'))$('dmediastatus').textContent='sem mídia (até 16 MB)';
+  if($('dpreview'))$('dpreview').innerHTML='';
+}
+function arquivoBase64(f){
+  return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result||''));};r.onerror=rej;r.readAsDataURL(f);});
+}
+async function enviarParaLista(){
+  var listaId=$('dlista').value, texto=$('dtexto').value.trim(), link=$('dlink').value.trim();
+  if(!listaId){alert('Escolha uma lista salva.');return;}
+  if(!texto&&!DMEDIA){alert('Escreva a mensagem ou escolha uma imagem/vídeo.');return;}
+  var av=$('daviso'); av.textContent='enviando…';
+  try{
+    var midia=null;
+    if(DMEDIA){
+      var b64=await arquivoBase64(DMEDIA);
+      var up=await (await fetch('/api/clientes/midia',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base64:b64,filename:DMEDIA.name,mimetype:DMEDIA.type})})).json();
+      if(up.erro)throw new Error(up.erro);
+      midia={arquivo:up.arquivo,mime:up.mime,tipo:up.tipo,nome:up.nome};
+    }
+    var r=await (await fetch('/api/disparos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listaId:listaId,texto:texto,link:link,midia:midia})})).json();
+    if(r.erro)throw new Error(r.erro);
+    $('dtexto').value=''; $('dlink').value=''; limparMidiaDisparo();
+    av.textContent='na fila — acompanhe no grid abaixo';
+    carregarClientes();
+  }catch(e){ av.textContent='erro: '+String(e&&e.message?e.message:e); }
+}
+function editarDisparo(id){
+  var d=(CLIENTES.disparos||[]).filter(function(x){return x.id===id;})[0]; if(!d)return;
+  if(d.status!=='PENDENTE'||d.enviados||d.falhas){alert('Só dá para editar disparo ainda não enviado. Use ⧉ para reenviar.');return;}
+  DEDIT=id; $('dedtexto').value=d.texto||''; $('dedlink').value=d.link||'';
+  $('modalDisparo').style.display='flex';
+}
+async function salvarEdicaoDisparo(){
+  var id=DEDIT; if(!id)return;
+  var r=await (await fetch('/api/disparos/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:$('dedtexto').value,link:$('dedlink').value})})).json();
+  if(r.erro){alert(r.erro);return;}
+  $('modalDisparo').style.display='none'; DEDIT=null; carregarClientes();
+}
+async function duplicarDisparo(id){
+  var r=await (await fetch('/api/disparos/'+encodeURIComponent(id)+'/duplicar',{method:'POST'})).json();
+  if(r.erro){alert(r.erro);return;}
+  carregarClientes();
+}
+async function excluirDisparo(id){
+  if(!confirm('Excluir este disparo? Itens ainda na fila saem; o que já foi enviado não voltar.'))return;
+  var r=await (await fetch('/api/disparos/'+encodeURIComponent(id),{method:'DELETE'})).json();
+  if(r.erro){alert(r.erro);return;}
+  carregarClientes();
 }
 // ===== Rastreio (publicações) =====
 async function carregarRastreio(){

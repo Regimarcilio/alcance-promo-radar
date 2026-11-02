@@ -1,6 +1,6 @@
 # Protótipo — Clientes: lista salva + mídia + grid de disparos
 
-**Status**: aguardando aprovação.
+**Status**: aprovado e implementado.
 
 ## Objetivo
 

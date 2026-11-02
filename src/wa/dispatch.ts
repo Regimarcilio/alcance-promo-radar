@@ -66,6 +66,29 @@ export function validarImagem(imagem: string): void {
 }
 
 /**
+ * Mesma checagem de origem, mas ciente do tipo: vídeo/documento também passam.
+ * Arquivo local continua restrito a data/midia com nome UUID.
+ */
+function validarMidiaArquivo(arquivo: string, tipo: "image" | "video" | "document"): void {
+  if (!arquivo) return;
+  if (/^https?:\/\//i.test(arquivo)) {
+    if (!urlImagemSegura(arquivo)) throw new Error("mídia remota recusada (URL insegura)");
+    return;
+  }
+  if (arquivo.startsWith("data:")) {
+    const ok =
+      tipo === "video"
+        ? /^data:video\//i.test(arquivo)
+        : tipo === "document"
+          ? /^data:application\//i.test(arquivo)
+          : /^data:image\//i.test(arquivo);
+    if (!ok) throw new Error("data URI de mídia inválido");
+    return;
+  }
+  if (!ehArquivoMidia(arquivo)) throw new Error("caminho de mídia não permitido");
+}
+
+/**
  * Baixa a imagem no PRÓPRIO manager e manda em base64 para a Evolution.
  *
  * Evita depender do DNS/TLS do container da Evolution (EAI_AGAIN em
@@ -113,30 +136,35 @@ async function enviarTexto(args: {
 
 export async function enviarParaGrupo(args: {
   grupo: string;
-  imagem: string;
+  imagem?: string;
   legenda: string;
   dryRun: boolean;
+  /** "video" envia como vídeo (upload da tela Clientes); padrão imagem. */
+  mediatype?: "image" | "video" | "document";
+  mimetype?: string;
 }): Promise<EnvioResult> {
-  if (engine() === "go") return enviarViaGo(args);
+  const imagem = String(args.imagem ?? "");
+  if (engine() === "go") return enviarViaGo({ ...args, imagem });
   const evoUrl = process.env.EVO_URL;
   const evoKey = process.env.EVO_KEY;
   if (args.dryRun) {
     console.log(
-      `[dry-run] grupo=${args.grupo} legenda=${args.legenda.length}chars imagem=${args.imagem || "(sem)"}`
+      `[dry-run] grupo=${args.grupo} legenda=${args.legenda.length}chars imagem=${imagem || "(sem)"}`
     );
     return { messageId: `dryrun-${Date.now()}`, dryRun: true };
   }
   if (!evoUrl || !evoKey) {
     throw new Error("Evolution não configurada (EVO_URL/EVO_KEY) — envio abortado");
   }
-  validarImagem(args.imagem);
-  const temFoto =
-    /^https?:\/\//.test(args.imagem) ||
-    args.imagem.startsWith("data:") ||
-    ehArquivoMidia(args.imagem);
-  if (temFoto) {
+  const tipo = args.mediatype ?? "image";
+  validarMidiaArquivo(imagem, tipo);
+  const temMidia =
+    /^https?:\/\//.test(imagem) ||
+    imagem.startsWith("data:") ||
+    ehArquivoMidia(imagem);
+  if (temMidia) {
     try {
-      return await enviarMidia({ ...args, mediatype: "image" });
+      return await enviarMidia({ ...args, imagem, mediatype: tipo });
     } catch (e: any) {
       // Foto é acessório: se o sendMedia falhar (CDN, conexão do número,
       // formato), a oferta NÃO pode ficar presa. Reenvia só o texto/link.
@@ -170,7 +198,7 @@ export async function enviarMidia(args: {
   if (!evoUrl || !evoKey) {
     throw new Error("Evolution não configurada (EVO_URL/EVO_KEY) — envio de mídia abortado");
   }
-  validarImagem(args.imagem);
+  validarMidiaArquivo(args.imagem, args.mediatype ?? "image");
   let media = args.imagem;
   let mimetype = args.mimetype;
   if (/^https?:\/\//i.test(args.imagem)) {
