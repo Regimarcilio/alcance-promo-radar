@@ -1786,7 +1786,11 @@ Dois defeitos vizinhos no mesmo bloco: `programa` de ML virava `desconhecido` e
   `mercadolivre→ml` e `categoria = programa` (fim do JID).
 - Protótipo antes/depois em `docs/prototipos/rastreio-titulo/`.
 
-**Validação**: `npm test` **170/170**; build limpo.
+**Validação**: `npm test` **170/170**; build limpo; deploy 22:56 BRT. Em produção,
+2/2 publicações do monitor depois do deploy saíram com título:
+`"Samsung Smartwatch Galaxy Fit3"` (B0CVCLGV1W, R$ 188) e
+`"WAP Torradeira Elétrico WTE2 127V"` (B0H8ZKYRDH, R$ 103), já com
+`programa: amazon` e `categoria: amazon` (sem JID).
 
 **Limite conhecido**: as ~4.799 publicações antigas já gravadas não têm o texto
 guardado, então não há como recuperar o título — só as novas (e as 16 da fila, na
