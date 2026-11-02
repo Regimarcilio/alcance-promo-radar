@@ -131,12 +131,16 @@ export async function processar(
     // 2.1) Link no domínio da própria origem (ex.: oferta.emipefps.com/amazon/XXXX):
     // expande para a URL final (amazon.com.br/dp/ASIN?tag=...) e reclassifica.
     // Sem isso, o post do Emipe via domínio próprio morria em "sem link".
-    const desconhecido = oferta.links.find((l) => l.programa === "desconhecido");
-    if (desconhecido) {
-      const expandido = await expandirLink(desconhecido.url);
+    // Mensagens costumam trazer 2+ links (o do canal + o do anúncio). Tenta
+    // TODOS os desconhecidos, não só o primeiro — antes o 1º link de grupo
+    // (ex.: chat.whatsapp.com) queimava a única tentativa e a oferta morria.
+    const desconhecidos = oferta.links.filter((l) => l.programa === "desconhecido");
+    for (const d of desconhecidos) {
+      const expandido = await expandirLink(d.url);
       if (expandido) {
         oferta.principal = expandido;
-        oferta.textoLimpo = limparTexto(msg.texto, desconhecido.url);
+        oferta.textoLimpo = limparTexto(msg.texto, d.url);
+        break;
       }
     }
   }
@@ -144,11 +148,15 @@ export async function processar(
     // Diagnóstico: quais domínios chegaram e não foram reconhecidos? Sem isso
     // o operador só vê "link não reconhecido" e não sabe o que adicionar.
     const doms = [...new Set(oferta.links.map((l) => l.host).filter(Boolean))].slice(0, 3);
+    // Guarda o link cru: sem ele o operador só vê o host e não consegue
+    // distinguir "programa não suportado" de "link expirado".
+    const cru = oferta.links.find((l) => l.programa === "desconhecido")?.url ?? "";
     registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: "desconhecido",
       idProduto: null, linkTransformado: null, destino: null,
       status: "REVISAO",
-      detalhe: doms.length ? `sem link de afiliado reconhecido (${doms.join(", ")})` : "sem link de afiliado reconhecido",
+      detalhe: (doms.length ? `sem link de afiliado reconhecido (${doms.join(", ")})` : "sem link de afiliado reconhecido")
+        + (cru ? ` — ${cru.slice(0, 140)}` : ""),
     });
     return { acao: "REVISAO", motivo: doms.length ? `link não reconhecido (${doms.join(", ")})` : "link não reconhecido" };
   }

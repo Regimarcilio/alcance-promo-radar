@@ -1756,8 +1756,10 @@ vazio desde 09:58.
 - `[dispatch]` sem nenhum erro nos últimos 5 min.
 
 **Pendências**
-- `revisao: 29` no período: ofertas de `oferta.emipefps.com`, `promosdebrother.com`,
-  `tidd.ly` (programa não suportado) e MLB sem `ML_CONVERSOR_URL` configurado.
+- `revisao: 29` no período: ofertas de `oferta.emipefps.com`, `promosdebrother.com`
+  (vira Rakuten/linksynergy, programa não suportado) e `tidd.ly` (idem).
+  **Retificação (2026-11-02)**: a causa "MLB sem `ML_CONVERSOR_URL`" registrada aqui
+  estava **errada** — o conversor ML não depende dessa variável (ver CONVERSOR-01).
 - `m28` continua `close` de verdade (state mente `open`); só não atrapalha porque o envio
   marca instância ruim e o serviço usa fallback.
 - Watchdog: o zumbi da 3ga só foi detectado testando o grupo. Vale um alerta quando
@@ -1835,3 +1837,50 @@ DELETE dos dois → grid vazio. Nada foi enviado de verdade (worker desligado no
 
 **Limites conhecidos**: vídeo acima de ~16 MB o WhatsApp recusa (disparo termina `ERRO`,
 visível no grid); edição só em disparo `PENDENTE` sem envios (o resto é duplicar).
+
+## 2026-11-02 | CONVERSOR-01 | planmaster | Conversor de links: prova de funcionamento + diagnóstico honesto
+
+**Demanda**: o resumo anterior deixou como pendência "ML_CONVERSOR_URL vazio mantém
+ofertas ML em revisão". O usuário corrigiu: o conversor **tem** que funcionar.
+
+**Fato**: não existe dependência de `ML_CONVERSOR_URL`. `converterLink()` faz, nesta ordem,
+o **createLink direto** no ML (`POST /affiliate-program/api/v2/affiliates/createLink`) com
+TAG + cookie das contas de `data/contas.json`; o conversor externo é só o 2º caminho e o
+fallback do hunter é o último. Prova em produção (dentro do container):
+
+| conta | produto | resultado | tempo |
+|---|---|---|---|
+| mestra | MLB-4665383027 | `https://meli.la/19duda6` | 3,0 s (1ª, cold) |
+| mestra | MLB-1566684996 | `https://meli.la/1n6Fj16` | 0,4 s |
+| superofertas | MLB-4665383027 | `https://meli.la/19duda6` | 0,4 s |
+| superofertas | MLB-1566684996 | `https://meli.la/1n6Fj16` | 0,5 s |
+
+E as 224 publicações ML do Rastreio têm link `meli.la` (nenhuma com link cru); os 124
+eventos ML no monitor são `ENCAMINHADA`/`ENFILEIRADA`/`DUPLICADO` — **zero** `REVISAO`
+por programa mercadolivre. As 44 revisões reais são de programas sem suporte
+(Rakuten/linksynergy via `promosdebrother.com`, `tidd.ly`) e de link de grupo
+(`sndflw.com → chat.whatsapp.com`).
+
+**Correções aplicadas**
+- `src/ml/provider.ts`: o aviso de fallback agora diz o **erro real** (`CONVERSAO_DIRETA_FALHOU`
+  + `dicaConversao()`), em vez de culpar `ML_CONVERSOR_URL`; quando faltam credenciais,
+  manda cadastrar em **Contas ML**. Antes o diagnóstico enganava o operador (e enganou o
+  próprio dev-log).
+- `.env`: `TAG_ML` (vazia) passa a ter a tag da conta padrão — redundância caso
+  `data/contas.json` seja recriado.
+- `src/monitor/webhook.ts`: a expansão de link desconhecido agora percorre **todos** os
+  links não reconhecidos (antes só o primeiro — um `chat.whatsapp.com` no topo queimava a
+  tentativa) e o evento `REVISAO` grava o **link cru** (140 chars) no detalhe.
+- `src/monitor/curtos.ts`: 1 retry (400 ms) quando o resolvedor devolve vazio — Epipe/Supabase
+  falham de forma transitória (429/cold start) e a oferta caía em revisão sem necessidade.
+
+**Validação**: `npm test` **181/181** (novos: `provider.test.ts` — fallback sem credenciais e
+`dicaConversao`); build limpo; deploy do manager (`healthy`, `/healthz` 200). Pós-deploy no
+container: ML → `meli.la/19duda6` (`fonte: conversor`, conta `mestra`); Epipe
+`oferta.emipefps.com/amazon/3NFM7n` → `amazon.com.br/dp/B0GSGWFGKF` classificado
+`amazon`; `transformar()` aplica a tag própria (`manodosachadi-20`). Expansão em rajada
+(6 links paralelos): **6/6**.
+
+**Pendência real**: Amazon e ML ok; falta `SHOPEE_APP_ID`/`SHOPEE_APP_SECRET` para as
+ofertas Shopee (4 em revisão). Rakuten/netshoes e links de grupo continuam sem conversor
+por design (programa não suportado / não é oferta).

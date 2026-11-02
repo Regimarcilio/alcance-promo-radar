@@ -111,7 +111,13 @@ export async function expandirLink(url: string): Promise<LinkDetectado | null> {
     }
     const res = RESOLVEDORES.find((r) => r.host.test(host));
     if (!res) return null;
-    const final = await res.resolver(atual).catch(() => null);
+    // Epipe/Supabase e encurtadores falham de forma transitória (429, cold
+    // start). Uma segunda tentativa curta evita perder a oferta para a revisão.
+    let final = await res.resolver(atual).catch(() => null);
+    if (!final) {
+      await new Promise((r) => setTimeout(r, 400));
+      final = await res.resolver(atual).catch(() => null);
+    }
     if (!final) return null;
     const { programa, host: hostFinal } = classificar(final);
     if (programa !== "desconhecido") {
