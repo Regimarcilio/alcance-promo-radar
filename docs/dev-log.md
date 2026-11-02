@@ -2022,7 +2022,27 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 - Repositório pronto para publicação: código limpo, documentação completa, CI configurado
 
 ---
+  
+  ## 2026-11-02 | COMMIT-PUBLICACAO-01 | planmaster | Commit final de preparação para publicação
 
+### Commit Realizado
+`e2bc7c7` - "docs(publicacao): CI/CD, TLS e preparação para publicação pública"
+
+### Arquivos do Commit
+- `.github/workflows/ci.yml` - Novo workflow CI/CD
+- `Caddyfile` - Novo arquivo (TLS/reverse proxy)
+- `docker-compose.production.yml` - Novo arquivo (stack prod)
+- `README.md` - Badge CI e instruções TLS
+- `CHANGELOG.md` - Atualizado
+- `docs/dev-log.md` - Atualizado com entrada final
+
+### Status Pós-Commit
+- **Push**: `origin/develop` ✅
+- **GitHub Actions**: CI em execução (workflow disparado automaticamente)
+- **Issues criadas**: #31, #32, #33, #34, #35 para continuidade
+
+---
+  
   ## 2026-11-02 | ISSUES-CRIADAS-01 | issuemaster | Issues para preparação pública
 
 ### Issues criadas conforme protocolo ISSUEMASTER
@@ -2038,7 +2058,7 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 ### Status Atual do Repositório
 
 - **Branch**: `develop` 
-- **Push**: `origin/develop` com commits até 92c71db
+- **Push**: `origin/develop` com commit `e2bc7c7`
 - **Testes**: 181/181 passando ✅
 - **Build**: limpo ✅
 - **Typecheck**: limpo ✅
@@ -2049,5 +2069,5 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 - `/group/fetchAllGroups` retorna 500 nas instâncias instáveis (não é prioridade enquanto fallback funciona)
 
 ---
-
-  *Entrada registrada: 2026-11-02 23:30* | *Status: Finalizado* | *Commit: 67b3590* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
+  
+  *Entrada registrada: 2026-11-02 23:30* | *Status: Finalizado* | *Commit: e2bc7c7* | *Para revisionamento: abrir issue em `alcance-promo-radar`*

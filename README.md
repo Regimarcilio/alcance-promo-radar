@@ -144,19 +144,30 @@ docs/           SRS, arquitetura, ADRs, backlog e diário de bordo
 Para produção, use Caddy como reverse proxy com TLS automático (Let's Encrypt):
 
 ```bash
-# 1. Ajuste o domínio no Caddyfile
-cat Caddyfile | sed 's/your-domain.com.br/seu-dominio.com.br/'
+# Passo 1: Configure .env com credenciais reais
+cp .env.example .env
+# Editar .env com valores do ambiente
 
-# 2. Suba o stack com Caddy
+# Passo 2: Crie usuário admin
+npm run auth:user -- admin --telefone 5511999999999
+
+# Passo 3: Ajuste o domínio no Caddyfile
+sed -i 's/your-domain.com.br/seu-dominio.com.br/' Caddyfile
+
+# Passo 4: Crie volumes para o Caddy (executar apenas uma vez)
+docker volume create alcance_caddy_data alcance_caddy_config
+
+# Passo 5: Suba o stack com Caddy
 docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
 
-# 3. Caddy configura HTTPS automaticamente
+# Passo 6: Caddy configura HTTPS automaticamente
 # Acesse: https://seu-dominio.com.br/login
 ```
 
 Arquivos relevantes:
 - `Caddyfile` - configuração do proxy reverso com TLS
-- `docker-compose.production.yml` - serviço Caddy separado
+- `docker-compose.production.yml` - stack de produção com Caddy
+- `SECURITY.md` - boas práticas de segurança
 
 ## Segurança
 

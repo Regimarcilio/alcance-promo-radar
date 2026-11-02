@@ -4,6 +4,10 @@
 #   1. Copie .env.example para .env e configure
 #   2. Ajuste MANAGER_HOST no Caddyfile ou passe como variável
 #   3. docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#
+# NOTA: Para usar com volumes externos, execute primeiro:
+#       docker volume create caddy_data caddy_config
+#       Ou remova as linhas 'external: true' abaixo para que o Compose gerencie os volumes.
 
 services:
   caddy:
@@ -18,7 +22,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     networks:
-      - alcance_default
+      - app_net
     healthcheck:
       test: ["CMD", "caddy", "ping", "localhost:2019"]
       interval: 30s
