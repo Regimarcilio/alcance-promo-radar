@@ -1656,3 +1656,34 @@ zumbi, segundo contato direto na secundária); `npm run typecheck` limpo; smoke 
 - `radar-47997136647-m28` em `close` (device_removed).
 - Painel acompanha o job por no máximo 20 min (`600×2s`) — lote real pode passar disso.
 - `/group/fetchAllGroups` com 500 nas duas instâncias instáveis; `clientes.json` de 31/10.
+
+---
+
+## 2026-11-01 | PILOTO-PARADO-01 | planmaster | Envios parados após restart: autoretoma
+
+**Sintoma relatado**: "todos os envios parados". `data/envios.json` sem novidade desde
+17:17Z (14:17 BRT) e `piloto.json` com log `19:05 ⏸ 1 loop(s) pausado(s) após reinício`.
+
+**Causa raiz**
+- `PILOTO_AUTORELIGA=0` no `.env`: **todo** restart do container pausava os loops por
+  projeto. O restart das ~19:02 (e o deploy das 20:16/20:24) derrubaram o `setTimeout`
+  agendado para 19:03 e o loop ficou parado.
+- Às 20:49 o loop foi parado manualmente (`⏹️ parado (config salva para religar)`).
+- Fonte do ML: `COOKIE_ML` **existe e é válido** (2247 chars) — o hub de afiliados
+  funciona; `ML_ACCESS_TOKEN` está vazio, mas só afeta a API pública (`/sites/MLB/search`
+  responde 403 da PolicyAgent de qualquer forma) e a página de busca (302 para
+  `account-verification`). O `hunt` cai no hub e devolve `mock:false`.
+
+**Correção**
+- `.env`: `PILOTO_AUTORELIGA=0` → **1**. `.env.example` atualizado para o novo padrão,
+  com o motivo documentado.
+- `data/piloto.json`: loop religado (`rodando:true`, `proximaEm` imediato) e recreate do
+  container para carregar a variável.
+- Boot confirmou: `▶ 2 loop(s) religados automaticamente (PILOTO_AUTORELIGA=1)`.
+
+**Validação**: ciclos de 20:50, 20:51 e 20:59 enviaram de verdade (`caça LIVE|mestra`,
+`mock:false`), com dedup 7d funcionando (`pulado ... DUPLICADO_7D`). `enviadas` passou de
+2→3 (#1) e 1→2 (#2).
+
+**Pendência**: `ML_ACCESS_TOKEN` vazio — se o hub algum dia exigir OAuth, renovar via
+`scripts/ml-oauth.ts`. Hoje o hub usa apenas `COOKIE_ML` (renovável no navegador).
