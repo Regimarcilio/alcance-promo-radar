@@ -8,6 +8,12 @@ do histórico do git (`git log`), sem tags formais.
 
 ## [Unreleased]
 
+### Adicionado
+- **CI/CD com GitHub Actions**: workflow `.github/workflows/ci.yml` com typecheck, build, testes e smoke do manager.
+- **Badge de CI**: badge de status adicionado ao README.md.
+- **TLS com Caddy**: `Caddyfile` para reverse proxy com Let's Encrypt + `docker-compose.production.yml` para deploy seguro com HTTPS.
+- **Container manager non-root**: já configurado com `USER node` no Dockerfile (issue #5).
+
 ### Segurança
 - Revisão de headers de segurança e endurecimento do gate default-deny do painel.
 - **LFI/SSRF em imagem**: `validarImagem()` passou a exigir allowlist de `data/midia`

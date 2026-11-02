@@ -1,0 +1,30 @@
+# Docker Compose para produção com TLS (Caddy)
+# 
+# Uso:
+#   1. Copie .env.example para .env e configure
+#   2. Ajuste MANAGER_HOST no Caddyfile ou passe como variável
+#   3. docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: alcance_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - alcance_default
+    healthcheck:
+      test: ["CMD", "caddy", "ping", "localhost:2019"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  caddy_data:
+  caddy_config:

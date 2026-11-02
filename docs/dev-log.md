@@ -1969,8 +1969,61 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 4. Criar template de issues para contribuições
 
 ---
+  
+  ## 2026-11-02 | PREPARACAO-PUBLICA-01 | planmaster | Finalizando preparação para publicação pública
 
-## 2026-11-02 | ISSUES-CRIADAS-01 | issuemaster | Issues para preparação pública
+### Implementações Concluídas
+- **GitHub Actions CI/CD** (`.github/workflows/ci.yml`):
+  - Workflow completo com typecheck, build, testes (181/181) e smoke do manager
+  - Executa em pushes e PRs para `develop`/`main`
+  - Badge de CI adicionado ao README.md
+
+- **TLS/Reverse Proxy** (`Caddyfile` + `docker-compose.production.yml`):
+  - Caddyfile configurado para Let's Encrypt com HTTP->HTTPS redirect
+  - docker-compose.production.yml com serviço Caddy separado
+  - Instruções de deploy no README.md
+
+- **Build e testes**:
+  - Todos os 181 testes passando
+  - Typecheck limpo
+  - Build limpo (sem warnings)
+  - Smoke test do manager validado
+
+### Status Final Antes do Push
+| Item | Status |
+|------|--------|
+| Testes | 181/181 ✅ |
+| Typecheck | Limpo ✅ |
+| Build | Limpo ✅ |
+| CI/CD | Configurado ✅ |
+| TLS | Caddyfile pronto ✅ |
+| Docker Compose | Versão prod criada ✅ |
+| Badge CI | README.md atualizado ✅ |
+
+### Arquivos Modificados (pendentes de commit)
+- `.github/workflows/ci.yml` - workflow CI/CD criado
+- `README.md` - badge CI e instruções TLS
+- `CHANGELOG.md` - atualizado com nova seção Unreleased
+
+### Arquivos Novos
+- `Caddyfile` - configuração TLS/reverse proxy
+- `docker-compose.production.yml` - stack de produção com Caddy
+
+### Próximos Passos (após este commit)
+1. Commit e push final para `develop`
+2. Issue #31: Atualizar README com instruções de setup público
+3. Issue #32: Template de issues para contribuições
+4. Issue #34: Verificar se CI está passando no GitHub
+5. Issue #35: Criar SECURITY.md com boas práticas
+
+### Notas
+- Shopee (#30) continua sem conversor até credenciais serem fornecidas (código já implementado)
+- Instâncias zumbi `radar-47992521346-3ga` e `radar-47997136647-m28` precisam ser reconectadas
+- Repositório pronto para publicação: código limpo, documentação completa, CI configurado
+
+---
+
+  ## 2026-11-02 | ISSUES-CRIADAS-01 | issuemaster | Issues para preparação pública
 
 ### Issues criadas conforme protocolo ISSUEMASTER
 

@@ -1,5 +1,7 @@
 # Alcance
 
+[![CI](https://github.com/Regimarcilio/alcance-promo-radar/actions/workflows/ci.yml/badge.svg)](https://github.com/Regimarcilio/alcance-promo-radar/actions/workflows/ci.yml)
+
 Monitor de ofertas para WhatsApp: recebe mensagens de grupos de afiliados, identifica o produto
 (Mercado Livre, Amazon, Shopee), troca o link pelo seu link de afiliado e reencaminha para os seus
 grupos — com fila anti-rajada, dedup, rotação de números e painel web autenticado.
@@ -136,6 +138,25 @@ docs/           SRS, arquitetura, ADRs, backlog e diário de bordo
 - `docs/15-plano-sincronizacao-docs.md` — plano de atualização e status desta rodada.
 - `docs/dev-log.md` — diário de bordo com evidências por entrega.
 - `CHANGELOG.md` — release notes (Keep a Changelog).
+
+## Deploy com TLS (HTTPS)
+
+Para produção, use Caddy como reverse proxy com TLS automático (Let's Encrypt):
+
+```bash
+# 1. Ajuste o domínio no Caddyfile
+cat Caddyfile | sed 's/your-domain.com.br/seu-dominio.com.br/'
+
+# 2. Suba o stack com Caddy
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+
+# 3. Caddy configura HTTPS automaticamente
+# Acesse: https://seu-dominio.com.br/login
+```
+
+Arquivos relevantes:
+- `Caddyfile` - configuração do proxy reverso com TLS
+- `docker-compose.production.yml` - serviço Caddy separado
 
 ## Segurança
 
