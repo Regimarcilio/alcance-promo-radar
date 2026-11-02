@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Rastreio — antes/depois do título (monitor)</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--border:#262b36;--tx:#e6e9ef;--mini:#8b93a7;--ok:#3fb950}
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,sans-serif}
+  h1{font-size:18px;margin:0 0 4px}
+  p.sub{color:var(--mini);margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mini)}
+  .row{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+  .mini{color:var(--mini);font-size:12px;white-space:nowrap}
+  .titulo{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lk{color:#58a6ff;font-size:12px;text-decoration:none}
+  .codigo{color:var(--mini)}
+  .novo{color:var(--ok)}
+</style>
+</head>
+<body>
+  <h1>Rastreio — linha da publicação (vista do monitor)</h1>
+  <p class="sub">Objetivo: mostrar o título do produto postado, como já acontece no piloto. Layout e colunas inalterados.</p>
+  <div class="grid">
+    <div class="card">
+      <div class="tag">antes — só o código</div>
+      <div class="row">
+        <span class="mini">01/11/2026 21:42</span>
+        <span class="mini" style="min-width:58px">ml</span>
+        <span class="titulo codigo">MLB5864818802</span>
+        <span class="mini">120363412937047408@g.us</span>
+        <a class="lk" href="#">abrir</a>
+      </div>
+      <div class="row">
+        <span class="mini">01/11/2026 21:43</span>
+        <span class="mini" style="min-width:58px">ml</span>
+        <span class="titulo codigo">MLB4907812931</span>
+        <span class="mini">120363412937047408@g.us</span>
+        <a class="lk" href="#">abrir</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tag">depois — título do produto postado</div>
+      <div class="row">
+        <span class="mini">01/11/2026 21:42</span>
+        <span class="mini" style="min-width:58px">ml</span>
+        <span class="titulo novo">Ômega 3 EPA DHA Dark Lab em cápsula Sem sabor de 120 un</span>
+        <span class="mini">ml</span>
+        <a class="lk" href="#">abrir</a>
+      </div>
+      <div class="row">
+        <span class="mini">01/11/2026 21:43</span>
+        <span class="mini" style="min-width:58px">ml</span>
+        <span class="titulo novo">Tênis Fila Masculino Spry Esportivo Treino Corrida Academia</span>
+        <span class="mini">ml</span>
+        <a class="lk" href="#">abrir</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

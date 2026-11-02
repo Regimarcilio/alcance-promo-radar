@@ -1,0 +1,46 @@
+- generic [ref=f3e1]:
+  - link "Pular para o formulário de login" [ref=f3e2] [cursor=pointer]:
+    - /url: "#loginForm"
+  - region "Tela de login" [ref=f3e4]:
+    - complementary "Apresentação do Alcance" [ref=f3e5]:
+      - generic [ref=f3e6]: Alcance · acesso restrito
+      - generic [ref=f3e8]:
+        - paragraph [ref=f3e16]: Alcance · caça ofertas
+        - heading "Sua sala de controle de ofertas." [level=1] [ref=f3e17]
+        - paragraph [ref=f3e18]: Encontre as melhores promoções do Mercado Livre, acompanhe cada envio e saiba exatamente o que está chegando no WhatsApp.
+        - list [ref=f3e19]:
+          - listitem [ref=f3e20]: Radar de ofertas
+          - listitem [ref=f3e22]: Envios monitorados
+          - listitem [ref=f3e24]: Acesso restrito
+      - generic [ref=f3e26]:
+        - generic [ref=f3e27]: Avaliar em outra paleta
+        - group "Avaliar em outra paleta" [ref=f3e28]:
+          - button "Verde" [pressed] [ref=f3e29] [cursor=pointer]
+          - button "Laranja" [ref=f3e31] [cursor=pointer]
+          - button "Areia" [ref=f3e33] [cursor=pointer]
+          - button "Grafite" [ref=f3e35] [cursor=pointer]
+          - button "Marrom" [ref=f3e37] [cursor=pointer]
+          - button "Cacau" [ref=f3e39] [cursor=pointer]
+    - main [ref=f3e41]:
+      - generic [ref=f3e42]:
+        - generic [ref=f3e43]: Acesso restrito
+        - heading "Entrar no Alcance" [level=2] [ref=f3e47]
+        - paragraph [ref=f3e48]: Use sua conta para abrir o monitor de ofertas e envios.
+        - generic [ref=f3e49]:
+          - generic [ref=f3e50]:
+            - generic [ref=f3e51]: Usuário
+            - textbox "Usuário" [active] [ref=f3e52]:
+              - /placeholder: seu usuário
+          - generic [ref=f3e53]:
+            - generic [ref=f3e54]: Senha
+            - generic [ref=f3e55]:
+              - textbox "Senha" [ref=f3e56]:
+                - /placeholder: Sua senha
+              - button "Mostrar senha" [ref=f3e57] [cursor=pointer]
+          - button "Entrar no painel" [ref=f3e61] [cursor=pointer]
+        - paragraph [ref=f3e65]: Sessão protegida · acesso restrito
+  - contentinfo "Developed by EX Technologies":
+    - img "EX Technologies"
+    - generic:
+      - text: Developed by
+      - strong: EX Technologies

@@ -1,0 +1,1684 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - link "Alcance — ir para o monitor" [ref=f1e4] [cursor=pointer]:
+      - /url: "#/monitor"
+      - generic [ref=f1e5]: A
+      - heading "Alcance" [level=1] [ref=f1e7]
+    - navigation "Navegação principal" [ref=f1e8]:
+      - link "Contas" [ref=f1e9] [cursor=pointer]:
+        - /url: "#/contas"
+      - link "Cupons" [ref=f1e17] [cursor=pointer]:
+        - /url: "#/cupons"
+      - link "Piloto" [ref=f1e25] [cursor=pointer]:
+        - /url: "#/piloto"
+      - link "Monitor" [ref=f1e34] [cursor=pointer]:
+        - /url: "#/monitor"
+      - link "Números" [ref=f1e44] [cursor=pointer]:
+        - /url: "#/numeros"
+      - link "Rastreio" [ref=f1e52] [cursor=pointer]:
+        - /url: "#/rastreio"
+      - link "Clientes" [ref=f1e60] [cursor=pointer]:
+        - /url: "#/clientes"
+  - main [ref=f1e69]:
+    - generic [ref=f1e70]:
+      - generic [ref=f1e71]:
+        - generic [ref=f1e72]: crescimento
+        - heading "Clientes" [level=2] [ref=f1e160]
+        - generic [ref=f1e74]: Contatos dos grupos + disparo individual com fila anti-bloqueio.
+      - generic [ref=f1e75]:
+        - group [ref=f1e76]:
+          - generic "Verde" [ref=f1e77] [cursor=pointer]
+          - text: ✓
+        - generic [ref=f1e82]: ● monitor · 13 na fila
+        - button "Sair" [ref=f1e83] [cursor=pointer]
+    - generic [ref=f1e161]:
+      - generic [ref=f1e162]:
+        - generic [ref=f1e163]:
+          - generic [ref=f1e164]: "7802"
+          - text: contatos
+        - generic [ref=f1e165]:
+          - generic [ref=f1e166]: "0"
+          - text: listas
+        - generic [ref=f1e167]:
+          - generic [ref=f1e168]: "0"
+          - text: fila de envio
+      - generic [ref=f1e169]:
+        - generic [ref=f1e170]:
+          - generic [ref=f1e171]: 👥 Clientes
+          - link "✏️ renomear" [ref=f1e172] [cursor=pointer]:
+            - /url: "#"
+        - generic [ref=f1e173]: Contatos puxados dos grupos do seu celular + cadastro manual. Selecione e dispare uma propaganda individual (não é grupo). A fila envia 1 por vez para não parecer robô.
+        - generic [ref=f1e174]:
+          - button "🔄 Puxar contatos dos grupos" [active] [ref=f1e175] [cursor=pointer]
+          - generic [ref=f1e176]: puxando… 0/0 grupos · 7802 contatos
+        - generic [ref=f1e177]:
+          - 'textbox "nome (ex.: João)" [ref=f1e178]'
+          - textbox "telefone com DDD" [ref=f1e179]
+          - button "➕ Contato" [ref=f1e180] [cursor=pointer]
+        - generic [ref=f1e181]:
+          - combobox [ref=f1e182]:
+            - option "👥 Todos os grupos (7802)" [selected]
+            - 'option "📍 #003 Imersão Todos os caminhos levam a américa"'
+            - 'option "📍 #18 Python - Lira da Hashtag"'
+            - 'option "📍 #55 Emipe Promoções Tech 💜⚡"'
+            - option "📍 🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration"
+            - option "📍 A Promessa da Pizza do Luciano 🍕"
+            - option "📍 Ação Solidária em para Remédios do Thor"
+            - option "📍 Aluno e professor"
+            - option "📍 Cedup - Banco de Dados"
+            - option "📍 Clube dos Achadinhos🛍️🛍️"
+            - option "📍 Comunidade Morar-EUA - Joinville"
+            - option "📍 Edições de vídeos e fotos"
+            - option "📍 Eucurso 25A"
+            - option "📍 Grupo Acólitos"
+            - 'option "📍 Herói do Perfume #242"'
+            - option "📍 Introdução à Computação 👩‍💻👨‍💻"
+            - 'option "📍 Leleco Tech Ofertas e Cupons #4"'
+            - option "📍 LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPUTAÇÃO."
+            - option "📍 Mano dos Achadinhos"
+            - option "📍 MBX - Tech SC"
+            - option "📍 MBX | Data Science & Tecnologia 1"
+            - 'option "📍 Perfomance Lab #76"'
+            - 'option "📍 Poison Promos Club #5"'
+            - 'option "📍 Promoção Bruta Oficial #01"'
+            - option "📍 PROMOS DE BROTHER 470"
+            - 'option "📍 RADAR DAS PROMOS #24"'
+            - option "📍 Radar Teste"
+            - option "📍 RAINHA das PROMO"
+            - 'option "📍 Reunião Secreta 11/02 #1"'
+            - option "📍 Royal Masculine | 1"
+            - option "📍 TÉCNICO INFORMÁTICA - CEDUP - 4INFO3"
+            - 'option "📍 Vasculha 🔎 Ofertas #23"'
+          - textbox "buscar por nome ou telefone" [ref=f1e183]
+          - generic [ref=f1e184]: 0 sel. · 7802 contato(s) (mostrando 300)
+        - generic [ref=f1e185]:
+          - button "☑ Todos" [ref=f1e186] [cursor=pointer]
+          - button "☐ Limpar" [ref=f1e187] [cursor=pointer]
+          - button "💾 Salvar selecionados como lista" [ref=f1e188] [cursor=pointer]
+        - generic [ref=f1e189]:
+          - generic [ref=f1e190]: 📋 Tarefas pendentes de adição ao grupo
+          - generic [ref=f1e191]:
+            - generic [ref=f1e1776]:
+              - generic [ref=f1e1777]:
+                - generic [ref=f1e1778]: Teste adição grupo
+                - generic [ref=f1e1779]: CONCLUÍDA
+                - generic [ref=f1e1780]: "criada: 26/10/2026, 02:35:26"
+                - generic [ref=f1e1781]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1782]: 2 contato(s)
+                - generic [ref=f1e1783]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e1784]:
+                - generic [ref=f1e1785]: concluída
+                - button "👁 Ver" [ref=f1e1786] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1787] [cursor=pointer]
+            - generic [ref=f1e1788]:
+              - generic [ref=f1e1789]:
+                - generic [ref=f1e1790]: Teste persistência
+                - generic [ref=f1e1791]: PENDENTE
+                - generic [ref=f1e1792]: "criada: 26/10/2026, 02:54:57"
+                - generic [ref=f1e1793]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1794]: 2 contato(s)
+                - generic [ref=f1e1795]: ✓0 · 👥0 · ❌0
+              - generic [ref=f1e1796]:
+                - button "✔ Confirmar" [ref=f1e1797] [cursor=pointer]
+                - button "📅 Agendar" [ref=f1e1798] [cursor=pointer]
+                - button "👁 Ver" [ref=f1e1799] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1800] [cursor=pointer]
+            - generic [ref=f1e1801]:
+              - generic [ref=f1e1802]:
+                - generic [ref=f1e1803]: Teste persistência v2
+                - generic [ref=f1e1804]: PENDENTE
+                - generic [ref=f1e1805]: "criada: 26/10/2026, 03:02:03"
+                - generic [ref=f1e1806]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1807]: 2 contato(s)
+                - generic [ref=f1e1808]: ✓0 · 👥0 · ❌0
+              - generic [ref=f1e1809]:
+                - button "✔ Confirmar" [ref=f1e1810] [cursor=pointer]
+                - button "📅 Agendar" [ref=f1e1811] [cursor=pointer]
+                - button "👁 Ver" [ref=f1e1812] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1813] [cursor=pointer]
+            - generic [ref=f1e1814]:
+              - generic [ref=f1e1815]:
+                - generic [ref=f1e1816]: Teste persistência v3
+                - generic [ref=f1e1817]: CONCLUÍDA
+                - generic [ref=f1e1818]: "criada: 26/10/2026, 03:10:24"
+                - generic [ref=f1e1819]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1820]: 2 contato(s)
+                - generic [ref=f1e1821]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e1822]:
+                - generic [ref=f1e1823]: concluída
+                - button "👁 Ver" [ref=f1e1824] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1825] [cursor=pointer]
+            - generic [ref=f1e1826]:
+              - generic [ref=f1e1827]:
+                - generic [ref=f1e1828]: Teste UI flow
+                - generic [ref=f1e1829]: CONCLUÍDA
+                - generic [ref=f1e1830]: "criada: 26/10/2026, 03:46:31"
+                - generic [ref=f1e1831]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1832]: 2 contato(s)
+                - generic [ref=f1e1833]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e1834]:
+                - generic [ref=f1e1835]: concluída
+                - button "👁 Ver" [ref=f1e1836] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1837] [cursor=pointer]
+            - generic [ref=f1e1838]:
+              - generic [ref=f1e1839]:
+                - generic [ref=f1e1840]: Teste Acompanhar
+                - generic [ref=f1e1841]: CONCLUÍDA
+                - generic [ref=f1e1842]: "criada: 26/10/2026, 03:49:11"
+                - generic [ref=f1e1843]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e1844]: 2 contato(s)
+                - generic [ref=f1e1845]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e1846]:
+                - generic [ref=f1e1847]: concluída
+                - button "👁 Ver" [ref=f1e1848] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e1849] [cursor=pointer]
+        - generic [ref=f1e266]:
+          - generic [ref=f1e1850]:
+            - checkbox [ref=f1e1851]
+            - generic [ref=f1e1852]: +55 15 99753-6921🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1853] [cursor=pointer]
+            - button "🗑" [ref=f1e1854] [cursor=pointer]
+          - generic [ref=f1e1855]:
+            - checkbox [ref=f1e1856]
+            - generic [ref=f1e1857]: +55 15 99683-2678🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1858] [cursor=pointer]
+            - button "🗑" [ref=f1e1859] [cursor=pointer]
+          - generic [ref=f1e1860]:
+            - checkbox [ref=f1e1861]
+            - generic [ref=f1e1862]: +55 15 98144-0115🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1863] [cursor=pointer]
+            - button "🗑" [ref=f1e1864] [cursor=pointer]
+          - generic [ref=f1e1865]:
+            - checkbox [ref=f1e1866]
+            - generic [ref=f1e1867]: +16892764402🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1868] [cursor=pointer]
+            - button "🗑" [ref=f1e1869] [cursor=pointer]
+          - generic [ref=f1e1870]:
+            - checkbox [ref=f1e1871]
+            - generic [ref=f1e1872]: +14079884169🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1873] [cursor=pointer]
+            - button "🗑" [ref=f1e1874] [cursor=pointer]
+          - generic [ref=f1e1875]:
+            - checkbox [ref=f1e1876]
+            - generic [ref=f1e1877]: +14073088185🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigrati
+            - button "✏️" [ref=f1e1878] [cursor=pointer]
+            - button "🗑" [ref=f1e1879] [cursor=pointer]
+          - generic [ref=f1e1880]:
+            - checkbox [ref=f1e1881]
+            - generic [ref=f1e1882]: +55 15 99675-1747#003 Imersão Todos os caminhos levam a amé
+            - button "✏️" [ref=f1e1883] [cursor=pointer]
+            - button "🗑" [ref=f1e1884] [cursor=pointer]
+          - generic [ref=f1e1885]:
+            - checkbox [ref=f1e1886]
+            - generic [ref=f1e1887]: +55 15 98149-0452#003 Imersão Todos os caminhos levam a amé
+            - button "✏️" [ref=f1e1888] [cursor=pointer]
+            - button "🗑" [ref=f1e1889] [cursor=pointer]
+          - generic [ref=f1e1890]:
+            - checkbox [ref=f1e1891]
+            - generic [ref=f1e1892]: +556196970606MBX | Data Science & Tecnologia 1
+            - button "✏️" [ref=f1e1893] [cursor=pointer]
+            - button "🗑" [ref=f1e1894] [cursor=pointer]
+          - generic [ref=f1e1895]:
+            - checkbox [ref=f1e1896]
+            - generic [ref=f1e1897]: +55 19 99915-3975MBX | Data Science & Tecnologia 1
+            - button "✏️" [ref=f1e1898] [cursor=pointer]
+            - button "🗑" [ref=f1e1899] [cursor=pointer]
+          - generic [ref=f1e1900]:
+            - checkbox [ref=f1e1901]
+            - generic [ref=f1e1902]: +55 19 99881-9042MBX | Data Science & Tecnologia 1
+            - button "✏️" [ref=f1e1903] [cursor=pointer]
+            - button "🗑" [ref=f1e1904] [cursor=pointer]
+          - generic [ref=f1e1905]:
+            - checkbox [ref=f1e1906]
+            - generic [ref=f1e1907]: +55 19 99850-0278MBX | Data Science & Tecnologia 1
+            - button "✏️" [ref=f1e1908] [cursor=pointer]
+            - button "🗑" [ref=f1e1909] [cursor=pointer]
+          - generic [ref=f1e1910]:
+            - checkbox [ref=f1e1911]
+            - generic [ref=f1e1912]: +554792521346LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPU
+            - button "✏️" [ref=f1e1913] [cursor=pointer]
+            - button "🗑" [ref=f1e1914] [cursor=pointer]
+          - generic [ref=f1e1915]:
+            - checkbox [ref=f1e1916]
+            - generic [ref=f1e1917]: +559691927632Cedup - Banco de Dados
+            - button "✏️" [ref=f1e1918] [cursor=pointer]
+            - button "🗑" [ref=f1e1919] [cursor=pointer]
+          - generic [ref=f1e1920]:
+            - checkbox [ref=f1e1921]
+            - generic [ref=f1e1922]: +554784159115Cedup - Banco de Dados
+            - button "✏️" [ref=f1e1923] [cursor=pointer]
+            - button "🗑" [ref=f1e1924] [cursor=pointer]
+          - generic [ref=f1e1925]:
+            - checkbox [ref=f1e1926]
+            - generic [ref=f1e1927]: "+554195208977"
+            - button "✏️" [ref=f1e1928] [cursor=pointer]
+            - button "🗑" [ref=f1e1929] [cursor=pointer]
+          - generic [ref=f1e1930]:
+            - checkbox [ref=f1e1931]
+            - generic [ref=f1e1932]: "+554187952833"
+            - button "✏️" [ref=f1e1933] [cursor=pointer]
+            - button "🗑" [ref=f1e1934] [cursor=pointer]
+          - generic [ref=f1e1935]:
+            - checkbox [ref=f1e1936]
+            - generic [ref=f1e1937]: +554797595849Aluno e professor
+            - button "✏️" [ref=f1e1938] [cursor=pointer]
+            - button "🗑" [ref=f1e1939] [cursor=pointer]
+          - generic [ref=f1e1940]:
+            - checkbox [ref=f1e1941]
+            - generic [ref=f1e1942]: +554797136647Aluno e professor
+            - button "✏️" [ref=f1e1943] [cursor=pointer]
+            - button "🗑" [ref=f1e1944] [cursor=pointer]
+          - generic [ref=f1e1945]:
+            - checkbox [ref=f1e1946]
+            - generic [ref=f1e1947]: +55 47 93381-0940Edições de vídeos e fotos
+            - button "✏️" [ref=f1e1948] [cursor=pointer]
+            - button "🗑" [ref=f1e1949] [cursor=pointer]
+          - generic [ref=f1e1950]:
+            - checkbox [ref=f1e1951]
+            - generic [ref=f1e1952]: +554799934918 Grupo Acólitos
+            - button "✏️" [ref=f1e1953] [cursor=pointer]
+            - button "🗑" [ref=f1e1954] [cursor=pointer]
+          - generic [ref=f1e1955]:
+            - checkbox [ref=f1e1956]
+            - generic [ref=f1e1957]: +554797035385 Grupo Acólitos
+            - button "✏️" [ref=f1e1958] [cursor=pointer]
+            - button "🗑" [ref=f1e1959] [cursor=pointer]
+          - generic [ref=f1e1960]:
+            - checkbox [ref=f1e1961]
+            - generic [ref=f1e1962]: +554799948681Radar Teste
+            - button "✏️" [ref=f1e1963] [cursor=pointer]
+            - button "🗑" [ref=f1e1964] [cursor=pointer]
+          - generic [ref=f1e1965]:
+            - checkbox [ref=f1e1966]
+            - generic [ref=f1e1967]: +554797136648Radar Teste
+            - button "✏️" [ref=f1e1968] [cursor=pointer]
+            - button "🗑" [ref=f1e1969] [cursor=pointer]
+          - generic [ref=f1e1970]:
+            - checkbox [ref=f1e1971]
+            - generic [ref=f1e1972]: +554799403580TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1973] [cursor=pointer]
+            - button "🗑" [ref=f1e1974] [cursor=pointer]
+          - generic [ref=f1e1975]:
+            - checkbox [ref=f1e1976]
+            - generic [ref=f1e1977]: +554797529106TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1978] [cursor=pointer]
+            - button "🗑" [ref=f1e1979] [cursor=pointer]
+          - generic [ref=f1e1980]:
+            - checkbox [ref=f1e1981]
+            - generic [ref=f1e1982]: +554797287128TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1983] [cursor=pointer]
+            - button "🗑" [ref=f1e1984] [cursor=pointer]
+          - generic [ref=f1e1985]:
+            - checkbox [ref=f1e1986]
+            - generic [ref=f1e1987]: +554796901367TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1988] [cursor=pointer]
+            - button "🗑" [ref=f1e1989] [cursor=pointer]
+          - generic [ref=f1e1990]:
+            - checkbox [ref=f1e1991]
+            - generic [ref=f1e1992]: +554796523818TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1993] [cursor=pointer]
+            - button "🗑" [ref=f1e1994] [cursor=pointer]
+          - generic [ref=f1e1995]:
+            - checkbox [ref=f1e1996]
+            - generic [ref=f1e1997]: +55 47 93380-3398TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e1998] [cursor=pointer]
+            - button "🗑" [ref=f1e1999] [cursor=pointer]
+          - generic [ref=f1e2000]:
+            - checkbox [ref=f1e2001]
+            - generic [ref=f1e2002]: +554792242234TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e2003] [cursor=pointer]
+            - button "🗑" [ref=f1e2004] [cursor=pointer]
+          - generic [ref=f1e2005]:
+            - checkbox [ref=f1e2006]
+            - generic [ref=f1e2007]: +554788495584TÉCNICO INFORMÁTICA - CEDUP - 4INFO3
+            - button "✏️" [ref=f1e2008] [cursor=pointer]
+            - button "🗑" [ref=f1e2009] [cursor=pointer]
+          - generic [ref=f1e2010]:
+            - checkbox [ref=f1e2011]
+            - generic [ref=f1e2012]: +554799384924A Promessa da Pizza do Luciano 🍕
+            - button "✏️" [ref=f1e2013] [cursor=pointer]
+            - button "🗑" [ref=f1e2014] [cursor=pointer]
+          - generic [ref=f1e2015]:
+            - checkbox [ref=f1e2016]
+            - generic [ref=f1e2017]: +554797475330A Promessa da Pizza do Luciano 🍕
+            - button "✏️" [ref=f1e2018] [cursor=pointer]
+            - button "🗑" [ref=f1e2019] [cursor=pointer]
+          - generic [ref=f1e2020]:
+            - checkbox [ref=f1e2021]
+            - generic [ref=f1e2022]: +554797470887A Promessa da Pizza do Luciano 🍕
+            - button "✏️" [ref=f1e2023] [cursor=pointer]
+            - button "🗑" [ref=f1e2024] [cursor=pointer]
+          - generic [ref=f1e2025]:
+            - checkbox [ref=f1e2026]
+            - generic [ref=f1e2027]: +554792821865A Promessa da Pizza do Luciano 🍕
+            - button "✏️" [ref=f1e2028] [cursor=pointer]
+            - button "🗑" [ref=f1e2029] [cursor=pointer]
+          - generic [ref=f1e2030]:
+            - checkbox [ref=f1e2031]
+            - generic [ref=f1e2032]: +554789109009A Promessa da Pizza do Luciano 🍕
+            - button "✏️" [ref=f1e2033] [cursor=pointer]
+            - button "🗑" [ref=f1e2034] [cursor=pointer]
+          - generic [ref=f1e2035]:
+            - checkbox [ref=f1e2036]
+            - generic [ref=f1e2037]: +554799204455Introdução à Computação 👩‍💻👨‍💻
+            - button "✏️" [ref=f1e2038] [cursor=pointer]
+            - button "🗑" [ref=f1e2039] [cursor=pointer]
+          - generic [ref=f1e2040]:
+            - checkbox [ref=f1e2041]
+            - generic [ref=f1e2042]: +554797711834Introdução à Computação 👩‍💻👨‍💻
+            - button "✏️" [ref=f1e2043] [cursor=pointer]
+            - button "🗑" [ref=f1e2044] [cursor=pointer]
+          - generic [ref=f1e2045]:
+            - checkbox [ref=f1e2046]
+            - generic [ref=f1e2047]: +554796280532Introdução à Computação 👩‍💻👨‍💻
+            - button "✏️" [ref=f1e2048] [cursor=pointer]
+            - button "🗑" [ref=f1e2049] [cursor=pointer]
+          - generic [ref=f1e2050]:
+            - checkbox [ref=f1e2051]
+            - generic [ref=f1e2052]: +554796143061Introdução à Computação 👩‍💻👨‍💻
+            - button "✏️" [ref=f1e2053] [cursor=pointer]
+            - button "🗑" [ref=f1e2054] [cursor=pointer]
+          - generic [ref=f1e2055]:
+            - checkbox [ref=f1e2056]
+            - generic [ref=f1e2057]: +554791023660Introdução à Computação 👩‍💻👨‍💻
+            - button "✏️" [ref=f1e2058] [cursor=pointer]
+            - button "🗑" [ref=f1e2059] [cursor=pointer]
+          - generic [ref=f1e2060]:
+            - checkbox [ref=f1e2061]
+            - generic [ref=f1e2062]: +62 83 11202-5994Mano dos Achadinhos
+            - button "✏️" [ref=f1e2063] [cursor=pointer]
+            - button "🗑" [ref=f1e2064] [cursor=pointer]
+          - generic [ref=f1e2065]:
+            - checkbox [ref=f1e2066]
+            - generic [ref=f1e2067]: +559591717155Mano dos Achadinhos
+            - button "✏️" [ref=f1e2068] [cursor=pointer]
+            - button "🗑" [ref=f1e2069] [cursor=pointer]
+          - generic [ref=f1e2070]:
+            - checkbox [ref=f1e2071]
+            - generic [ref=f1e2072]: +558282205215Mano dos Achadinhos
+            - button "✏️" [ref=f1e2073] [cursor=pointer]
+            - button "🗑" [ref=f1e2074] [cursor=pointer]
+          - generic [ref=f1e2075]:
+            - checkbox [ref=f1e2076]
+            - generic [ref=f1e2077]: +556992754870Mano dos Achadinhos
+            - button "✏️" [ref=f1e2078] [cursor=pointer]
+            - button "🗑" [ref=f1e2079] [cursor=pointer]
+          - generic [ref=f1e2080]:
+            - checkbox [ref=f1e2081]
+            - generic [ref=f1e2082]: +556793469314Mano dos Achadinhos
+            - button "✏️" [ref=f1e2083] [cursor=pointer]
+            - button "🗑" [ref=f1e2084] [cursor=pointer]
+          - generic [ref=f1e2085]:
+            - checkbox [ref=f1e2086]
+            - generic [ref=f1e2087]: +556492769315Mano dos Achadinhos
+            - button "✏️" [ref=f1e2088] [cursor=pointer]
+            - button "🗑" [ref=f1e2089] [cursor=pointer]
+          - generic [ref=f1e2090]:
+            - checkbox [ref=f1e2091]
+            - generic [ref=f1e2092]: +556195183851Mano dos Achadinhos
+            - button "✏️" [ref=f1e2093] [cursor=pointer]
+            - button "🗑" [ref=f1e2094] [cursor=pointer]
+          - generic [ref=f1e2095]:
+            - checkbox [ref=f1e2096]
+            - generic [ref=f1e2097]: +554891460675Mano dos Achadinhos
+            - button "✏️" [ref=f1e2098] [cursor=pointer]
+            - button "🗑" [ref=f1e2099] [cursor=pointer]
+          - generic [ref=f1e2100]:
+            - checkbox [ref=f1e2101]
+            - generic [ref=f1e2102]: +554799563775Mano dos Achadinhos
+            - button "✏️" [ref=f1e2103] [cursor=pointer]
+            - button "🗑" [ref=f1e2104] [cursor=pointer]
+          - generic [ref=f1e2105]:
+            - checkbox [ref=f1e2106]
+            - generic [ref=f1e2107]: +553899157423Mano dos Achadinhos
+            - button "✏️" [ref=f1e2108] [cursor=pointer]
+            - button "🗑" [ref=f1e2109] [cursor=pointer]
+          - generic [ref=f1e2110]:
+            - checkbox [ref=f1e2111]
+            - generic [ref=f1e2112]: +55 27 98882-0592Mano dos Achadinhos
+            - button "✏️" [ref=f1e2113] [cursor=pointer]
+            - button "🗑" [ref=f1e2114] [cursor=pointer]
+          - generic [ref=f1e2115]:
+            - checkbox [ref=f1e2116]
+            - generic [ref=f1e2117]: +55 24 98125-7443Mano dos Achadinhos
+            - button "✏️" [ref=f1e2118] [cursor=pointer]
+            - button "🗑" [ref=f1e2119] [cursor=pointer]
+          - generic [ref=f1e2120]:
+            - checkbox [ref=f1e2121]
+            - generic [ref=f1e2122]: +55 21 99538-2384Mano dos Achadinhos
+            - button "✏️" [ref=f1e2123] [cursor=pointer]
+            - button "🗑" [ref=f1e2124] [cursor=pointer]
+          - generic [ref=f1e2125]:
+            - checkbox [ref=f1e2126]
+            - generic [ref=f1e2127]: +55 11 95109-9748Mano dos Achadinhos
+            - button "✏️" [ref=f1e2128] [cursor=pointer]
+            - button "🗑" [ref=f1e2129] [cursor=pointer]
+          - generic [ref=f1e2130]:
+            - checkbox [ref=f1e2131]
+            - generic [ref=f1e2132]: +55 11 93394-1118Mano dos Achadinhos
+            - button "✏️" [ref=f1e2133] [cursor=pointer]
+            - button "🗑" [ref=f1e2134] [cursor=pointer]
+          - generic [ref=f1e2135]:
+            - checkbox [ref=f1e2136]
+            - generic [ref=f1e2137]: +554797902375Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2138] [cursor=pointer]
+            - button "🗑" [ref=f1e2139] [cursor=pointer]
+          - generic [ref=f1e2140]:
+            - checkbox [ref=f1e2141]
+            - generic [ref=f1e2142]: +554797022724Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2143] [cursor=pointer]
+            - button "🗑" [ref=f1e2144] [cursor=pointer]
+          - generic [ref=f1e2145]:
+            - checkbox [ref=f1e2146]
+            - generic [ref=f1e2147]: +554792404603Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2148] [cursor=pointer]
+            - button "🗑" [ref=f1e2149] [cursor=pointer]
+          - generic [ref=f1e2150]:
+            - checkbox [ref=f1e2151]
+            - generic [ref=f1e2152]: +554791759513Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2153] [cursor=pointer]
+            - button "🗑" [ref=f1e2154] [cursor=pointer]
+          - generic [ref=f1e2155]:
+            - checkbox [ref=f1e2156]
+            - generic [ref=f1e2157]: +554791595736Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2158] [cursor=pointer]
+            - button "🗑" [ref=f1e2159] [cursor=pointer]
+          - generic [ref=f1e2160]:
+            - checkbox [ref=f1e2161]
+            - generic [ref=f1e2162]: +554791308256Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2163] [cursor=pointer]
+            - button "🗑" [ref=f1e2164] [cursor=pointer]
+          - generic [ref=f1e2165]:
+            - checkbox [ref=f1e2166]
+            - generic [ref=f1e2167]: +554789216000Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2168] [cursor=pointer]
+            - button "🗑" [ref=f1e2169] [cursor=pointer]
+          - generic [ref=f1e2170]:
+            - checkbox [ref=f1e2171]
+            - generic [ref=f1e2172]: +554789136802Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2173] [cursor=pointer]
+            - button "🗑" [ref=f1e2174] [cursor=pointer]
+          - generic [ref=f1e2175]:
+            - checkbox [ref=f1e2176]
+            - generic [ref=f1e2177]: +554789129122Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2178] [cursor=pointer]
+            - button "🗑" [ref=f1e2179] [cursor=pointer]
+          - generic [ref=f1e2180]:
+            - checkbox [ref=f1e2181]
+            - generic [ref=f1e2182]: +554788920805Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2183] [cursor=pointer]
+            - button "🗑" [ref=f1e2184] [cursor=pointer]
+          - generic [ref=f1e2185]:
+            - checkbox [ref=f1e2186]
+            - generic [ref=f1e2187]: +554788891054Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2188] [cursor=pointer]
+            - button "🗑" [ref=f1e2189] [cursor=pointer]
+          - generic [ref=f1e2190]:
+            - checkbox [ref=f1e2191]
+            - generic [ref=f1e2192]: +554788729914Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2193] [cursor=pointer]
+            - button "🗑" [ref=f1e2194] [cursor=pointer]
+          - generic [ref=f1e2195]:
+            - checkbox [ref=f1e2196]
+            - generic [ref=f1e2197]: +554788568255Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2198] [cursor=pointer]
+            - button "🗑" [ref=f1e2199] [cursor=pointer]
+          - generic [ref=f1e2200]:
+            - checkbox [ref=f1e2201]
+            - generic [ref=f1e2202]: +554788529125Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2203] [cursor=pointer]
+            - button "🗑" [ref=f1e2204] [cursor=pointer]
+          - generic [ref=f1e2205]:
+            - checkbox [ref=f1e2206]
+            - generic [ref=f1e2207]: +554788464310Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2208] [cursor=pointer]
+            - button "🗑" [ref=f1e2209] [cursor=pointer]
+          - generic [ref=f1e2210]:
+            - checkbox [ref=f1e2211]
+            - generic [ref=f1e2212]: +554788113451Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2213] [cursor=pointer]
+            - button "🗑" [ref=f1e2214] [cursor=pointer]
+          - generic [ref=f1e2215]:
+            - checkbox [ref=f1e2216]
+            - generic [ref=f1e2217]: +554788083740Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2218] [cursor=pointer]
+            - button "🗑" [ref=f1e2219] [cursor=pointer]
+          - generic [ref=f1e2220]:
+            - checkbox [ref=f1e2221]
+            - generic [ref=f1e2222]: +554788022537Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2223] [cursor=pointer]
+            - button "🗑" [ref=f1e2224] [cursor=pointer]
+          - generic [ref=f1e2225]:
+            - checkbox [ref=f1e2226]
+            - generic [ref=f1e2227]: +554784889697Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2228] [cursor=pointer]
+            - button "🗑" [ref=f1e2229] [cursor=pointer]
+          - generic [ref=f1e2230]:
+            - checkbox [ref=f1e2231]
+            - generic [ref=f1e2232]: +554784775337Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2233] [cursor=pointer]
+            - button "🗑" [ref=f1e2234] [cursor=pointer]
+          - generic [ref=f1e2235]:
+            - checkbox [ref=f1e2236]
+            - generic [ref=f1e2237]: +554784740464Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2238] [cursor=pointer]
+            - button "🗑" [ref=f1e2239] [cursor=pointer]
+          - generic [ref=f1e2240]:
+            - checkbox [ref=f1e2241]
+            - generic [ref=f1e2242]: +554784214594Ação Solidária em para Remédios do Thor
+            - button "✏️" [ref=f1e2243] [cursor=pointer]
+            - button "🗑" [ref=f1e2244] [cursor=pointer]
+          - generic [ref=f1e2245]:
+            - checkbox [ref=f1e2246]
+            - generic [ref=f1e2247]: +554784628581Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2248] [cursor=pointer]
+            - button "🗑" [ref=f1e2249] [cursor=pointer]
+          - generic [ref=f1e2250]:
+            - checkbox [ref=f1e2251]
+            - generic [ref=f1e2252]: +554799963495Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2253] [cursor=pointer]
+            - button "🗑" [ref=f1e2254] [cursor=pointer]
+          - generic [ref=f1e2255]:
+            - checkbox [ref=f1e2256]
+            - generic [ref=f1e2257]: +554799487755Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2258] [cursor=pointer]
+            - button "🗑" [ref=f1e2259] [cursor=pointer]
+          - generic [ref=f1e2260]:
+            - checkbox [ref=f1e2261]
+            - generic [ref=f1e2262]: +554792195264Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2263] [cursor=pointer]
+            - button "🗑" [ref=f1e2264] [cursor=pointer]
+          - generic [ref=f1e2265]:
+            - checkbox [ref=f1e2266]
+            - generic [ref=f1e2267]: +55 11 98205-7881Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2268] [cursor=pointer]
+            - button "🗑" [ref=f1e2269] [cursor=pointer]
+          - generic [ref=f1e2270]:
+            - checkbox [ref=f1e2271]
+            - generic [ref=f1e2272]: +554792693592Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2273] [cursor=pointer]
+            - button "🗑" [ref=f1e2274] [cursor=pointer]
+          - generic [ref=f1e2275]:
+            - checkbox [ref=f1e2276]
+            - generic [ref=f1e2277]: +554797910367Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2278] [cursor=pointer]
+            - button "🗑" [ref=f1e2279] [cursor=pointer]
+          - generic [ref=f1e2280]:
+            - checkbox [ref=f1e2281]
+            - generic [ref=f1e2282]: +554788264829Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2283] [cursor=pointer]
+            - button "🗑" [ref=f1e2284] [cursor=pointer]
+          - generic [ref=f1e2285]:
+            - checkbox [ref=f1e2286]
+            - generic [ref=f1e2287]: +554796877207Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2288] [cursor=pointer]
+            - button "🗑" [ref=f1e2289] [cursor=pointer]
+          - generic [ref=f1e2290]:
+            - checkbox [ref=f1e2291]
+            - generic [ref=f1e2292]: +554799501764Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2293] [cursor=pointer]
+            - button "🗑" [ref=f1e2294] [cursor=pointer]
+          - generic [ref=f1e2295]:
+            - checkbox [ref=f1e2296]
+            - generic [ref=f1e2297]: +559591443157Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2298] [cursor=pointer]
+            - button "🗑" [ref=f1e2299] [cursor=pointer]
+          - generic [ref=f1e2300]:
+            - checkbox [ref=f1e2301]
+            - generic [ref=f1e2302]: +554799147033Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2303] [cursor=pointer]
+            - button "🗑" [ref=f1e2304] [cursor=pointer]
+          - generic [ref=f1e2305]:
+            - checkbox [ref=f1e2306]
+            - generic [ref=f1e2307]: +554797539000Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2308] [cursor=pointer]
+            - button "🗑" [ref=f1e2309] [cursor=pointer]
+          - generic [ref=f1e2310]:
+            - checkbox [ref=f1e2311]
+            - generic [ref=f1e2312]: +554799381530Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2313] [cursor=pointer]
+            - button "🗑" [ref=f1e2314] [cursor=pointer]
+          - generic [ref=f1e2315]:
+            - checkbox [ref=f1e2316]
+            - generic [ref=f1e2317]: +55 21 98164-9331Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2318] [cursor=pointer]
+            - button "🗑" [ref=f1e2319] [cursor=pointer]
+          - generic [ref=f1e2320]:
+            - checkbox [ref=f1e2321]
+            - generic [ref=f1e2322]: +554792613455Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2323] [cursor=pointer]
+            - button "🗑" [ref=f1e2324] [cursor=pointer]
+          - generic [ref=f1e2325]:
+            - checkbox [ref=f1e2326]
+            - generic [ref=f1e2327]: +554799168020Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2328] [cursor=pointer]
+            - button "🗑" [ref=f1e2329] [cursor=pointer]
+          - generic [ref=f1e2330]:
+            - checkbox [ref=f1e2331]
+            - generic [ref=f1e2332]: +55 11 99902-1662Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2333] [cursor=pointer]
+            - button "🗑" [ref=f1e2334] [cursor=pointer]
+          - generic [ref=f1e2335]:
+            - checkbox [ref=f1e2336]
+            - generic [ref=f1e2337]: +554796567042Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2338] [cursor=pointer]
+            - button "🗑" [ref=f1e2339] [cursor=pointer]
+          - generic [ref=f1e2340]:
+            - checkbox [ref=f1e2341]
+            - generic [ref=f1e2342]: +554791953684Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2343] [cursor=pointer]
+            - button "🗑" [ref=f1e2344] [cursor=pointer]
+          - generic [ref=f1e2345]:
+            - checkbox [ref=f1e2346]
+            - generic [ref=f1e2347]: +554792145014Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2348] [cursor=pointer]
+            - button "🗑" [ref=f1e2349] [cursor=pointer]
+          - generic [ref=f1e2350]:
+            - checkbox [ref=f1e2351]
+            - generic [ref=f1e2352]: +554788269704Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2353] [cursor=pointer]
+            - button "🗑" [ref=f1e2354] [cursor=pointer]
+          - generic [ref=f1e2355]:
+            - checkbox [ref=f1e2356]
+            - generic [ref=f1e2357]: +554792790307Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2358] [cursor=pointer]
+            - button "🗑" [ref=f1e2359] [cursor=pointer]
+          - generic [ref=f1e2360]:
+            - checkbox [ref=f1e2361]
+            - generic [ref=f1e2362]: +554792062171Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2363] [cursor=pointer]
+            - button "🗑" [ref=f1e2364] [cursor=pointer]
+          - generic [ref=f1e2365]:
+            - checkbox [ref=f1e2366]
+            - generic [ref=f1e2367]: +554796055834Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2368] [cursor=pointer]
+            - button "🗑" [ref=f1e2369] [cursor=pointer]
+          - generic [ref=f1e2370]:
+            - checkbox [ref=f1e2371]
+            - generic [ref=f1e2372]: +554796742688Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2373] [cursor=pointer]
+            - button "🗑" [ref=f1e2374] [cursor=pointer]
+          - generic [ref=f1e2375]:
+            - checkbox [ref=f1e2376]
+            - generic [ref=f1e2377]: +554797057000Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2378] [cursor=pointer]
+            - button "🗑" [ref=f1e2379] [cursor=pointer]
+          - generic [ref=f1e2380]:
+            - checkbox [ref=f1e2381]
+            - generic [ref=f1e2382]: +554788673248Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2383] [cursor=pointer]
+            - button "🗑" [ref=f1e2384] [cursor=pointer]
+          - generic [ref=f1e2385]:
+            - checkbox [ref=f1e2386]
+            - generic [ref=f1e2387]: +554796136968Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2388] [cursor=pointer]
+            - button "🗑" [ref=f1e2389] [cursor=pointer]
+          - generic [ref=f1e2390]:
+            - checkbox [ref=f1e2391]
+            - generic [ref=f1e2392]: +554797772091Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2393] [cursor=pointer]
+            - button "🗑" [ref=f1e2394] [cursor=pointer]
+          - generic [ref=f1e2395]:
+            - checkbox [ref=f1e2396]
+            - generic [ref=f1e2397]: +554791294097Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2398] [cursor=pointer]
+            - button "🗑" [ref=f1e2399] [cursor=pointer]
+          - generic [ref=f1e2400]:
+            - checkbox [ref=f1e2401]
+            - generic [ref=f1e2402]: +554797170632Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2403] [cursor=pointer]
+            - button "🗑" [ref=f1e2404] [cursor=pointer]
+          - generic [ref=f1e2405]:
+            - checkbox [ref=f1e2406]
+            - generic [ref=f1e2407]: +554796965909Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2408] [cursor=pointer]
+            - button "🗑" [ref=f1e2409] [cursor=pointer]
+          - generic [ref=f1e2410]:
+            - checkbox [ref=f1e2411]
+            - generic [ref=f1e2412]: +554796190376Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2413] [cursor=pointer]
+            - button "🗑" [ref=f1e2414] [cursor=pointer]
+          - generic [ref=f1e2415]:
+            - checkbox [ref=f1e2416]
+            - generic [ref=f1e2417]: +554799369491Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2418] [cursor=pointer]
+            - button "🗑" [ref=f1e2419] [cursor=pointer]
+          - generic [ref=f1e2420]:
+            - checkbox [ref=f1e2421]
+            - generic [ref=f1e2422]: +554792825776Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2423] [cursor=pointer]
+            - button "🗑" [ref=f1e2424] [cursor=pointer]
+          - generic [ref=f1e2425]:
+            - checkbox [ref=f1e2426]
+            - generic [ref=f1e2427]: +554797093029Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2428] [cursor=pointer]
+            - button "🗑" [ref=f1e2429] [cursor=pointer]
+          - generic [ref=f1e2430]:
+            - checkbox [ref=f1e2431]
+            - generic [ref=f1e2432]: +554788239135Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2433] [cursor=pointer]
+            - button "🗑" [ref=f1e2434] [cursor=pointer]
+          - generic [ref=f1e2435]:
+            - checkbox [ref=f1e2436]
+            - generic [ref=f1e2437]: +554788342118Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2438] [cursor=pointer]
+            - button "🗑" [ref=f1e2439] [cursor=pointer]
+          - generic [ref=f1e2440]:
+            - checkbox [ref=f1e2441]
+            - generic [ref=f1e2442]: +554789176417Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2443] [cursor=pointer]
+            - button "🗑" [ref=f1e2444] [cursor=pointer]
+          - generic [ref=f1e2445]:
+            - checkbox [ref=f1e2446]
+            - generic [ref=f1e2447]: +554791368752Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2448] [cursor=pointer]
+            - button "🗑" [ref=f1e2449] [cursor=pointer]
+          - generic [ref=f1e2450]:
+            - checkbox [ref=f1e2451]
+            - generic [ref=f1e2452]: +554797784847Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2453] [cursor=pointer]
+            - button "🗑" [ref=f1e2454] [cursor=pointer]
+          - generic [ref=f1e2455]:
+            - checkbox [ref=f1e2456]
+            - generic [ref=f1e2457]: +554799062231Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2458] [cursor=pointer]
+            - button "🗑" [ref=f1e2459] [cursor=pointer]
+          - generic [ref=f1e2460]:
+            - checkbox [ref=f1e2461]
+            - generic [ref=f1e2462]: +55 11 99283-3730Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2463] [cursor=pointer]
+            - button "🗑" [ref=f1e2464] [cursor=pointer]
+          - generic [ref=f1e2465]:
+            - checkbox [ref=f1e2466]
+            - generic [ref=f1e2467]: +554799842064Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2468] [cursor=pointer]
+            - button "🗑" [ref=f1e2469] [cursor=pointer]
+          - generic [ref=f1e2470]:
+            - checkbox [ref=f1e2471]
+            - generic [ref=f1e2472]: +554792221969Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2473] [cursor=pointer]
+            - button "🗑" [ref=f1e2474] [cursor=pointer]
+          - generic [ref=f1e2475]:
+            - checkbox [ref=f1e2476]
+            - generic [ref=f1e2477]: +554792498352Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2478] [cursor=pointer]
+            - button "🗑" [ref=f1e2479] [cursor=pointer]
+          - generic [ref=f1e2480]:
+            - checkbox [ref=f1e2481]
+            - generic [ref=f1e2482]: +55 16 98181-6323Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2483] [cursor=pointer]
+            - button "🗑" [ref=f1e2484] [cursor=pointer]
+          - generic [ref=f1e2485]:
+            - checkbox [ref=f1e2486]
+            - generic [ref=f1e2487]: +554196635192Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2488] [cursor=pointer]
+            - button "🗑" [ref=f1e2489] [cursor=pointer]
+          - generic [ref=f1e2490]:
+            - checkbox [ref=f1e2491]
+            - generic [ref=f1e2492]: +554796715209Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2493] [cursor=pointer]
+            - button "🗑" [ref=f1e2494] [cursor=pointer]
+          - generic [ref=f1e2495]:
+            - checkbox [ref=f1e2496]
+            - generic [ref=f1e2497]: +554799006774Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2498] [cursor=pointer]
+            - button "🗑" [ref=f1e2499] [cursor=pointer]
+          - generic [ref=f1e2500]:
+            - checkbox [ref=f1e2501]
+            - generic [ref=f1e2502]: +554792545601Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2503] [cursor=pointer]
+            - button "🗑" [ref=f1e2504] [cursor=pointer]
+          - generic [ref=f1e2505]:
+            - checkbox [ref=f1e2506]
+            - generic [ref=f1e2507]: +554792171372Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2508] [cursor=pointer]
+            - button "🗑" [ref=f1e2509] [cursor=pointer]
+          - generic [ref=f1e2510]:
+            - checkbox [ref=f1e2511]
+            - generic [ref=f1e2512]: +554784612799Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2513] [cursor=pointer]
+            - button "🗑" [ref=f1e2514] [cursor=pointer]
+          - generic [ref=f1e2515]:
+            - checkbox [ref=f1e2516]
+            - generic [ref=f1e2517]: +554784594094Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2518] [cursor=pointer]
+            - button "🗑" [ref=f1e2519] [cursor=pointer]
+          - generic [ref=f1e2520]:
+            - checkbox [ref=f1e2521]
+            - generic [ref=f1e2522]: +554799703264Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2523] [cursor=pointer]
+            - button "🗑" [ref=f1e2524] [cursor=pointer]
+          - generic [ref=f1e2525]:
+            - checkbox [ref=f1e2526]
+            - generic [ref=f1e2527]: +554796736719Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2528] [cursor=pointer]
+            - button "🗑" [ref=f1e2529] [cursor=pointer]
+          - generic [ref=f1e2530]:
+            - checkbox [ref=f1e2531]
+            - generic [ref=f1e2532]: +554791510888Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2533] [cursor=pointer]
+            - button "🗑" [ref=f1e2534] [cursor=pointer]
+          - generic [ref=f1e2535]:
+            - checkbox [ref=f1e2536]
+            - generic [ref=f1e2537]: +554799685534Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2538] [cursor=pointer]
+            - button "🗑" [ref=f1e2539] [cursor=pointer]
+          - generic [ref=f1e2540]:
+            - checkbox [ref=f1e2541]
+            - generic [ref=f1e2542]: +554788184853Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2543] [cursor=pointer]
+            - button "🗑" [ref=f1e2544] [cursor=pointer]
+          - generic [ref=f1e2545]:
+            - checkbox [ref=f1e2546]
+            - generic [ref=f1e2547]: +554588221333Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2548] [cursor=pointer]
+            - button "🗑" [ref=f1e2549] [cursor=pointer]
+          - generic [ref=f1e2550]:
+            - checkbox [ref=f1e2551]
+            - generic [ref=f1e2552]: +555198774530Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2553] [cursor=pointer]
+            - button "🗑" [ref=f1e2554] [cursor=pointer]
+          - generic [ref=f1e2555]:
+            - checkbox [ref=f1e2556]
+            - generic [ref=f1e2557]: +554792598874Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2558] [cursor=pointer]
+            - button "🗑" [ref=f1e2559] [cursor=pointer]
+          - generic [ref=f1e2560]:
+            - checkbox [ref=f1e2561]
+            - generic [ref=f1e2562]: +554789153103Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2563] [cursor=pointer]
+            - button "🗑" [ref=f1e2564] [cursor=pointer]
+          - generic [ref=f1e2565]:
+            - checkbox [ref=f1e2566]
+            - generic [ref=f1e2567]: +554196276118Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2568] [cursor=pointer]
+            - button "🗑" [ref=f1e2569] [cursor=pointer]
+          - generic [ref=f1e2570]:
+            - checkbox [ref=f1e2571]
+            - generic [ref=f1e2572]: +554796773722Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2573] [cursor=pointer]
+            - button "🗑" [ref=f1e2574] [cursor=pointer]
+          - generic [ref=f1e2575]:
+            - checkbox [ref=f1e2576]
+            - generic [ref=f1e2577]: +554799969068Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2578] [cursor=pointer]
+            - button "🗑" [ref=f1e2579] [cursor=pointer]
+          - generic [ref=f1e2580]:
+            - checkbox [ref=f1e2581]
+            - generic [ref=f1e2582]: +554799578897Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2583] [cursor=pointer]
+            - button "🗑" [ref=f1e2584] [cursor=pointer]
+          - generic [ref=f1e2585]:
+            - checkbox [ref=f1e2586]
+            - generic [ref=f1e2587]: +554396742599Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2588] [cursor=pointer]
+            - button "🗑" [ref=f1e2589] [cursor=pointer]
+          - generic [ref=f1e2590]:
+            - checkbox [ref=f1e2591]
+            - generic [ref=f1e2592]: +554791084668Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2593] [cursor=pointer]
+            - button "🗑" [ref=f1e2594] [cursor=pointer]
+          - generic [ref=f1e2595]:
+            - checkbox [ref=f1e2596]
+            - generic [ref=f1e2597]: +554791666310Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2598] [cursor=pointer]
+            - button "🗑" [ref=f1e2599] [cursor=pointer]
+          - generic [ref=f1e2600]:
+            - checkbox [ref=f1e2601]
+            - generic [ref=f1e2602]: +554792565401Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2603] [cursor=pointer]
+            - button "🗑" [ref=f1e2604] [cursor=pointer]
+          - generic [ref=f1e2605]:
+            - checkbox [ref=f1e2606]
+            - generic [ref=f1e2607]: +554788116674Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2608] [cursor=pointer]
+            - button "🗑" [ref=f1e2609] [cursor=pointer]
+          - generic [ref=f1e2610]:
+            - checkbox [ref=f1e2611]
+            - generic [ref=f1e2612]: +554788514415Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2613] [cursor=pointer]
+            - button "🗑" [ref=f1e2614] [cursor=pointer]
+          - generic [ref=f1e2615]:
+            - checkbox [ref=f1e2616]
+            - generic [ref=f1e2617]: +554796972003Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2618] [cursor=pointer]
+            - button "🗑" [ref=f1e2619] [cursor=pointer]
+          - generic [ref=f1e2620]:
+            - checkbox [ref=f1e2621]
+            - generic [ref=f1e2622]: +554791535333Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2623] [cursor=pointer]
+            - button "🗑" [ref=f1e2624] [cursor=pointer]
+          - generic [ref=f1e2625]:
+            - checkbox [ref=f1e2626]
+            - generic [ref=f1e2627]: +554788470585Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2628] [cursor=pointer]
+            - button "🗑" [ref=f1e2629] [cursor=pointer]
+          - generic [ref=f1e2630]:
+            - checkbox [ref=f1e2631]
+            - generic [ref=f1e2632]: +554784290056Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2633] [cursor=pointer]
+            - button "🗑" [ref=f1e2634] [cursor=pointer]
+          - generic [ref=f1e2635]:
+            - checkbox [ref=f1e2636]
+            - generic [ref=f1e2637]: +554791030305Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2638] [cursor=pointer]
+            - button "🗑" [ref=f1e2639] [cursor=pointer]
+          - generic [ref=f1e2640]:
+            - checkbox [ref=f1e2641]
+            - generic [ref=f1e2642]: +554799508121Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2643] [cursor=pointer]
+            - button "🗑" [ref=f1e2644] [cursor=pointer]
+          - generic [ref=f1e2645]:
+            - checkbox [ref=f1e2646]
+            - generic [ref=f1e2647]: +554788371459Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2648] [cursor=pointer]
+            - button "🗑" [ref=f1e2649] [cursor=pointer]
+          - generic [ref=f1e2650]:
+            - checkbox [ref=f1e2651]
+            - generic [ref=f1e2652]: +554796830306Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2653] [cursor=pointer]
+            - button "🗑" [ref=f1e2654] [cursor=pointer]
+          - generic [ref=f1e2655]:
+            - checkbox [ref=f1e2656]
+            - generic [ref=f1e2657]: +554796394352Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2658] [cursor=pointer]
+            - button "🗑" [ref=f1e2659] [cursor=pointer]
+          - generic [ref=f1e2660]:
+            - checkbox [ref=f1e2661]
+            - generic [ref=f1e2662]: +554796783522Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2663] [cursor=pointer]
+            - button "🗑" [ref=f1e2664] [cursor=pointer]
+          - generic [ref=f1e2665]:
+            - checkbox [ref=f1e2666]
+            - generic [ref=f1e2667]: +554796728586Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2668] [cursor=pointer]
+            - button "🗑" [ref=f1e2669] [cursor=pointer]
+          - generic [ref=f1e2670]:
+            - checkbox [ref=f1e2671]
+            - generic [ref=f1e2672]: +555496413306Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2673] [cursor=pointer]
+            - button "🗑" [ref=f1e2674] [cursor=pointer]
+          - generic [ref=f1e2675]:
+            - checkbox [ref=f1e2676]
+            - generic [ref=f1e2677]: +554799476159Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2678] [cursor=pointer]
+            - button "🗑" [ref=f1e2679] [cursor=pointer]
+          - generic [ref=f1e2680]:
+            - checkbox [ref=f1e2681]
+            - generic [ref=f1e2682]: +554796150326Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2683] [cursor=pointer]
+            - button "🗑" [ref=f1e2684] [cursor=pointer]
+          - generic [ref=f1e2685]:
+            - checkbox [ref=f1e2686]
+            - generic [ref=f1e2687]: +554796706791Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2688] [cursor=pointer]
+            - button "🗑" [ref=f1e2689] [cursor=pointer]
+          - generic [ref=f1e2690]:
+            - checkbox [ref=f1e2691]
+            - generic [ref=f1e2692]: +554797705392Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2693] [cursor=pointer]
+            - button "🗑" [ref=f1e2694] [cursor=pointer]
+          - generic [ref=f1e2695]:
+            - checkbox [ref=f1e2696]
+            - generic [ref=f1e2697]: +554789014582Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2698] [cursor=pointer]
+            - button "🗑" [ref=f1e2699] [cursor=pointer]
+          - generic [ref=f1e2700]:
+            - checkbox [ref=f1e2701]
+            - generic [ref=f1e2702]: +554792505053Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2703] [cursor=pointer]
+            - button "🗑" [ref=f1e2704] [cursor=pointer]
+          - generic [ref=f1e2705]:
+            - checkbox [ref=f1e2706]
+            - generic [ref=f1e2707]: +554796590173Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2708] [cursor=pointer]
+            - button "🗑" [ref=f1e2709] [cursor=pointer]
+          - generic [ref=f1e2710]:
+            - checkbox [ref=f1e2711]
+            - generic [ref=f1e2712]: +554788186197Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2713] [cursor=pointer]
+            - button "🗑" [ref=f1e2714] [cursor=pointer]
+          - generic [ref=f1e2715]:
+            - checkbox [ref=f1e2716]
+            - generic [ref=f1e2717]: +55 47 93390-1079Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2718] [cursor=pointer]
+            - button "🗑" [ref=f1e2719] [cursor=pointer]
+          - generic [ref=f1e2720]:
+            - checkbox [ref=f1e2721]
+            - generic [ref=f1e2722]: +554797134551Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2723] [cursor=pointer]
+            - button "🗑" [ref=f1e2724] [cursor=pointer]
+          - generic [ref=f1e2725]:
+            - checkbox [ref=f1e2726]
+            - generic [ref=f1e2727]: +554797149681Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2728] [cursor=pointer]
+            - button "🗑" [ref=f1e2729] [cursor=pointer]
+          - generic [ref=f1e2730]:
+            - checkbox [ref=f1e2731]
+            - generic [ref=f1e2732]: +55 11 91111-1574Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2733] [cursor=pointer]
+            - button "🗑" [ref=f1e2734] [cursor=pointer]
+          - generic [ref=f1e2735]:
+            - checkbox [ref=f1e2736]
+            - generic [ref=f1e2737]: +559991282620Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2738] [cursor=pointer]
+            - button "🗑" [ref=f1e2739] [cursor=pointer]
+          - generic [ref=f1e2740]:
+            - checkbox [ref=f1e2741]
+            - generic [ref=f1e2742]: +554791134057Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2743] [cursor=pointer]
+            - button "🗑" [ref=f1e2744] [cursor=pointer]
+          - generic [ref=f1e2745]:
+            - checkbox [ref=f1e2746]
+            - generic [ref=f1e2747]: +554797389035Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2748] [cursor=pointer]
+            - button "🗑" [ref=f1e2749] [cursor=pointer]
+          - generic [ref=f1e2750]:
+            - checkbox [ref=f1e2751]
+            - generic [ref=f1e2752]: +554799876724Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2753] [cursor=pointer]
+            - button "🗑" [ref=f1e2754] [cursor=pointer]
+          - generic [ref=f1e2755]:
+            - checkbox [ref=f1e2756]
+            - generic [ref=f1e2757]: +554199092123Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2758] [cursor=pointer]
+            - button "🗑" [ref=f1e2759] [cursor=pointer]
+          - generic [ref=f1e2760]:
+            - checkbox [ref=f1e2761]
+            - generic [ref=f1e2762]: +554792445164Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2763] [cursor=pointer]
+            - button "🗑" [ref=f1e2764] [cursor=pointer]
+          - generic [ref=f1e2765]:
+            - checkbox [ref=f1e2766]
+            - generic [ref=f1e2767]: +554796554141Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2768] [cursor=pointer]
+            - button "🗑" [ref=f1e2769] [cursor=pointer]
+          - generic [ref=f1e2770]:
+            - checkbox [ref=f1e2771]
+            - generic [ref=f1e2772]: +554799696483Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2773] [cursor=pointer]
+            - button "🗑" [ref=f1e2774] [cursor=pointer]
+          - generic [ref=f1e2775]:
+            - checkbox [ref=f1e2776]
+            - generic [ref=f1e2777]: +554799708398Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2778] [cursor=pointer]
+            - button "🗑" [ref=f1e2779] [cursor=pointer]
+          - generic [ref=f1e2780]:
+            - checkbox [ref=f1e2781]
+            - generic [ref=f1e2782]: +554799293666Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2783] [cursor=pointer]
+            - button "🗑" [ref=f1e2784] [cursor=pointer]
+          - generic [ref=f1e2785]:
+            - checkbox [ref=f1e2786]
+            - generic [ref=f1e2787]: +554899964609Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2788] [cursor=pointer]
+            - button "🗑" [ref=f1e2789] [cursor=pointer]
+          - generic [ref=f1e2790]:
+            - checkbox [ref=f1e2791]
+            - generic [ref=f1e2792]: +554799559191Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2793] [cursor=pointer]
+            - button "🗑" [ref=f1e2794] [cursor=pointer]
+          - generic [ref=f1e2795]:
+            - checkbox [ref=f1e2796]
+            - generic [ref=f1e2797]: +554796063399Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2798] [cursor=pointer]
+            - button "🗑" [ref=f1e2799] [cursor=pointer]
+          - generic [ref=f1e2800]:
+            - checkbox [ref=f1e2801]
+            - generic [ref=f1e2802]: +554792730471Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2803] [cursor=pointer]
+            - button "🗑" [ref=f1e2804] [cursor=pointer]
+          - generic [ref=f1e2805]:
+            - checkbox [ref=f1e2806]
+            - generic [ref=f1e2807]: +554784727757Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2808] [cursor=pointer]
+            - button "🗑" [ref=f1e2809] [cursor=pointer]
+          - generic [ref=f1e2810]:
+            - checkbox [ref=f1e2811]
+            - generic [ref=f1e2812]: +12723701047Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2813] [cursor=pointer]
+            - button "🗑" [ref=f1e2814] [cursor=pointer]
+          - generic [ref=f1e2815]:
+            - checkbox [ref=f1e2816]
+            - generic [ref=f1e2817]: +554784224563Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2818] [cursor=pointer]
+            - button "🗑" [ref=f1e2819] [cursor=pointer]
+          - generic [ref=f1e2820]:
+            - checkbox [ref=f1e2821]
+            - generic [ref=f1e2822]: +554796234112Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2823] [cursor=pointer]
+            - button "🗑" [ref=f1e2824] [cursor=pointer]
+          - generic [ref=f1e2825]:
+            - checkbox [ref=f1e2826]
+            - generic [ref=f1e2827]: +55 11 99126-5276Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2828] [cursor=pointer]
+            - button "🗑" [ref=f1e2829] [cursor=pointer]
+          - generic [ref=f1e2830]:
+            - checkbox [ref=f1e2831]
+            - generic [ref=f1e2832]: +554796937492Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2833] [cursor=pointer]
+            - button "🗑" [ref=f1e2834] [cursor=pointer]
+          - generic [ref=f1e2835]:
+            - checkbox [ref=f1e2836]
+            - generic [ref=f1e2837]: +554796149989Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2838] [cursor=pointer]
+            - button "🗑" [ref=f1e2839] [cursor=pointer]
+          - generic [ref=f1e2840]:
+            - checkbox [ref=f1e2841]
+            - generic [ref=f1e2842]: +554791777575Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2843] [cursor=pointer]
+            - button "🗑" [ref=f1e2844] [cursor=pointer]
+          - generic [ref=f1e2845]:
+            - checkbox [ref=f1e2846]
+            - generic [ref=f1e2847]: +554799123190Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2848] [cursor=pointer]
+            - button "🗑" [ref=f1e2849] [cursor=pointer]
+          - generic [ref=f1e2850]:
+            - checkbox [ref=f1e2851]
+            - generic [ref=f1e2852]: +554792338008Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2853] [cursor=pointer]
+            - button "🗑" [ref=f1e2854] [cursor=pointer]
+          - generic [ref=f1e2855]:
+            - checkbox [ref=f1e2856]
+            - generic [ref=f1e2857]: +554799849314Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2858] [cursor=pointer]
+            - button "🗑" [ref=f1e2859] [cursor=pointer]
+          - generic [ref=f1e2860]:
+            - checkbox [ref=f1e2861]
+            - generic [ref=f1e2862]: +554799686663Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2863] [cursor=pointer]
+            - button "🗑" [ref=f1e2864] [cursor=pointer]
+          - generic [ref=f1e2865]:
+            - checkbox [ref=f1e2866]
+            - generic [ref=f1e2867]: +554388020566Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2868] [cursor=pointer]
+            - button "🗑" [ref=f1e2869] [cursor=pointer]
+          - generic [ref=f1e2870]:
+            - checkbox [ref=f1e2871]
+            - generic [ref=f1e2872]: +554991482468Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2873] [cursor=pointer]
+            - button "🗑" [ref=f1e2874] [cursor=pointer]
+          - generic [ref=f1e2875]:
+            - checkbox [ref=f1e2876]
+            - generic [ref=f1e2877]: +554799506900Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2878] [cursor=pointer]
+            - button "🗑" [ref=f1e2879] [cursor=pointer]
+          - generic [ref=f1e2880]:
+            - checkbox [ref=f1e2881]
+            - generic [ref=f1e2882]: +554796161651Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2883] [cursor=pointer]
+            - button "🗑" [ref=f1e2884] [cursor=pointer]
+          - generic [ref=f1e2885]:
+            - checkbox [ref=f1e2886]
+            - generic [ref=f1e2887]: +554796410695Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2888] [cursor=pointer]
+            - button "🗑" [ref=f1e2889] [cursor=pointer]
+          - generic [ref=f1e2890]:
+            - checkbox [ref=f1e2891]
+            - generic [ref=f1e2892]: +554799196004Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2893] [cursor=pointer]
+            - button "🗑" [ref=f1e2894] [cursor=pointer]
+          - generic [ref=f1e2895]:
+            - checkbox [ref=f1e2896]
+            - generic [ref=f1e2897]: +557193229988Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2898] [cursor=pointer]
+            - button "🗑" [ref=f1e2899] [cursor=pointer]
+          - generic [ref=f1e2900]:
+            - checkbox [ref=f1e2901]
+            - generic [ref=f1e2902]: +554788640099Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2903] [cursor=pointer]
+            - button "🗑" [ref=f1e2904] [cursor=pointer]
+          - generic [ref=f1e2905]:
+            - checkbox [ref=f1e2906]
+            - generic [ref=f1e2907]: +554792830116Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2908] [cursor=pointer]
+            - button "🗑" [ref=f1e2909] [cursor=pointer]
+          - generic [ref=f1e2910]:
+            - checkbox [ref=f1e2911]
+            - generic [ref=f1e2912]: +554799512921Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2913] [cursor=pointer]
+            - button "🗑" [ref=f1e2914] [cursor=pointer]
+          - generic [ref=f1e2915]:
+            - checkbox [ref=f1e2916]
+            - generic [ref=f1e2917]: +559281559205Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2918] [cursor=pointer]
+            - button "🗑" [ref=f1e2919] [cursor=pointer]
+          - generic [ref=f1e2920]:
+            - checkbox [ref=f1e2921]
+            - generic [ref=f1e2922]: +554989034771Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2923] [cursor=pointer]
+            - button "🗑" [ref=f1e2924] [cursor=pointer]
+          - generic [ref=f1e2925]:
+            - checkbox [ref=f1e2926]
+            - generic [ref=f1e2927]: +554799665532Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2928] [cursor=pointer]
+            - button "🗑" [ref=f1e2929] [cursor=pointer]
+          - generic [ref=f1e2930]:
+            - checkbox [ref=f1e2931]
+            - generic [ref=f1e2932]: +554789234545Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2933] [cursor=pointer]
+            - button "🗑" [ref=f1e2934] [cursor=pointer]
+          - generic [ref=f1e2935]:
+            - checkbox [ref=f1e2936]
+            - generic [ref=f1e2937]: +554796251304Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2938] [cursor=pointer]
+            - button "🗑" [ref=f1e2939] [cursor=pointer]
+          - generic [ref=f1e2940]:
+            - checkbox [ref=f1e2941]
+            - generic [ref=f1e2942]: +554784716997Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2943] [cursor=pointer]
+            - button "🗑" [ref=f1e2944] [cursor=pointer]
+          - generic [ref=f1e2945]:
+            - checkbox [ref=f1e2946]
+            - generic [ref=f1e2947]: +554799571910Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2948] [cursor=pointer]
+            - button "🗑" [ref=f1e2949] [cursor=pointer]
+          - generic [ref=f1e2950]:
+            - checkbox [ref=f1e2951]
+            - generic [ref=f1e2952]: +554784169690Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2953] [cursor=pointer]
+            - button "🗑" [ref=f1e2954] [cursor=pointer]
+          - generic [ref=f1e2955]:
+            - checkbox [ref=f1e2956]
+            - generic [ref=f1e2957]: +554799193829Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2958] [cursor=pointer]
+            - button "🗑" [ref=f1e2959] [cursor=pointer]
+          - generic [ref=f1e2960]:
+            - checkbox [ref=f1e2961]
+            - generic [ref=f1e2962]: +55 18 99690-1503Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2963] [cursor=pointer]
+            - button "🗑" [ref=f1e2964] [cursor=pointer]
+          - generic [ref=f1e2965]:
+            - checkbox [ref=f1e2966]
+            - generic [ref=f1e2967]: +554789170263Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2968] [cursor=pointer]
+            - button "🗑" [ref=f1e2969] [cursor=pointer]
+          - generic [ref=f1e2970]:
+            - checkbox [ref=f1e2971]
+            - generic [ref=f1e2972]: +554199612105Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2973] [cursor=pointer]
+            - button "🗑" [ref=f1e2974] [cursor=pointer]
+          - generic [ref=f1e2975]:
+            - checkbox [ref=f1e2976]
+            - generic [ref=f1e2977]: +554791414589Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2978] [cursor=pointer]
+            - button "🗑" [ref=f1e2979] [cursor=pointer]
+          - generic [ref=f1e2980]:
+            - checkbox [ref=f1e2981]
+            - generic [ref=f1e2982]: +554791069527Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2983] [cursor=pointer]
+            - button "🗑" [ref=f1e2984] [cursor=pointer]
+          - generic [ref=f1e2985]:
+            - checkbox [ref=f1e2986]
+            - generic [ref=f1e2987]: +554796561574Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2988] [cursor=pointer]
+            - button "🗑" [ref=f1e2989] [cursor=pointer]
+          - generic [ref=f1e2990]:
+            - checkbox [ref=f1e2991]
+            - generic [ref=f1e2992]: +554791254256Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2993] [cursor=pointer]
+            - button "🗑" [ref=f1e2994] [cursor=pointer]
+          - generic [ref=f1e2995]:
+            - checkbox [ref=f1e2996]
+            - generic [ref=f1e2997]: +554734337809Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e2998] [cursor=pointer]
+            - button "🗑" [ref=f1e2999] [cursor=pointer]
+          - generic [ref=f1e3000]:
+            - checkbox [ref=f1e3001]
+            - generic [ref=f1e3002]: +554796002965Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3003] [cursor=pointer]
+            - button "🗑" [ref=f1e3004] [cursor=pointer]
+          - generic [ref=f1e3005]:
+            - checkbox [ref=f1e3006]
+            - generic [ref=f1e3007]: +554792509788Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3008] [cursor=pointer]
+            - button "🗑" [ref=f1e3009] [cursor=pointer]
+          - generic [ref=f1e3010]:
+            - checkbox [ref=f1e3011]
+            - generic [ref=f1e3012]: +554192191333Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3013] [cursor=pointer]
+            - button "🗑" [ref=f1e3014] [cursor=pointer]
+          - generic [ref=f1e3015]:
+            - checkbox [ref=f1e3016]
+            - generic [ref=f1e3017]: +554784052942Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3018] [cursor=pointer]
+            - button "🗑" [ref=f1e3019] [cursor=pointer]
+          - generic [ref=f1e3020]:
+            - checkbox [ref=f1e3021]
+            - generic [ref=f1e3022]: +554899869928Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3023] [cursor=pointer]
+            - button "🗑" [ref=f1e3024] [cursor=pointer]
+          - generic [ref=f1e3025]:
+            - checkbox [ref=f1e3026]
+            - generic [ref=f1e3027]: +554788442683Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3028] [cursor=pointer]
+            - button "🗑" [ref=f1e3029] [cursor=pointer]
+          - generic [ref=f1e3030]:
+            - checkbox [ref=f1e3031]
+            - generic [ref=f1e3032]: +554788112367Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3033] [cursor=pointer]
+            - button "🗑" [ref=f1e3034] [cursor=pointer]
+          - generic [ref=f1e3035]:
+            - checkbox [ref=f1e3036]
+            - generic [ref=f1e3037]: +559691790624Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3038] [cursor=pointer]
+            - button "🗑" [ref=f1e3039] [cursor=pointer]
+          - generic [ref=f1e3040]:
+            - checkbox [ref=f1e3041]
+            - generic [ref=f1e3042]: +55 11 94142-2155Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3043] [cursor=pointer]
+            - button "🗑" [ref=f1e3044] [cursor=pointer]
+          - generic [ref=f1e3045]:
+            - checkbox [ref=f1e3046]
+            - generic [ref=f1e3047]: +554796842333Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3048] [cursor=pointer]
+            - button "🗑" [ref=f1e3049] [cursor=pointer]
+          - generic [ref=f1e3050]:
+            - checkbox [ref=f1e3051]
+            - generic [ref=f1e3052]: +554799122341Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3053] [cursor=pointer]
+            - button "🗑" [ref=f1e3054] [cursor=pointer]
+          - generic [ref=f1e3055]:
+            - checkbox [ref=f1e3056]
+            - generic [ref=f1e3057]: +554891283828Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3058] [cursor=pointer]
+            - button "🗑" [ref=f1e3059] [cursor=pointer]
+          - generic [ref=f1e3060]:
+            - checkbox [ref=f1e3061]
+            - generic [ref=f1e3062]: +554789193460Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3063] [cursor=pointer]
+            - button "🗑" [ref=f1e3064] [cursor=pointer]
+          - generic [ref=f1e3065]:
+            - checkbox [ref=f1e3066]
+            - generic [ref=f1e3067]: +554792790913Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3068] [cursor=pointer]
+            - button "🗑" [ref=f1e3069] [cursor=pointer]
+          - generic [ref=f1e3070]:
+            - checkbox [ref=f1e3071]
+            - generic [ref=f1e3072]: +554796365252Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3073] [cursor=pointer]
+            - button "🗑" [ref=f1e3074] [cursor=pointer]
+          - generic [ref=f1e3075]:
+            - checkbox [ref=f1e3076]
+            - generic [ref=f1e3077]: +554799791030Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3078] [cursor=pointer]
+            - button "🗑" [ref=f1e3079] [cursor=pointer]
+          - generic [ref=f1e3080]:
+            - checkbox [ref=f1e3081]
+            - generic [ref=f1e3082]: +553598859908Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3083] [cursor=pointer]
+            - button "🗑" [ref=f1e3084] [cursor=pointer]
+          - generic [ref=f1e3085]:
+            - checkbox [ref=f1e3086]
+            - generic [ref=f1e3087]: +554784804891Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3088] [cursor=pointer]
+            - button "🗑" [ref=f1e3089] [cursor=pointer]
+          - generic [ref=f1e3090]:
+            - checkbox [ref=f1e3091]
+            - generic [ref=f1e3092]: +554796626774Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3093] [cursor=pointer]
+            - button "🗑" [ref=f1e3094] [cursor=pointer]
+          - generic [ref=f1e3095]:
+            - checkbox [ref=f1e3096]
+            - generic [ref=f1e3097]: +554789156807Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3098] [cursor=pointer]
+            - button "🗑" [ref=f1e3099] [cursor=pointer]
+          - generic [ref=f1e3100]:
+            - checkbox [ref=f1e3101]
+            - generic [ref=f1e3102]: +554799874850Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3103] [cursor=pointer]
+            - button "🗑" [ref=f1e3104] [cursor=pointer]
+          - generic [ref=f1e3105]:
+            - checkbox [ref=f1e3106]
+            - generic [ref=f1e3107]: +554791090770Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3108] [cursor=pointer]
+            - button "🗑" [ref=f1e3109] [cursor=pointer]
+          - generic [ref=f1e3110]:
+            - checkbox [ref=f1e3111]
+            - generic [ref=f1e3112]: +554799826036Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3113] [cursor=pointer]
+            - button "🗑" [ref=f1e3114] [cursor=pointer]
+          - generic [ref=f1e3115]:
+            - checkbox [ref=f1e3116]
+            - generic [ref=f1e3117]: +55 14 99864-9637Comunidade Morar-EUA - Joinville
+            - button "✏️" [ref=f1e3118] [cursor=pointer]
+            - button "🗑" [ref=f1e3119] [cursor=pointer]
+          - generic [ref=f1e3120]:
+            - checkbox [ref=f1e3121]
+            - generic [ref=f1e3122]: "+553597608176Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3123] [cursor=pointer]
+            - button "🗑" [ref=f1e3124] [cursor=pointer]
+          - generic [ref=f1e3125]:
+            - checkbox [ref=f1e3126]
+            - generic [ref=f1e3127]: "+55 11 96316-5284Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3128] [cursor=pointer]
+            - button "🗑" [ref=f1e3129] [cursor=pointer]
+          - generic [ref=f1e3130]:
+            - checkbox [ref=f1e3131]
+            - generic [ref=f1e3132]: "+559881023216Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3133] [cursor=pointer]
+            - button "🗑" [ref=f1e3134] [cursor=pointer]
+          - generic [ref=f1e3135]:
+            - checkbox [ref=f1e3136]
+            - generic [ref=f1e3137]: "+55 13 98196-4154Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3138] [cursor=pointer]
+            - button "🗑" [ref=f1e3139] [cursor=pointer]
+          - generic [ref=f1e3140]:
+            - checkbox [ref=f1e3141]
+            - generic [ref=f1e3142]: "+558585072325Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3143] [cursor=pointer]
+            - button "🗑" [ref=f1e3144] [cursor=pointer]
+          - generic [ref=f1e3145]:
+            - checkbox [ref=f1e3146]
+            - generic [ref=f1e3147]: "+55 11 96424-3909Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3148] [cursor=pointer]
+            - button "🗑" [ref=f1e3149] [cursor=pointer]
+          - generic [ref=f1e3150]:
+            - checkbox [ref=f1e3151]
+            - generic [ref=f1e3152]: "+553192023829Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3153] [cursor=pointer]
+            - button "🗑" [ref=f1e3154] [cursor=pointer]
+          - generic [ref=f1e3155]:
+            - checkbox [ref=f1e3156]
+            - generic [ref=f1e3157]: "+555198195183Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3158] [cursor=pointer]
+            - button "🗑" [ref=f1e3159] [cursor=pointer]
+          - generic [ref=f1e3160]:
+            - checkbox [ref=f1e3161]
+            - generic [ref=f1e3162]: "+553588541383Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3163] [cursor=pointer]
+            - button "🗑" [ref=f1e3164] [cursor=pointer]
+          - generic [ref=f1e3165]:
+            - checkbox [ref=f1e3166]
+            - generic [ref=f1e3167]: "+55 28 99904-8675Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3168] [cursor=pointer]
+            - button "🗑" [ref=f1e3169] [cursor=pointer]
+          - generic [ref=f1e3170]:
+            - checkbox [ref=f1e3171]
+            - generic [ref=f1e3172]: "+55 21 98995-3111Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3173] [cursor=pointer]
+            - button "🗑" [ref=f1e3174] [cursor=pointer]
+          - generic [ref=f1e3175]:
+            - checkbox [ref=f1e3176]
+            - generic [ref=f1e3177]: "+559884590411Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3178] [cursor=pointer]
+            - button "🗑" [ref=f1e3179] [cursor=pointer]
+          - generic [ref=f1e3180]:
+            - checkbox [ref=f1e3181]
+            - generic [ref=f1e3182]: "+558188579070Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3183] [cursor=pointer]
+            - button "🗑" [ref=f1e3184] [cursor=pointer]
+          - generic [ref=f1e3185]:
+            - checkbox [ref=f1e3186]
+            - generic [ref=f1e3187]: "+55 16 99992-6303Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3188] [cursor=pointer]
+            - button "🗑" [ref=f1e3189] [cursor=pointer]
+          - generic [ref=f1e3190]:
+            - checkbox [ref=f1e3191]
+            - generic [ref=f1e3192]: "+55 22 98178-0754Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3193] [cursor=pointer]
+            - button "🗑" [ref=f1e3194] [cursor=pointer]
+          - generic [ref=f1e3195]:
+            - checkbox [ref=f1e3196]
+            - generic [ref=f1e3197]: "+557187021130Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3198] [cursor=pointer]
+            - button "🗑" [ref=f1e3199] [cursor=pointer]
+          - generic [ref=f1e3200]:
+            - checkbox [ref=f1e3201]
+            - generic [ref=f1e3202]: "+59892578257Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3203] [cursor=pointer]
+            - button "🗑" [ref=f1e3204] [cursor=pointer]
+          - generic [ref=f1e3205]:
+            - checkbox [ref=f1e3206]
+            - generic [ref=f1e3207]: "+558788387188Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3208] [cursor=pointer]
+            - button "🗑" [ref=f1e3209] [cursor=pointer]
+          - generic [ref=f1e3210]:
+            - checkbox [ref=f1e3211]
+            - generic [ref=f1e3212]: "+555192005442Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3213] [cursor=pointer]
+            - button "🗑" [ref=f1e3214] [cursor=pointer]
+          - generic [ref=f1e3215]:
+            - checkbox [ref=f1e3216]
+            - generic [ref=f1e3217]: "+553195898009Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3218] [cursor=pointer]
+            - button "🗑" [ref=f1e3219] [cursor=pointer]
+          - generic [ref=f1e3220]:
+            - checkbox [ref=f1e3221]
+            - generic [ref=f1e3222]: "+559185481614Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3223] [cursor=pointer]
+            - button "🗑" [ref=f1e3224] [cursor=pointer]
+          - generic [ref=f1e3225]:
+            - checkbox [ref=f1e3226]
+            - generic [ref=f1e3227]: "+554199010333Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3228] [cursor=pointer]
+            - button "🗑" [ref=f1e3229] [cursor=pointer]
+          - generic [ref=f1e3230]:
+            - checkbox [ref=f1e3231]
+            - generic [ref=f1e3232]: "+558486246150Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3233] [cursor=pointer]
+            - button "🗑" [ref=f1e3234] [cursor=pointer]
+          - generic [ref=f1e3235]:
+            - checkbox [ref=f1e3236]
+            - generic [ref=f1e3237]: "+554391316873Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3238] [cursor=pointer]
+            - button "🗑" [ref=f1e3239] [cursor=pointer]
+          - generic [ref=f1e3240]:
+            - checkbox [ref=f1e3241]
+            - generic [ref=f1e3242]: "+555599523512Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3243] [cursor=pointer]
+            - button "🗑" [ref=f1e3244] [cursor=pointer]
+          - generic [ref=f1e3245]:
+            - checkbox [ref=f1e3246]
+            - generic [ref=f1e3247]: "+554199292693Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3248] [cursor=pointer]
+            - button "🗑" [ref=f1e3249] [cursor=pointer]
+          - generic [ref=f1e3250]:
+            - checkbox [ref=f1e3251]
+            - generic [ref=f1e3252]: "+55 16 99395-1918Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3253] [cursor=pointer]
+            - button "🗑" [ref=f1e3254] [cursor=pointer]
+          - generic [ref=f1e3255]:
+            - checkbox [ref=f1e3256]
+            - generic [ref=f1e3257]: "+554174035604Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3258] [cursor=pointer]
+            - button "🗑" [ref=f1e3259] [cursor=pointer]
+          - generic [ref=f1e3260]:
+            - checkbox [ref=f1e3261]
+            - generic [ref=f1e3262]: "+553193436623Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3263] [cursor=pointer]
+            - button "🗑" [ref=f1e3264] [cursor=pointer]
+          - generic [ref=f1e3265]:
+            - checkbox [ref=f1e3266]
+            - generic [ref=f1e3267]: "+553591517883Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3268] [cursor=pointer]
+            - button "🗑" [ref=f1e3269] [cursor=pointer]
+          - generic [ref=f1e3270]:
+            - checkbox [ref=f1e3271]
+            - generic [ref=f1e3272]: "+557197111220Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3273] [cursor=pointer]
+            - button "🗑" [ref=f1e3274] [cursor=pointer]
+          - generic [ref=f1e3275]:
+            - checkbox [ref=f1e3276]
+            - generic [ref=f1e3277]: "+55 11 94730-7096Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3278] [cursor=pointer]
+            - button "🗑" [ref=f1e3279] [cursor=pointer]
+          - generic [ref=f1e3280]:
+            - checkbox [ref=f1e3281]
+            - generic [ref=f1e3282]: "+55 18 99623-3041Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3283] [cursor=pointer]
+            - button "🗑" [ref=f1e3284] [cursor=pointer]
+          - generic [ref=f1e3285]:
+            - checkbox [ref=f1e3286]
+            - generic [ref=f1e3287]: "+55 11 93760-2735Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3288] [cursor=pointer]
+            - button "🗑" [ref=f1e3289] [cursor=pointer]
+          - generic [ref=f1e3290]:
+            - checkbox [ref=f1e3291]
+            - generic [ref=f1e3292]: "+556584176354Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3293] [cursor=pointer]
+            - button "🗑" [ref=f1e3294] [cursor=pointer]
+          - generic [ref=f1e3295]:
+            - checkbox [ref=f1e3296]
+            - generic [ref=f1e3297]: "+554399950761Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3298] [cursor=pointer]
+            - button "🗑" [ref=f1e3299] [cursor=pointer]
+          - generic [ref=f1e3300]:
+            - checkbox [ref=f1e3301]
+            - generic [ref=f1e3302]: "+55 15 99840-0847Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3303] [cursor=pointer]
+            - button "🗑" [ref=f1e3304] [cursor=pointer]
+          - generic [ref=f1e3305]:
+            - checkbox [ref=f1e3306]
+            - generic [ref=f1e3307]: "+554497380500Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3308] [cursor=pointer]
+            - button "🗑" [ref=f1e3309] [cursor=pointer]
+          - generic [ref=f1e3310]:
+            - checkbox [ref=f1e3311]
+            - generic [ref=f1e3312]: "+556293938183Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3313] [cursor=pointer]
+            - button "🗑" [ref=f1e3314] [cursor=pointer]
+          - generic [ref=f1e3315]:
+            - checkbox [ref=f1e3316]
+            - generic [ref=f1e3317]: "+556492586338Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3318] [cursor=pointer]
+            - button "🗑" [ref=f1e3319] [cursor=pointer]
+          - generic [ref=f1e3320]:
+            - checkbox [ref=f1e3321]
+            - generic [ref=f1e3322]: "+559284296875Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3323] [cursor=pointer]
+            - button "🗑" [ref=f1e3324] [cursor=pointer]
+          - generic [ref=f1e3325]:
+            - checkbox [ref=f1e3326]
+            - generic [ref=f1e3327]: "+55 28 99915-9207Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3328] [cursor=pointer]
+            - button "🗑" [ref=f1e3329] [cursor=pointer]
+          - generic [ref=f1e3330]:
+            - checkbox [ref=f1e3331]
+            - generic [ref=f1e3332]: "+554598186319Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3333] [cursor=pointer]
+            - button "🗑" [ref=f1e3334] [cursor=pointer]
+          - generic [ref=f1e3335]:
+            - checkbox [ref=f1e3336]
+            - generic [ref=f1e3337]: "+55 11 98614-9131Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3338] [cursor=pointer]
+            - button "🗑" [ref=f1e3339] [cursor=pointer]
+          - generic [ref=f1e3340]:
+            - checkbox [ref=f1e3341]
+            - generic [ref=f1e3342]: "+556484247726Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3343] [cursor=pointer]
+            - button "🗑" [ref=f1e3344] [cursor=pointer]
+          - generic [ref=f1e3345]:
+            - checkbox [ref=f1e3346]
+            - generic [ref=f1e3347]: "+556399426825Reunião Secreta 11/02 #1"
+            - button "✏️" [ref=f1e3348] [cursor=pointer]
+            - button "🗑" [ref=f1e3349] [cursor=pointer]
+        - generic [ref=f1e1767]: nenhuma lista salva
+        - generic [ref=f1e1768]:
+          - generic [ref=f1e1769]: ✉️ Propaganda para a seleção
+          - textbox "Texto da propaganda (pode colar o link no meio)…" [ref=f1e1770]
+          - textbox "URL da imagem (opcional)" [ref=f1e1771]
+          - generic [ref=f1e1772]:
+            - button "🚀 Disparar" [ref=f1e1773] [cursor=pointer]
+            - button "🗑 Cancelar fila" [ref=f1e1774] [cursor=pointer]
+            - generic [ref=f1e1775]: "fila: 0 pendente(s) · enviados: 0 · 1 a cada 60s"

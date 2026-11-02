@@ -14,6 +14,8 @@ import { enviarParaGrupo, ehErroTransitorio } from "../wa/dispatch.js";
 import { registrarPublicacao } from "../store/publicacoes.js";
 import { carregarMonitor } from "./grupos.js";
 import { limparMidiaAntiga } from "./midia.js";
+import { extrairPrecos } from "./produto.js";
+import { extrairTitulo } from "./titulo.js";
 import { registrarEvento } from "./state.js";
 import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico, lerJson } from "../store/json.js";
@@ -27,6 +29,10 @@ export interface ItemFila {
   idProduto: string | null;
   link: string;
   mensagem: string;
+  /** título do produto postado (para o rastreio; `null` = extrai do corpo) */
+  titulo?: string | null;
+  /** categoria/programa do Alcance (no rastreio; ausente = usa o programa) */
+  categoria?: string | null;
   imagem: string;
   /** de onde veio a foto (ex.: "foto da origem" / "foto do anúncio") */
   fonte?: string;
@@ -150,6 +156,15 @@ export function ehRajada(origem: string, agora = Date.now()): boolean {
  * Falha transitória reenfileira o destino que falhou + os ainda não tentados
  * (sem duplicar os que já receberam). Falha permanente segue para o próximo.
  */
+/** Programa interno (`mercadolivre`) → rótulo do rastreio (`ml`). */
+const PROGRAMA_PUB: Record<string, "ml" | "shopee" | "amazon" | "kabum" | "desconhecido"> = {
+  mercadolivre: "ml",
+  ml: "ml",
+  shopee: "shopee",
+  amazon: "amazon",
+  kabum: "kabum",
+};
+
 export async function entregarItem(
   item: ItemFila
 ): Promise<{ jid: string; messageId: string }[]> {
@@ -176,16 +191,17 @@ export async function entregarItem(
       // painel de comissão do programa.
       if (!dry) {
         try {
+          const programa = PROGRAMA_PUB[item.programa] ?? "desconhecido";
           registrarPublicacao({
             em: new Date().toISOString(),
-            programa: (item.programa === "shopee" || item.programa === "amazon" || item.programa === "kabum"
-              ? item.programa
-              : "desconhecido") as "shopee" | "amazon" | "kabum" | "desconhecido",
-            categoria: item.origem,
+            programa,
+            categoria: item.categoria ?? programa,
             grupo: jid,
             id: item.idProduto ?? "",
-            titulo: "",
-            preco: 0,
+            // Título do produto postado (como no piloto). Itens antigos da fila,
+            // gravados antes deste campo existir, têm o título extraído do corpo.
+            titulo: item.titulo?.trim() || extrairTitulo(item.mensagem) || "",
+            preco: extrairPrecos(item.mensagem).precoAtual ?? 0,
             link: item.link,
             tag: item.link.includes("tag=") ? item.link.split("tag=")[1].split("&")[0] : undefined,
             via: "monitor",

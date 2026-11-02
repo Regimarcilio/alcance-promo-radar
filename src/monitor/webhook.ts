@@ -8,6 +8,7 @@ import { detectar, rotulo, limparTexto, type OfertaDetectada } from "./parser.js
 import { expandirLink } from "./curtos.js";
 import { transformar } from "./transformer.js";
 import { extrairPrecos } from "./produto.js";
+import { extrairTitulo } from "./titulo.js";
 import { salvarMidia } from "./midia.js";
 import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { registrarOfertaDeGrupo } from "./grupos-vistos.js";
@@ -222,6 +223,9 @@ export async function processar(
     idProduto: idEfetivo,
     link: tr.url,
     mensagem: corpo,
+    // Rastreio: título do anúncio (og:title) ou, sem isso, o título postado.
+    titulo: tr.produto?.titulo?.trim() || extrairTitulo(msg.texto) || null,
+    categoria: null,
     imagem: foto,
     fonte: fonteFoto,
     destinos: destinos.map((d) => d.jid),

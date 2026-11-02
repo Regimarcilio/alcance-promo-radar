@@ -1762,3 +1762,32 @@ vazio desde 09:58.
   marca instância ruim e o serviço usa fallback.
 - Watchdog: o zumbi da 3ga só foi detectado testando o grupo. Vale um alerta quando
   `fetchAllGroups` falhar 3x seguidas.
+
+---
+
+## 2026-11-01 | RASTREIO-TITULO-01 | planmaster | Rastreio do monitor com título do produto
+
+**Demanda**: no Rastreio, as publicações do monitor apareciam só como código
+(`MLB5864818802`); o piloto já mostrava o título. Igualar.
+
+**Causa**: `src/monitor/fila.ts` gravava `titulo: ""` e `preco: 0` em
+`registrarPublicacao()`; a tela já fazia `p.titulo || p.id`, então sem título caía no código.
+Dois defeitos vizinhos no mesmo bloco: `programa` de ML virava `desconhecido` e
+`categoria` recebia o **JID** do grupo de origem (`120363...@g.us`).
+
+**Implementação**
+- `src/monitor/titulo.ts` (+ `titulo.test.ts`, 6 testes): `extrairTitulo()` pega a
+  linha útil do post (remove link, markdown, emoji, preço, CTA e código puro; corta em
+  120 chars; devolve `null` sem confiança).
+- `webhook.ts`: `ItemFila.titulo = tr.produto?.titulo ?? extrairTitulo(msg.texto)`
+  (og:title do anúncio quando o transformer resolve; senão o título postado).
+- `fila.ts`: grava `titulo` (com fallback no corpo para itens antigos da fila),
+  `preco` via `extrairPrecos(item.mensagem)`, `programa` mapeado
+  `mercadolivre→ml` e `categoria = programa` (fim do JID).
+- Protótipo antes/depois em `docs/prototipos/rastreio-titulo/`.
+
+**Validação**: `npm test` **170/170**; build limpo.
+
+**Limite conhecido**: as ~4.799 publicações antigas já gravadas não têm o texto
+guardado, então não há como recuperar o título — só as novas (e as 16 da fila, na
+entrega) passam a ter.

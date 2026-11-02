@@ -1,0 +1,1014 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - link "Alcance — ir para o monitor" [ref=f1e4] [cursor=pointer]:
+      - /url: "#/monitor"
+      - generic [ref=f1e5]: A
+      - heading "Alcance" [level=1] [ref=f1e7]
+    - navigation "Navegação principal" [ref=f1e8]:
+      - link "Contas" [ref=f1e9] [cursor=pointer]:
+        - /url: "#/contas"
+      - link "Cupons" [ref=f1e17] [cursor=pointer]:
+        - /url: "#/cupons"
+      - link "Piloto" [ref=f1e25] [cursor=pointer]:
+        - /url: "#/piloto"
+      - link "Monitor" [ref=f1e34] [cursor=pointer]:
+        - /url: "#/monitor"
+      - link "Números" [ref=f1e44] [cursor=pointer]:
+        - /url: "#/numeros"
+      - link "Rastreio" [ref=f1e52] [cursor=pointer]:
+        - /url: "#/rastreio"
+      - link "Clientes" [ref=f1e60] [cursor=pointer]:
+        - /url: "#/clientes"
+  - main [ref=f1e69]:
+    - generic [ref=f1e70]:
+      - generic [ref=f1e71]:
+        - generic [ref=f1e72]: crescimento
+        - heading "Clientes" [level=2] [ref=f1e160]
+        - generic [ref=f1e74]: Contatos dos grupos + disparo individual com fila anti-bloqueio.
+      - generic [ref=f1e75]:
+        - group [ref=f1e76]:
+          - generic "Verde" [ref=f1e77] [cursor=pointer]
+          - text: ✓
+        - generic [ref=f1e82]: ● monitor · 13 na fila
+        - button "Sair" [ref=f1e83] [cursor=pointer]
+    - generic [ref=f1e161]:
+      - generic [ref=f1e162]:
+        - generic [ref=f1e163]:
+          - generic [ref=f1e164]: "7948"
+          - text: contatos
+        - generic [ref=f1e165]:
+          - generic [ref=f1e166]: "0"
+          - text: listas
+        - generic [ref=f1e167]:
+          - generic [ref=f1e168]: "0"
+          - text: fila de envio
+      - generic [ref=f1e169]:
+        - generic [ref=f1e170]:
+          - generic [ref=f1e171]: 👥 Clientes
+          - link "✏️ renomear" [ref=f1e172] [cursor=pointer]:
+            - /url: "#"
+        - generic [ref=f1e173]: Contatos puxados dos grupos do seu celular + cadastro manual. Selecione e dispare uma propaganda individual (não é grupo). A fila envia 1 por vez para não parecer robô.
+        - generic [ref=f1e174]:
+          - button "🔄 Puxar contatos dos grupos" [ref=f1e175] [cursor=pointer]
+          - generic [ref=f1e176]: "último sync: 26/10/2026, 04:02:23 · 7948 contatos"
+        - generic [ref=f1e177]:
+          - 'textbox "nome (ex.: João)" [ref=f1e178]'
+          - textbox "telefone com DDD" [ref=f1e179]
+          - button "➕ Contato" [ref=f1e180] [cursor=pointer]
+        - generic [ref=f1e181]:
+          - combobox [active] [ref=f1e182]:
+            - option "👥 Todos os grupos (7948)"
+            - 'option "📍 #003 Imersão Todos os caminhos levam a américa"'
+            - 'option "📍 #18 Python - Lira da Hashtag"'
+            - 'option "📍 #55 Emipe Promoções Tech 💜⚡"'
+            - option "📍 🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration"
+            - option "📍 A Promessa da Pizza do Luciano 🍕"
+            - option "📍 Ação Solidária em para Remédios do Thor"
+            - option "📍 Aluno e professor"
+            - option "📍 Cedup - Banco de Dados"
+            - option "📍 Clube dos Achadinhos🛍️🛍️" [selected]
+            - option "📍 Comunidade Morar-EUA - Joinville"
+            - option "📍 Edições de vídeos e fotos"
+            - option "📍 Eucurso 25A"
+            - option "📍 Grupo Acólitos"
+            - option "📍 Grupo Favorita - Distribuidor Rafael Lenger"
+            - option "📍 Henrique 3 Semana - São Bento Do Sul II"
+            - 'option "📍 Herói do Perfume #242"'
+            - option "📍 Introdução à Computação 👩‍💻👨‍💻"
+            - 'option "📍 Leleco Tech Ofertas e Cupons #4"'
+            - option "📍 LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPUTAÇÃO."
+            - option "📍 Mano dos Achadinhos"
+            - option "📍 Maternal ll C Peter Pan"
+            - option "📍 MBX - Tech SC"
+            - option "📍 MBX | Data Science & Tecnologia 1"
+            - 'option "📍 Perfomance Lab #76"'
+            - 'option "📍 Poison Promos Club #5"'
+            - 'option "📍 Promoção Bruta Oficial #01"'
+            - option "📍 PROMOS DE BROTHER 470"
+            - 'option "📍 RADAR DAS PROMOS #24"'
+            - option "📍 Radar Teste"
+            - option "📍 RAINHA das PROMO"
+            - 'option "📍 Reunião Secreta 11/02 #1"'
+            - option "📍 Romance/Favorita Setor 3 - São Bento do Sul"
+            - option "📍 Royal Masculine | 1"
+            - option "📍 TÉCNICO INFORMÁTICA - CEDUP - 4INFO3"
+            - option "📍 Turma 134494 EJA - Ciências da Natureza Professora Alessandra"
+            - 'option "📍 Vasculha 🔎 Ofertas #23"'
+          - textbox "buscar por nome ou telefone" [ref=f1e183]
+          - generic [ref=f1e184]: 0 sel. · 165 contato(s)
+        - generic [ref=f1e185]:
+          - button "☑ Todos" [ref=f1e186] [cursor=pointer]
+          - button "☐ Limpar" [ref=f1e187] [cursor=pointer]
+          - button "💾 Salvar selecionados como lista" [ref=f1e188] [cursor=pointer]
+        - generic [ref=f1e189]:
+          - generic [ref=f1e190]: 📋 Tarefas pendentes de adição ao grupo
+          - generic [ref=f1e191]:
+            - generic [ref=f1e8072]:
+              - generic [ref=f1e8073]:
+                - generic [ref=f1e8074]: Teste adição grupo
+                - generic [ref=f1e8075]: CONCLUÍDA
+                - generic [ref=f1e8076]: "criada: 26/10/2026, 02:35:26"
+                - generic [ref=f1e8077]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8078]: 2 contato(s)
+                - generic [ref=f1e8079]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e8080]:
+                - generic [ref=f1e8081]: concluída
+                - button "👁 Ver" [ref=f1e8082] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8083] [cursor=pointer]
+            - generic [ref=f1e8084]:
+              - generic [ref=f1e8085]:
+                - generic [ref=f1e8086]: Teste persistência
+                - generic [ref=f1e8087]: PENDENTE
+                - generic [ref=f1e8088]: "criada: 26/10/2026, 02:54:57"
+                - generic [ref=f1e8089]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8090]: 2 contato(s)
+                - generic [ref=f1e8091]: ✓0 · 👥0 · ❌0
+              - generic [ref=f1e8092]:
+                - button "✔ Confirmar" [ref=f1e8093] [cursor=pointer]
+                - button "📅 Agendar" [ref=f1e8094] [cursor=pointer]
+                - button "👁 Ver" [ref=f1e8095] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8096] [cursor=pointer]
+            - generic [ref=f1e8097]:
+              - generic [ref=f1e8098]:
+                - generic [ref=f1e8099]: Teste persistência v2
+                - generic [ref=f1e8100]: PENDENTE
+                - generic [ref=f1e8101]: "criada: 26/10/2026, 03:02:03"
+                - generic [ref=f1e8102]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8103]: 2 contato(s)
+                - generic [ref=f1e8104]: ✓0 · 👥0 · ❌0
+              - generic [ref=f1e8105]:
+                - button "✔ Confirmar" [ref=f1e8106] [cursor=pointer]
+                - button "📅 Agendar" [ref=f1e8107] [cursor=pointer]
+                - button "👁 Ver" [ref=f1e8108] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8109] [cursor=pointer]
+            - generic [ref=f1e8110]:
+              - generic [ref=f1e8111]:
+                - generic [ref=f1e8112]: Teste persistência v3
+                - generic [ref=f1e8113]: CONCLUÍDA
+                - generic [ref=f1e8114]: "criada: 26/10/2026, 03:10:24"
+                - generic [ref=f1e8115]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8116]: 2 contato(s)
+                - generic [ref=f1e8117]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e8118]:
+                - generic [ref=f1e8119]: concluída
+                - button "👁 Ver" [ref=f1e8120] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8121] [cursor=pointer]
+            - generic [ref=f1e8122]:
+              - generic [ref=f1e8123]:
+                - generic [ref=f1e8124]: Teste UI flow
+                - generic [ref=f1e8125]: CONCLUÍDA
+                - generic [ref=f1e8126]: "criada: 26/10/2026, 03:46:31"
+                - generic [ref=f1e8127]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8128]: 2 contato(s)
+                - generic [ref=f1e8129]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e8130]:
+                - generic [ref=f1e8131]: concluída
+                - button "👁 Ver" [ref=f1e8132] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8133] [cursor=pointer]
+            - generic [ref=f1e8134]:
+              - generic [ref=f1e8135]:
+                - generic [ref=f1e8136]: Teste Acompanhar
+                - generic [ref=f1e8137]: CONCLUÍDA
+                - generic [ref=f1e8138]: "criada: 26/10/2026, 03:49:11"
+                - generic [ref=f1e8139]: "grupo: 120363429892871960@g…"
+                - generic [ref=f1e8140]: 2 contato(s)
+                - generic [ref=f1e8141]: ✓0 · 👥0 · ❌2
+              - generic [ref=f1e8142]:
+                - generic [ref=f1e8143]: concluída
+                - button "👁 Ver" [ref=f1e8144] [cursor=pointer]
+                - button "🗑 Excluir" [ref=f1e8145] [cursor=pointer]
+        - generic [ref=f1e266]:
+          - generic [ref=f1e8146]:
+            - checkbox [ref=f1e8147]
+            - generic [ref=f1e8148]: +556391375342Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8149] [cursor=pointer]
+            - button "🗑" [ref=f1e8150] [cursor=pointer]
+          - generic [ref=f1e8151]:
+            - checkbox [ref=f1e8152]
+            - generic [ref=f1e8153]: +556299534841Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8154] [cursor=pointer]
+            - button "🗑" [ref=f1e8155] [cursor=pointer]
+          - generic [ref=f1e8156]:
+            - checkbox [ref=f1e8157]
+            - generic [ref=f1e8158]: +55 11 98519-8704Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8159] [cursor=pointer]
+            - button "🗑" [ref=f1e8160] [cursor=pointer]
+          - generic [ref=f1e8161]:
+            - checkbox [ref=f1e8162]
+            - generic [ref=f1e8163]: +55 22 98819-0254Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8164] [cursor=pointer]
+            - button "🗑" [ref=f1e8165] [cursor=pointer]
+          - generic [ref=f1e8166]:
+            - checkbox [ref=f1e8167]
+            - generic [ref=f1e8168]: +55 16 99746-8167Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8169] [cursor=pointer]
+            - button "🗑" [ref=f1e8170] [cursor=pointer]
+          - generic [ref=f1e8171]:
+            - checkbox [ref=f1e8172]
+            - generic [ref=f1e8173]: +556699941954Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8174] [cursor=pointer]
+            - button "🗑" [ref=f1e8175] [cursor=pointer]
+          - generic [ref=f1e8176]:
+            - checkbox [ref=f1e8177]
+            - generic [ref=f1e8178]: +554497233454Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8179] [cursor=pointer]
+            - button "🗑" [ref=f1e8180] [cursor=pointer]
+          - generic [ref=f1e8181]:
+            - checkbox [ref=f1e8182]
+            - generic [ref=f1e8183]: +553591325858Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8184] [cursor=pointer]
+            - button "🗑" [ref=f1e8185] [cursor=pointer]
+          - generic [ref=f1e8186]:
+            - checkbox [ref=f1e8187]
+            - generic [ref=f1e8188]: +55 11 96508-6788Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8189] [cursor=pointer]
+            - button "🗑" [ref=f1e8190] [cursor=pointer]
+          - generic [ref=f1e8191]:
+            - checkbox [ref=f1e8192]
+            - generic [ref=f1e8193]: +556596035087Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8194] [cursor=pointer]
+            - button "🗑" [ref=f1e8195] [cursor=pointer]
+          - generic [ref=f1e8196]:
+            - checkbox [ref=f1e8197]
+            - generic [ref=f1e8198]: +559184576459Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8199] [cursor=pointer]
+            - button "🗑" [ref=f1e8200] [cursor=pointer]
+          - generic [ref=f1e8201]:
+            - checkbox [ref=f1e8202]
+            - generic [ref=f1e8203]: +553298582909Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8204] [cursor=pointer]
+            - button "🗑" [ref=f1e8205] [cursor=pointer]
+          - generic [ref=f1e8206]:
+            - checkbox [ref=f1e8207]
+            - generic [ref=f1e8208]: +558499670626Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8209] [cursor=pointer]
+            - button "🗑" [ref=f1e8210] [cursor=pointer]
+          - generic [ref=f1e8211]:
+            - checkbox [ref=f1e8212]
+            - generic [ref=f1e8213]: +554499951730Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8214] [cursor=pointer]
+            - button "🗑" [ref=f1e8215] [cursor=pointer]
+          - generic [ref=f1e8216]:
+            - checkbox [ref=f1e8217]
+            - generic [ref=f1e8218]: +557192287994Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8219] [cursor=pointer]
+            - button "🗑" [ref=f1e8220] [cursor=pointer]
+          - generic [ref=f1e8221]:
+            - checkbox [ref=f1e8222]
+            - generic [ref=f1e8223]: +55 19 99988-7902Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8224] [cursor=pointer]
+            - button "🗑" [ref=f1e8225] [cursor=pointer]
+          - generic [ref=f1e8226]:
+            - checkbox [ref=f1e8227]
+            - generic [ref=f1e8228]: +555197592600Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8229] [cursor=pointer]
+            - button "🗑" [ref=f1e8230] [cursor=pointer]
+          - generic [ref=f1e8231]:
+            - checkbox [ref=f1e8232]
+            - generic [ref=f1e8233]: +55 11 94886-6744Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8234] [cursor=pointer]
+            - button "🗑" [ref=f1e8235] [cursor=pointer]
+          - generic [ref=f1e8236]:
+            - checkbox [ref=f1e8237]
+            - generic [ref=f1e8238]: +55 21 96713-8628Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8239] [cursor=pointer]
+            - button "🗑" [ref=f1e8240] [cursor=pointer]
+          - generic [ref=f1e8241]:
+            - checkbox [ref=f1e8242]
+            - generic [ref=f1e8243]: +553591709129Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8244] [cursor=pointer]
+            - button "🗑" [ref=f1e8245] [cursor=pointer]
+          - generic [ref=f1e8246]:
+            - checkbox [ref=f1e8247]
+            - generic [ref=f1e8248]: +558599504034Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8249] [cursor=pointer]
+            - button "🗑" [ref=f1e8250] [cursor=pointer]
+          - generic [ref=f1e8251]:
+            - checkbox [ref=f1e8252]
+            - generic [ref=f1e8253]: +55 21 98244-4569Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8254] [cursor=pointer]
+            - button "🗑" [ref=f1e8255] [cursor=pointer]
+          - generic [ref=f1e8256]:
+            - checkbox [ref=f1e8257]
+            - generic [ref=f1e8258]: +55 24 98150-2811Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8259] [cursor=pointer]
+            - button "🗑" [ref=f1e8260] [cursor=pointer]
+          - generic [ref=f1e8261]:
+            - checkbox [ref=f1e8262]
+            - generic [ref=f1e8263]: +556592763522Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8264] [cursor=pointer]
+            - button "🗑" [ref=f1e8265] [cursor=pointer]
+          - generic [ref=f1e8266]:
+            - checkbox [ref=f1e8267]
+            - generic [ref=f1e8268]: +558896647008Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8269] [cursor=pointer]
+            - button "🗑" [ref=f1e8270] [cursor=pointer]
+          - generic [ref=f1e8271]:
+            - checkbox [ref=f1e8272]
+            - generic [ref=f1e8273]: +554797905246Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8274] [cursor=pointer]
+            - button "🗑" [ref=f1e8275] [cursor=pointer]
+          - generic [ref=f1e8276]:
+            - checkbox [ref=f1e8277]
+            - generic [ref=f1e8278]: +55 11 95784-2626Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8279] [cursor=pointer]
+            - button "🗑" [ref=f1e8280] [cursor=pointer]
+          - generic [ref=f1e8281]:
+            - checkbox [ref=f1e8282]
+            - generic [ref=f1e8283]: +55 21 98680-3968Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8284] [cursor=pointer]
+            - button "🗑" [ref=f1e8285] [cursor=pointer]
+          - generic [ref=f1e8286]:
+            - checkbox [ref=f1e8287]
+            - generic [ref=f1e8288]: +55 11 92124-6420Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8289] [cursor=pointer]
+            - button "🗑" [ref=f1e8290] [cursor=pointer]
+          - generic [ref=f1e8291]:
+            - checkbox [ref=f1e8292]
+            - generic [ref=f1e8293]: +559981124019Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8294] [cursor=pointer]
+            - button "🗑" [ref=f1e8295] [cursor=pointer]
+          - generic [ref=f1e8296]:
+            - checkbox [ref=f1e8297]
+            - generic [ref=f1e8298]: +554498305707Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8299] [cursor=pointer]
+            - button "🗑" [ref=f1e8300] [cursor=pointer]
+          - generic [ref=f1e8301]:
+            - checkbox [ref=f1e8302]
+            - generic [ref=f1e8303]: +554391808382Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8304] [cursor=pointer]
+            - button "🗑" [ref=f1e8305] [cursor=pointer]
+          - generic [ref=f1e8306]:
+            - checkbox [ref=f1e8307]
+            - generic [ref=f1e8308]: +558892901982Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8309] [cursor=pointer]
+            - button "🗑" [ref=f1e8310] [cursor=pointer]
+          - generic [ref=f1e8311]:
+            - checkbox [ref=f1e8312]
+            - generic [ref=f1e8313]: +55 21 97364-6298Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8314] [cursor=pointer]
+            - button "🗑" [ref=f1e8315] [cursor=pointer]
+          - generic [ref=f1e8316]:
+            - checkbox [ref=f1e8317]
+            - generic [ref=f1e8318]: +553198790364Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8319] [cursor=pointer]
+            - button "🗑" [ref=f1e8320] [cursor=pointer]
+          - generic [ref=f1e8321]:
+            - checkbox [ref=f1e8322]
+            - generic [ref=f1e8323]: +555391263906Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8324] [cursor=pointer]
+            - button "🗑" [ref=f1e8325] [cursor=pointer]
+          - generic [ref=f1e8326]:
+            - checkbox [ref=f1e8327]
+            - generic [ref=f1e8328]: +557499441324Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8329] [cursor=pointer]
+            - button "🗑" [ref=f1e8330] [cursor=pointer]
+          - generic [ref=f1e8331]:
+            - checkbox [ref=f1e8332]
+            - generic [ref=f1e8333]: +55 21 99634-5968Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8334] [cursor=pointer]
+            - button "🗑" [ref=f1e8335] [cursor=pointer]
+          - generic [ref=f1e8336]:
+            - checkbox [ref=f1e8337]
+            - generic [ref=f1e8338]: +554999764419Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8339] [cursor=pointer]
+            - button "🗑" [ref=f1e8340] [cursor=pointer]
+          - generic [ref=f1e8341]:
+            - checkbox [ref=f1e8342]
+            - generic [ref=f1e8343]: +55 21 96877-2572Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8344] [cursor=pointer]
+            - button "🗑" [ref=f1e8345] [cursor=pointer]
+          - generic [ref=f1e8346]:
+            - checkbox [ref=f1e8347]
+            - generic [ref=f1e8348]: +558197956711Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8349] [cursor=pointer]
+            - button "🗑" [ref=f1e8350] [cursor=pointer]
+          - generic [ref=f1e8351]:
+            - checkbox [ref=f1e8352]
+            - generic [ref=f1e8353]: +554299772147Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8354] [cursor=pointer]
+            - button "🗑" [ref=f1e8355] [cursor=pointer]
+          - generic [ref=f1e8356]:
+            - checkbox [ref=f1e8357]
+            - generic [ref=f1e8358]: +553588821595Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8359] [cursor=pointer]
+            - button "🗑" [ref=f1e8360] [cursor=pointer]
+          - generic [ref=f1e8361]:
+            - checkbox [ref=f1e8362]
+            - generic [ref=f1e8363]: +554497466859Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8364] [cursor=pointer]
+            - button "🗑" [ref=f1e8365] [cursor=pointer]
+          - generic [ref=f1e8366]:
+            - checkbox [ref=f1e8367]
+            - generic [ref=f1e8368]: +558487117588Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8369] [cursor=pointer]
+            - button "🗑" [ref=f1e8370] [cursor=pointer]
+          - generic [ref=f1e8371]:
+            - checkbox [ref=f1e8372]
+            - generic [ref=f1e8373]: +55 11 95365-6158Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8374] [cursor=pointer]
+            - button "🗑" [ref=f1e8375] [cursor=pointer]
+          - generic [ref=f1e8376]:
+            - checkbox [ref=f1e8377]
+            - generic [ref=f1e8378]: +55 16 99116-3831Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8379] [cursor=pointer]
+            - button "🗑" [ref=f1e8380] [cursor=pointer]
+          - generic [ref=f1e8381]:
+            - checkbox [ref=f1e8382]
+            - generic [ref=f1e8383]: +555599502779Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8384] [cursor=pointer]
+            - button "🗑" [ref=f1e8385] [cursor=pointer]
+          - generic [ref=f1e8386]:
+            - checkbox [ref=f1e8387]
+            - generic [ref=f1e8388]: +557799496324Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8389] [cursor=pointer]
+            - button "🗑" [ref=f1e8390] [cursor=pointer]
+          - generic [ref=f1e8391]:
+            - checkbox [ref=f1e8392]
+            - generic [ref=f1e8393]: +55 17 99753-6717Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8394] [cursor=pointer]
+            - button "🗑" [ref=f1e8395] [cursor=pointer]
+          - generic [ref=f1e8396]:
+            - checkbox [ref=f1e8397]
+            - generic [ref=f1e8398]: +556191490337Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8399] [cursor=pointer]
+            - button "🗑" [ref=f1e8400] [cursor=pointer]
+          - generic [ref=f1e8401]:
+            - checkbox [ref=f1e8402]
+            - generic [ref=f1e8403]: +55 19 98904-4926Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8404] [cursor=pointer]
+            - button "🗑" [ref=f1e8405] [cursor=pointer]
+          - generic [ref=f1e8406]:
+            - checkbox [ref=f1e8407]
+            - generic [ref=f1e8408]: +55 11 97778-5929Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8409] [cursor=pointer]
+            - button "🗑" [ref=f1e8410] [cursor=pointer]
+          - generic [ref=f1e8411]:
+            - checkbox [ref=f1e8412]
+            - generic [ref=f1e8413]: +55 12 98127-3155Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8414] [cursor=pointer]
+            - button "🗑" [ref=f1e8415] [cursor=pointer]
+          - generic [ref=f1e8416]:
+            - checkbox [ref=f1e8417]
+            - generic [ref=f1e8418]: +55 16 98848-5613Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8419] [cursor=pointer]
+            - button "🗑" [ref=f1e8420] [cursor=pointer]
+          - generic [ref=f1e8421]:
+            - checkbox [ref=f1e8422]
+            - generic [ref=f1e8423]: +554498488882Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8424] [cursor=pointer]
+            - button "🗑" [ref=f1e8425] [cursor=pointer]
+          - generic [ref=f1e8426]:
+            - checkbox [ref=f1e8427]
+            - generic [ref=f1e8428]: +558481936721Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8429] [cursor=pointer]
+            - button "🗑" [ref=f1e8430] [cursor=pointer]
+          - generic [ref=f1e8431]:
+            - checkbox [ref=f1e8432]
+            - generic [ref=f1e8433]: +553798362637Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8434] [cursor=pointer]
+            - button "🗑" [ref=f1e8435] [cursor=pointer]
+          - generic [ref=f1e8436]:
+            - checkbox [ref=f1e8437]
+            - generic [ref=f1e8438]: +55 21 99251-4559Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8439] [cursor=pointer]
+            - button "🗑" [ref=f1e8440] [cursor=pointer]
+          - generic [ref=f1e8441]:
+            - checkbox [ref=f1e8442]
+            - generic [ref=f1e8443]: +558591778183Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8444] [cursor=pointer]
+            - button "🗑" [ref=f1e8445] [cursor=pointer]
+          - generic [ref=f1e8446]:
+            - checkbox [ref=f1e8447]
+            - generic [ref=f1e8448]: +553191024244Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8449] [cursor=pointer]
+            - button "🗑" [ref=f1e8450] [cursor=pointer]
+          - generic [ref=f1e8451]:
+            - checkbox [ref=f1e8452]
+            - generic [ref=f1e8453]: +55 27 99953-6335Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8454] [cursor=pointer]
+            - button "🗑" [ref=f1e8455] [cursor=pointer]
+          - generic [ref=f1e8456]:
+            - checkbox [ref=f1e8457]
+            - generic [ref=f1e8458]: +55 21 99736-8828Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8459] [cursor=pointer]
+            - button "🗑" [ref=f1e8460] [cursor=pointer]
+          - generic [ref=f1e8461]:
+            - checkbox [ref=f1e8462]
+            - generic [ref=f1e8463]: +554789019383Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8464] [cursor=pointer]
+            - button "🗑" [ref=f1e8465] [cursor=pointer]
+          - generic [ref=f1e8466]:
+            - checkbox [ref=f1e8467]
+            - generic [ref=f1e8468]: +555391903098Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8469] [cursor=pointer]
+            - button "🗑" [ref=f1e8470] [cursor=pointer]
+          - generic [ref=f1e8471]:
+            - checkbox [ref=f1e8472]
+            - generic [ref=f1e8473]: +557591237735Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8474] [cursor=pointer]
+            - button "🗑" [ref=f1e8475] [cursor=pointer]
+          - generic [ref=f1e8476]:
+            - checkbox [ref=f1e8477]
+            - generic [ref=f1e8478]: +554784006071Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8479] [cursor=pointer]
+            - button "🗑" [ref=f1e8480] [cursor=pointer]
+          - generic [ref=f1e8481]:
+            - checkbox [ref=f1e8482]
+            - generic [ref=f1e8483]: +55 14 99181-7522Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8484] [cursor=pointer]
+            - button "🗑" [ref=f1e8485] [cursor=pointer]
+          - generic [ref=f1e8486]:
+            - checkbox [ref=f1e8487]
+            - generic [ref=f1e8488]: +553184240020Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8489] [cursor=pointer]
+            - button "🗑" [ref=f1e8490] [cursor=pointer]
+          - generic [ref=f1e8491]:
+            - checkbox [ref=f1e8492]
+            - generic [ref=f1e8493]: +55 14 99783-4794Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8494] [cursor=pointer]
+            - button "🗑" [ref=f1e8495] [cursor=pointer]
+          - generic [ref=f1e8496]:
+            - checkbox [ref=f1e8497]
+            - generic [ref=f1e8498]: +558591425531Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8499] [cursor=pointer]
+            - button "🗑" [ref=f1e8500] [cursor=pointer]
+          - generic [ref=f1e8501]:
+            - checkbox [ref=f1e8502]
+            - generic [ref=f1e8503]: +55 11 94874-4807Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8504] [cursor=pointer]
+            - button "🗑" [ref=f1e8505] [cursor=pointer]
+          - generic [ref=f1e8506]:
+            - checkbox [ref=f1e8507]
+            - generic [ref=f1e8508]: +558892762523Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8509] [cursor=pointer]
+            - button "🗑" [ref=f1e8510] [cursor=pointer]
+          - generic [ref=f1e8511]:
+            - checkbox [ref=f1e8512]
+            - generic [ref=f1e8513]: +559888364334Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8514] [cursor=pointer]
+            - button "🗑" [ref=f1e8515] [cursor=pointer]
+          - generic [ref=f1e8516]:
+            - checkbox [ref=f1e8517]
+            - generic [ref=f1e8518]: +55 22 99900-2120Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8519] [cursor=pointer]
+            - button "🗑" [ref=f1e8520] [cursor=pointer]
+          - generic [ref=f1e8521]:
+            - checkbox [ref=f1e8522]
+            - generic [ref=f1e8523]: +55 21 98960-9796Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8524] [cursor=pointer]
+            - button "🗑" [ref=f1e8525] [cursor=pointer]
+          - generic [ref=f1e8526]:
+            - checkbox [ref=f1e8527]
+            - generic [ref=f1e8528]: +55 24 99301-6269Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8529] [cursor=pointer]
+            - button "🗑" [ref=f1e8530] [cursor=pointer]
+          - generic [ref=f1e8531]:
+            - checkbox [ref=f1e8532]
+            - generic [ref=f1e8533]: +55 11 94602-6919Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8534] [cursor=pointer]
+            - button "🗑" [ref=f1e8535] [cursor=pointer]
+          - generic [ref=f1e8536]:
+            - checkbox [ref=f1e8537]
+            - generic [ref=f1e8538]: +55 22 98138-7118Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8539] [cursor=pointer]
+            - button "🗑" [ref=f1e8540] [cursor=pointer]
+          - generic [ref=f1e8541]:
+            - checkbox [ref=f1e8542]
+            - generic [ref=f1e8543]: +55 16 99338-5645Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8544] [cursor=pointer]
+            - button "🗑" [ref=f1e8545] [cursor=pointer]
+          - generic [ref=f1e8546]:
+            - checkbox [ref=f1e8547]
+            - generic [ref=f1e8548]: +553598053969Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8549] [cursor=pointer]
+            - button "🗑" [ref=f1e8550] [cursor=pointer]
+          - generic [ref=f1e8551]:
+            - checkbox [ref=f1e8552]
+            - generic [ref=f1e8553]: +55 11 98318-0050Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8554] [cursor=pointer]
+            - button "🗑" [ref=f1e8555] [cursor=pointer]
+          - generic [ref=f1e8556]:
+            - checkbox [ref=f1e8557]
+            - generic [ref=f1e8558]: +554199425531Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8559] [cursor=pointer]
+            - button "🗑" [ref=f1e8560] [cursor=pointer]
+          - generic [ref=f1e8561]:
+            - checkbox [ref=f1e8562]
+            - generic [ref=f1e8563]: +55 11 95221-2326Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8564] [cursor=pointer]
+            - button "🗑" [ref=f1e8565] [cursor=pointer]
+          - generic [ref=f1e8566]:
+            - checkbox [ref=f1e8567]
+            - generic [ref=f1e8568]: +553899862520Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8569] [cursor=pointer]
+            - button "🗑" [ref=f1e8570] [cursor=pointer]
+          - generic [ref=f1e8571]:
+            - checkbox [ref=f1e8572]
+            - generic [ref=f1e8573]: +559185019216Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8574] [cursor=pointer]
+            - button "🗑" [ref=f1e8575] [cursor=pointer]
+          - generic [ref=f1e8576]:
+            - checkbox [ref=f1e8577]
+            - generic [ref=f1e8578]: +55 13 97401-9744Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8579] [cursor=pointer]
+            - button "🗑" [ref=f1e8580] [cursor=pointer]
+          - generic [ref=f1e8581]:
+            - checkbox [ref=f1e8582]
+            - generic [ref=f1e8583]: +55 16 98116-7391Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8584] [cursor=pointer]
+            - button "🗑" [ref=f1e8585] [cursor=pointer]
+          - generic [ref=f1e8586]:
+            - checkbox [ref=f1e8587]
+            - generic [ref=f1e8588]: +558188321894Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8589] [cursor=pointer]
+            - button "🗑" [ref=f1e8590] [cursor=pointer]
+          - generic [ref=f1e8591]:
+            - checkbox [ref=f1e8592]
+            - generic [ref=f1e8593]: +55 13 97426-9077Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8594] [cursor=pointer]
+            - button "🗑" [ref=f1e8595] [cursor=pointer]
+          - generic [ref=f1e8596]:
+            - checkbox [ref=f1e8597]
+            - generic [ref=f1e8598]: +558494087201Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8599] [cursor=pointer]
+            - button "🗑" [ref=f1e8600] [cursor=pointer]
+          - generic [ref=f1e8601]:
+            - checkbox [ref=f1e8602]
+            - generic [ref=f1e8603]: +55 21 99986-1496Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8604] [cursor=pointer]
+            - button "🗑" [ref=f1e8605] [cursor=pointer]
+          - generic [ref=f1e8606]:
+            - checkbox [ref=f1e8607]
+            - generic [ref=f1e8608]: +554499223811Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8609] [cursor=pointer]
+            - button "🗑" [ref=f1e8610] [cursor=pointer]
+          - generic [ref=f1e8611]:
+            - checkbox [ref=f1e8612]
+            - generic [ref=f1e8613]: +559884722021Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8614] [cursor=pointer]
+            - button "🗑" [ref=f1e8615] [cursor=pointer]
+          - generic [ref=f1e8616]:
+            - checkbox [ref=f1e8617]
+            - generic [ref=f1e8618]: +55 19 99701-7452Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8619] [cursor=pointer]
+            - button "🗑" [ref=f1e8620] [cursor=pointer]
+          - generic [ref=f1e8621]:
+            - checkbox [ref=f1e8622]
+            - generic [ref=f1e8623]: +554491095687Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8624] [cursor=pointer]
+            - button "🗑" [ref=f1e8625] [cursor=pointer]
+          - generic [ref=f1e8626]:
+            - checkbox [ref=f1e8627]
+            - generic [ref=f1e8628]: +556281848713Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8629] [cursor=pointer]
+            - button "🗑" [ref=f1e8630] [cursor=pointer]
+          - generic [ref=f1e8631]:
+            - checkbox [ref=f1e8632]
+            - generic [ref=f1e8633]: +55 19 98166-2614Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8634] [cursor=pointer]
+            - button "🗑" [ref=f1e8635] [cursor=pointer]
+          - generic [ref=f1e8636]:
+            - checkbox [ref=f1e8637]
+            - generic [ref=f1e8638]: +553488332156Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8639] [cursor=pointer]
+            - button "🗑" [ref=f1e8640] [cursor=pointer]
+          - generic [ref=f1e8641]:
+            - checkbox [ref=f1e8642]
+            - generic [ref=f1e8643]: +558592416032Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8644] [cursor=pointer]
+            - button "🗑" [ref=f1e8645] [cursor=pointer]
+          - generic [ref=f1e8646]:
+            - checkbox [ref=f1e8647]
+            - generic [ref=f1e8648]: +55 11 91033-6654Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8649] [cursor=pointer]
+            - button "🗑" [ref=f1e8650] [cursor=pointer]
+          - generic [ref=f1e8651]:
+            - checkbox [ref=f1e8652]
+            - generic [ref=f1e8653]: +55 21 99544-8907Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8654] [cursor=pointer]
+            - button "🗑" [ref=f1e8655] [cursor=pointer]
+          - generic [ref=f1e8656]:
+            - checkbox [ref=f1e8657]
+            - generic [ref=f1e8658]: +556191777329Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8659] [cursor=pointer]
+            - button "🗑" [ref=f1e8660] [cursor=pointer]
+          - generic [ref=f1e8661]:
+            - checkbox [ref=f1e8662]
+            - generic [ref=f1e8663]: +554196949177Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8664] [cursor=pointer]
+            - button "🗑" [ref=f1e8665] [cursor=pointer]
+          - generic [ref=f1e8666]:
+            - checkbox [ref=f1e8667]
+            - generic [ref=f1e8668]: +55 18 99733-8973Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8669] [cursor=pointer]
+            - button "🗑" [ref=f1e8670] [cursor=pointer]
+          - generic [ref=f1e8671]:
+            - checkbox [ref=f1e8672]
+            - generic [ref=f1e8673]: +557791899302Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8674] [cursor=pointer]
+            - button "🗑" [ref=f1e8675] [cursor=pointer]
+          - generic [ref=f1e8676]:
+            - checkbox [ref=f1e8677]
+            - generic [ref=f1e8678]: +558187950524Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8679] [cursor=pointer]
+            - button "🗑" [ref=f1e8680] [cursor=pointer]
+          - generic [ref=f1e8681]:
+            - checkbox [ref=f1e8682]
+            - generic [ref=f1e8683]: +55 18 99673-5411Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8684] [cursor=pointer]
+            - button "🗑" [ref=f1e8685] [cursor=pointer]
+          - generic [ref=f1e8686]:
+            - checkbox [ref=f1e8687]
+            - generic [ref=f1e8688]: +55 13 98173-2205Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8689] [cursor=pointer]
+            - button "🗑" [ref=f1e8690] [cursor=pointer]
+          - generic [ref=f1e8691]:
+            - checkbox [ref=f1e8692]
+            - generic [ref=f1e8693]: +556199678734Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8694] [cursor=pointer]
+            - button "🗑" [ref=f1e8695] [cursor=pointer]
+          - generic [ref=f1e8696]:
+            - checkbox [ref=f1e8697]
+            - generic [ref=f1e8698]: +55 11 96554-8245Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8699] [cursor=pointer]
+            - button "🗑" [ref=f1e8700] [cursor=pointer]
+          - generic [ref=f1e8701]:
+            - checkbox [ref=f1e8702]
+            - generic [ref=f1e8703]: +557199561379Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8704] [cursor=pointer]
+            - button "🗑" [ref=f1e8705] [cursor=pointer]
+          - generic [ref=f1e8706]:
+            - checkbox [ref=f1e8707]
+            - generic [ref=f1e8708]: +55 12 99209-0881Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8709] [cursor=pointer]
+            - button "🗑" [ref=f1e8710] [cursor=pointer]
+          - generic [ref=f1e8711]:
+            - checkbox [ref=f1e8712]
+            - generic [ref=f1e8713]: +555195381440Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8714] [cursor=pointer]
+            - button "🗑" [ref=f1e8715] [cursor=pointer]
+          - generic [ref=f1e8716]:
+            - checkbox [ref=f1e8717]
+            - generic [ref=f1e8718]: +553588329990Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8719] [cursor=pointer]
+            - button "🗑" [ref=f1e8720] [cursor=pointer]
+          - generic [ref=f1e8721]:
+            - checkbox [ref=f1e8722]
+            - generic [ref=f1e8723]: +553488389842Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8724] [cursor=pointer]
+            - button "🗑" [ref=f1e8725] [cursor=pointer]
+          - generic [ref=f1e8726]:
+            - checkbox [ref=f1e8727]
+            - generic [ref=f1e8728]: +55 11 99899-7174Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8729] [cursor=pointer]
+            - button "🗑" [ref=f1e8730] [cursor=pointer]
+          - generic [ref=f1e8731]:
+            - checkbox [ref=f1e8732]
+            - generic [ref=f1e8733]: +555197606528Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8734] [cursor=pointer]
+            - button "🗑" [ref=f1e8735] [cursor=pointer]
+          - generic [ref=f1e8736]:
+            - checkbox [ref=f1e8737]
+            - generic [ref=f1e8738]: +55 18 99656-2931Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8739] [cursor=pointer]
+            - button "🗑" [ref=f1e8740] [cursor=pointer]
+          - generic [ref=f1e8741]:
+            - checkbox [ref=f1e8742]
+            - generic [ref=f1e8743]: +55 11 95988-3539Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8744] [cursor=pointer]
+            - button "🗑" [ref=f1e8745] [cursor=pointer]
+          - generic [ref=f1e8746]:
+            - checkbox [ref=f1e8747]
+            - generic [ref=f1e8748]: +556493286135Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8749] [cursor=pointer]
+            - button "🗑" [ref=f1e8750] [cursor=pointer]
+          - generic [ref=f1e8751]:
+            - checkbox [ref=f1e8752]
+            - generic [ref=f1e8753]: +55 21 99004-6119Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8754] [cursor=pointer]
+            - button "🗑" [ref=f1e8755] [cursor=pointer]
+          - generic [ref=f1e8756]:
+            - checkbox [ref=f1e8757]
+            - generic [ref=f1e8758]: +55 11 97070-4943Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8759] [cursor=pointer]
+            - button "🗑" [ref=f1e8760] [cursor=pointer]
+          - generic [ref=f1e8761]:
+            - checkbox [ref=f1e8762]
+            - generic [ref=f1e8763]: +55 11 96061-9749Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8764] [cursor=pointer]
+            - button "🗑" [ref=f1e8765] [cursor=pointer]
+          - generic [ref=f1e8766]:
+            - checkbox [ref=f1e8767]
+            - generic [ref=f1e8768]: +553599909428Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8769] [cursor=pointer]
+            - button "🗑" [ref=f1e8770] [cursor=pointer]
+          - generic [ref=f1e8771]:
+            - checkbox [ref=f1e8772]
+            - generic [ref=f1e8773]: +558596659000Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8774] [cursor=pointer]
+            - button "🗑" [ref=f1e8775] [cursor=pointer]
+          - generic [ref=f1e8776]:
+            - checkbox [ref=f1e8777]
+            - generic [ref=f1e8778]: +55 11 98584-3206Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8779] [cursor=pointer]
+            - button "🗑" [ref=f1e8780] [cursor=pointer]
+          - generic [ref=f1e8781]:
+            - checkbox [ref=f1e8782]
+            - generic [ref=f1e8783]: +55 18 99826-0676Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8784] [cursor=pointer]
+            - button "🗑" [ref=f1e8785] [cursor=pointer]
+          - generic [ref=f1e8786]:
+            - checkbox [ref=f1e8787]
+            - generic [ref=f1e8788]: +556384750563Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8789] [cursor=pointer]
+            - button "🗑" [ref=f1e8790] [cursor=pointer]
+          - generic [ref=f1e8791]:
+            - checkbox [ref=f1e8792]
+            - generic [ref=f1e8793]: +55 21 99041-2621Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8794] [cursor=pointer]
+            - button "🗑" [ref=f1e8795] [cursor=pointer]
+          - generic [ref=f1e8796]:
+            - checkbox [ref=f1e8797]
+            - generic [ref=f1e8798]: +553183998218Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8799] [cursor=pointer]
+            - button "🗑" [ref=f1e8800] [cursor=pointer]
+          - generic [ref=f1e8801]:
+            - checkbox [ref=f1e8802]
+            - generic [ref=f1e8803]: +556681316493Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8804] [cursor=pointer]
+            - button "🗑" [ref=f1e8805] [cursor=pointer]
+          - generic [ref=f1e8806]:
+            - checkbox [ref=f1e8807]
+            - generic [ref=f1e8808]: +553798352174Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8809] [cursor=pointer]
+            - button "🗑" [ref=f1e8810] [cursor=pointer]
+          - generic [ref=f1e8811]:
+            - checkbox [ref=f1e8812]
+            - generic [ref=f1e8813]: +555191956057Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8814] [cursor=pointer]
+            - button "🗑" [ref=f1e8815] [cursor=pointer]
+          - generic [ref=f1e8816]:
+            - checkbox [ref=f1e8817]
+            - generic [ref=f1e8818]: +55 22 99600-2408Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8819] [cursor=pointer]
+            - button "🗑" [ref=f1e8820] [cursor=pointer]
+          - generic [ref=f1e8821]:
+            - checkbox [ref=f1e8822]
+            - generic [ref=f1e8823]: +556781392913Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8824] [cursor=pointer]
+            - button "🗑" [ref=f1e8825] [cursor=pointer]
+          - generic [ref=f1e8826]:
+            - checkbox [ref=f1e8827]
+            - generic [ref=f1e8828]: +55 11 95443-8861Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8829] [cursor=pointer]
+            - button "🗑" [ref=f1e8830] [cursor=pointer]
+          - generic [ref=f1e8831]:
+            - checkbox [ref=f1e8832]
+            - generic [ref=f1e8833]: +55 11 97600-2034Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8834] [cursor=pointer]
+            - button "🗑" [ref=f1e8835] [cursor=pointer]
+          - generic [ref=f1e8836]:
+            - checkbox [ref=f1e8837]
+            - generic [ref=f1e8838]: +55 15 99721-9994Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8839] [cursor=pointer]
+            - button "🗑" [ref=f1e8840] [cursor=pointer]
+          - generic [ref=f1e8841]:
+            - checkbox [ref=f1e8842]
+            - generic [ref=f1e8843]: +554299733548Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8844] [cursor=pointer]
+            - button "🗑" [ref=f1e8845] [cursor=pointer]
+          - generic [ref=f1e8846]:
+            - checkbox [ref=f1e8847]
+            - generic [ref=f1e8848]: +556696045966Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8849] [cursor=pointer]
+            - button "🗑" [ref=f1e8850] [cursor=pointer]
+          - generic [ref=f1e8851]:
+            - checkbox [ref=f1e8852]
+            - generic [ref=f1e8853]: +558694058736Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8854] [cursor=pointer]
+            - button "🗑" [ref=f1e8855] [cursor=pointer]
+          - generic [ref=f1e8856]:
+            - checkbox [ref=f1e8857]
+            - generic [ref=f1e8858]: +55 18 99628-2441Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8859] [cursor=pointer]
+            - button "🗑" [ref=f1e8860] [cursor=pointer]
+          - generic [ref=f1e8861]:
+            - checkbox [ref=f1e8862]
+            - generic [ref=f1e8863]: +554299258787Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8864] [cursor=pointer]
+            - button "🗑" [ref=f1e8865] [cursor=pointer]
+          - generic [ref=f1e8866]:
+            - checkbox [ref=f1e8867]
+            - generic [ref=f1e8868]: +556299627863Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8869] [cursor=pointer]
+            - button "🗑" [ref=f1e8870] [cursor=pointer]
+          - generic [ref=f1e8871]:
+            - checkbox [ref=f1e8872]
+            - generic [ref=f1e8873]: +555199078186Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8874] [cursor=pointer]
+            - button "🗑" [ref=f1e8875] [cursor=pointer]
+          - generic [ref=f1e8876]:
+            - checkbox [ref=f1e8877]
+            - generic [ref=f1e8878]: +556286114823Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8879] [cursor=pointer]
+            - button "🗑" [ref=f1e8880] [cursor=pointer]
+          - generic [ref=f1e8881]:
+            - checkbox [ref=f1e8882]
+            - generic [ref=f1e8883]: +55 11 91331-1821Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8884] [cursor=pointer]
+            - button "🗑" [ref=f1e8885] [cursor=pointer]
+          - generic [ref=f1e8886]:
+            - checkbox [ref=f1e8887]
+            - generic [ref=f1e8888]: +558592182029Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8889] [cursor=pointer]
+            - button "🗑" [ref=f1e8890] [cursor=pointer]
+          - generic [ref=f1e8891]:
+            - checkbox [ref=f1e8892]
+            - generic [ref=f1e8893]: +553492015911Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8894] [cursor=pointer]
+            - button "🗑" [ref=f1e8895] [cursor=pointer]
+          - generic [ref=f1e8896]:
+            - checkbox [ref=f1e8897]
+            - generic [ref=f1e8898]: +55 17 99706-1825Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8899] [cursor=pointer]
+            - button "🗑" [ref=f1e8900] [cursor=pointer]
+          - generic [ref=f1e8901]:
+            - checkbox [ref=f1e8902]
+            - generic [ref=f1e8903]: +55 17 99107-6038Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8904] [cursor=pointer]
+            - button "🗑" [ref=f1e8905] [cursor=pointer]
+          - generic [ref=f1e8906]:
+            - checkbox [ref=f1e8907]
+            - generic [ref=f1e8908]: +557381068670Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8909] [cursor=pointer]
+            - button "🗑" [ref=f1e8910] [cursor=pointer]
+          - generic [ref=f1e8911]:
+            - checkbox [ref=f1e8912]
+            - generic [ref=f1e8913]: +556596308456Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8914] [cursor=pointer]
+            - button "🗑" [ref=f1e8915] [cursor=pointer]
+          - generic [ref=f1e8916]:
+            - checkbox [ref=f1e8917]
+            - generic [ref=f1e8918]: +553598578647Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8919] [cursor=pointer]
+            - button "🗑" [ref=f1e8920] [cursor=pointer]
+          - generic [ref=f1e8921]:
+            - checkbox [ref=f1e8922]
+            - generic [ref=f1e8923]: +553591903157Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8924] [cursor=pointer]
+            - button "🗑" [ref=f1e8925] [cursor=pointer]
+          - generic [ref=f1e8926]:
+            - checkbox [ref=f1e8927]
+            - generic [ref=f1e8928]: +556198329266Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8929] [cursor=pointer]
+            - button "🗑" [ref=f1e8930] [cursor=pointer]
+          - generic [ref=f1e8931]:
+            - checkbox [ref=f1e8932]
+            - generic [ref=f1e8933]: +55 13 99781-1158Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8934] [cursor=pointer]
+            - button "🗑" [ref=f1e8935] [cursor=pointer]
+          - generic [ref=f1e8936]:
+            - checkbox [ref=f1e8937]
+            - generic [ref=f1e8938]: +55 11 93535-9377Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8939] [cursor=pointer]
+            - button "🗑" [ref=f1e8940] [cursor=pointer]
+          - generic [ref=f1e8941]:
+            - checkbox [ref=f1e8942]
+            - generic [ref=f1e8943]: +55 21 97990-2493Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8944] [cursor=pointer]
+            - button "🗑" [ref=f1e8945] [cursor=pointer]
+          - generic [ref=f1e8946]:
+            - checkbox [ref=f1e8947]
+            - generic [ref=f1e8948]: +55 21 96643-0809Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8949] [cursor=pointer]
+            - button "🗑" [ref=f1e8950] [cursor=pointer]
+          - generic [ref=f1e8951]:
+            - checkbox [ref=f1e8952]
+            - generic [ref=f1e8953]: +553899363085Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8954] [cursor=pointer]
+            - button "🗑" [ref=f1e8955] [cursor=pointer]
+          - generic [ref=f1e8956]:
+            - checkbox [ref=f1e8957]
+            - generic [ref=f1e8958]: +553888160449Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8959] [cursor=pointer]
+            - button "🗑" [ref=f1e8960] [cursor=pointer]
+          - generic [ref=f1e8961]:
+            - checkbox [ref=f1e8962]
+            - generic [ref=f1e8963]: +55 11 98992-4719Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8964] [cursor=pointer]
+            - button "🗑" [ref=f1e8965] [cursor=pointer]
+          - generic [ref=f1e8966]:
+            - checkbox [ref=f1e8967]
+            - generic [ref=f1e8968]: +55 16 99717-8228Clube dos Achadinhos🛍️🛍️
+            - button "✏️" [ref=f1e8969] [cursor=pointer]
+            - button "🗑" [ref=f1e8970] [cursor=pointer]
+        - generic [ref=f1e1767]: nenhuma lista salva
+        - generic [ref=f1e1768]:
+          - generic [ref=f1e1769]: ✉️ Propaganda para a seleção
+          - textbox "Texto da propaganda (pode colar o link no meio)…" [ref=f1e1770]
+          - textbox "URL da imagem (opcional)" [ref=f1e1771]
+          - generic [ref=f1e1772]:
+            - button "🚀 Disparar" [ref=f1e1773] [cursor=pointer]
+            - button "🗑 Cancelar fila" [ref=f1e1774] [cursor=pointer]
+            - generic [ref=f1e1775]: "fila: 0 pendente(s) · enviados: 0 · 1 a cada 60s"

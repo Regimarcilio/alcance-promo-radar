@@ -1,0 +1,346 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - complementary [ref=f4e3]:
+      - link "Alcance — ir para o monitor" [ref=f4e4] [cursor=pointer]:
+        - /url: "#/monitor"
+        - generic [ref=f4e5]: A
+        - heading "Alcance" [level=1] [ref=f4e7]
+      - navigation "Navegação principal" [ref=f4e8]:
+        - link "Contas" [ref=f4e9] [cursor=pointer]:
+          - /url: "#/contas"
+        - link "Cupons" [ref=f4e17] [cursor=pointer]:
+          - /url: "#/cupons"
+        - link "Piloto" [ref=f4e25] [cursor=pointer]:
+          - /url: "#/piloto"
+        - link "Monitor" [ref=f4e34] [cursor=pointer]:
+          - /url: "#/monitor"
+        - link "Números" [ref=f4e44] [cursor=pointer]:
+          - /url: "#/numeros"
+        - link "Rastreio" [ref=f4e52] [cursor=pointer]:
+          - /url: "#/rastreio"
+        - link "Clientes" [ref=f4e60] [cursor=pointer]:
+          - /url: "#/clientes"
+    - main [ref=f4e69]:
+      - generic [ref=f4e70]:
+        - generic [ref=f4e71]:
+          - generic [ref=f4e72]: operação
+          - heading "Monitor" [level=2] [ref=f4e73]
+          - generic [ref=f4e74]: Cada grupo de origem encaminha para os seus destinos, com troca de link e anti-rajada.
+        - generic [ref=f4e75]:
+          - group [ref=f4e76]:
+            - generic "Verde" [ref=f4e77] [cursor=pointer]
+            - text: ✓
+          - generic [ref=f4e82]: ● monitor · —
+          - button "Sair" [ref=f4e83] [cursor=pointer]
+      - generic [ref=f4e84]:
+        - generic [ref=f4e85]:
+          - generic [ref=f4e86]:
+            - generic [ref=f4e87]: —
+            - text: recebidas
+          - generic [ref=f4e88]:
+            - generic [ref=f4e89]: —
+            - text: encaminhadas
+          - generic [ref=f4e90]:
+            - generic [ref=f4e91]: —
+            - text: origens
+          - generic [ref=f4e92]:
+            - generic [ref=f4e93]: —
+            - text: destinos
+          - generic [ref=f4e94]:
+            - generic [ref=f4e95]: —
+            - text: duplicadas
+          - generic [ref=f4e96]:
+            - generic [ref=f4e97]: —
+            - text: revisão
+          - generic [ref=f4e98]:
+            - generic [ref=f4e99]: —
+            - text: erros
+          - generic [ref=f4e100]:
+            - generic [ref=f4e101]: —
+            - text: na fila
+        - generic [ref=f4e103]:
+          - generic [ref=f4e104]:
+            - generic [ref=f4e105]: 📡 Monitor — cada grupo de origem encaminha para os SEUS destinos
+            - link "✏️ renomear" [ref=f4e106] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=f4e107]: Oferta publicada numa origem (grupo de achadinhos que você monitora) tem o link trocado pelo seu e é reenviada apenas para os destinos amarrados àquela origem. Uma origem pode ter vários destinos.
+          - generic [ref=f4e108]:
+            - generic [ref=f4e109]: "Conta WhatsApp: …"
+            - generic [ref=f4e110]:
+              - button "↻ Reconectar" [ref=f4e111] [cursor=pointer]
+              - button "📱 Trocar celular" [ref=f4e112] [cursor=pointer]
+          - generic [ref=f4e113]:
+            - generic [ref=f4e114]: Envio direto — ON (encaminha sozinho)ON encaminha sozinho • OFF apenas registra para revisão
+            - button "Desligar envio direto" [ref=f4e115] [cursor=pointer]
+          - generic [ref=f4e116]: ✅ Reenviando automaticamente — 6 regra(s) ativa(s).
+          - generic [ref=f4e118]:
+            - generic [ref=f4e119]: "Foto do repasse: a da ORIGEM (mesma do post)\"Da origem\" usa a MESMA foto que o post monitorado publicou; se o post for só texto, cai para a foto do anúncio."
+            - generic [ref=f4e120]:
+              - button "Da origem" [ref=f4e121] [cursor=pointer]
+              - button "Do anúncio" [ref=f4e122] [cursor=pointer]
+          - generic [ref=f4e123]:
+            - generic [ref=f4e124]: ➕ Nova regra — escolha uma origem e um destino
+            - generic [ref=f4e125]:
+              - generic [ref=f4e126]:
+                - generic [ref=f4e127]: Origem (grupo que eu monitoro)
+                - combobox [ref=f4e128]:
+                  - option "— escolha a origem —" [selected]
+                  - option "Grupo Acólitos (120363423100…)"
+                  - option "#18 Python - Lira da Hashtag (120363399706…)"
+                  - option "#55 Emipe Promoções Tech 💜⚡ (120363429892…)"
+                  - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363420989…)"
+                  - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363423345…)"
+                  - option "120363405987968901@g.us (120363405987…)"
+                  - option "A Promessa da Pizza do Luciano 🍕 (120363423747…)"
+                  - option "Ação Solidária em para Remédios do Thor (120363409965…)"
+                  - option "Aluno e professor (120363432133…)"
+                  - option "Cedup - Banco de Dados (120363400031…)"
+                  - option "Clube dos Achadinhos🛍️🛍️ (120363407207…)"
+                  - option "Comunidade Morar-EUA - Joinville (120363402031…)"
+                  - option "Edições de vídeos e fotos (120363414071…)"
+                  - option "Eucurso 25A (120363417838…)"
+                  - 'option "Herói do Perfume #242 (120363429408…)"'
+                  - option "Introdução à Computação 👩‍💻👨‍💻 (120363405118…)"
+                  - 'option "Leleco Tech Ofertas e Cupons #4 (120363409461…)"'
+                  - option "LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPUTAÇÃO. (120363417755…)"
+                  - option "Mano dos Achadinhos (120363412937…)"
+                  - option "MBX - Tech SC (120363423133…)"
+                  - option "MBX | Data Science & Tecnologia 1 (120363404134…)"
+                  - option "MBX | Data Science & Tecnologia 1 (120363423204…)"
+                  - 'option "Perfomance Lab #76 (120363424159…)"'
+                  - 'option "Poison Promos Club #5 (120363402549…)"'
+                  - 'option "Promoção Bruta Oficial #01 (120363430511…)"'
+                  - option "PROMOS DE BROTHER 470 (120363411920…)"
+                  - 'option "RADAR DAS PROMOS #24 (120363428379…)"'
+                  - option "Radar Teste (120363431279…)"
+                  - option "RAINHA das PROMO (120363425530…)"
+                  - 'option "Reunião Secreta 11/02 #1 (120363378905…)"'
+                  - option "Royal Masculine | 1 (120363426060…)"
+                  - option "TÉCNICO INFORMÁTICA - CEDUP - 4INFO3 (120363383051…)"
+                  - 'option "Vasculha 🔎 Ofertas #23 (120363424622…)"'
+              - generic [ref=f4e129]:
+                - generic [ref=f4e130]: Destino (meu grupo que recebe)
+                - combobox [ref=f4e131]:
+                  - option "— escolha o destino —" [selected]
+                  - option "Grupo Acólitos (120363423100…)"
+                  - option "#18 Python - Lira da Hashtag (120363399706…)"
+                  - option "#55 Emipe Promoções Tech 💜⚡ (120363429892…)"
+                  - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363420989…)"
+                  - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363423345…)"
+                  - option "120363405987968901@g.us (120363405987…)"
+                  - option "A Promessa da Pizza do Luciano 🍕 (120363423747…)"
+                  - option "Ação Solidária em para Remédios do Thor (120363409965…)"
+                  - option "Aluno e professor (120363432133…)"
+                  - option "Cedup - Banco de Dados (120363400031…)"
+                  - option "Clube dos Achadinhos🛍️🛍️ (120363407207…)"
+                  - option "Comunidade Morar-EUA - Joinville (120363402031…)"
+                  - option "Edições de vídeos e fotos (120363414071…)"
+                  - option "Eucurso 25A (120363417838…)"
+                  - 'option "Herói do Perfume #242 (120363429408…)"'
+                  - option "Introdução à Computação 👩‍💻👨‍💻 (120363405118…)"
+                  - 'option "Leleco Tech Ofertas e Cupons #4 (120363409461…)"'
+                  - option "LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPUTAÇÃO. (120363417755…)"
+                  - option "Mano dos Achadinhos (120363412937…)"
+                  - option "MBX - Tech SC (120363423133…)"
+                  - option "MBX | Data Science & Tecnologia 1 (120363404134…)"
+                  - option "MBX | Data Science & Tecnologia 1 (120363423204…)"
+                  - 'option "Perfomance Lab #76 (120363424159…)"'
+                  - 'option "Poison Promos Club #5 (120363402549…)"'
+                  - 'option "Promoção Bruta Oficial #01 (120363430511…)"'
+                  - option "PROMOS DE BROTHER 470 (120363411920…)"
+                  - 'option "RADAR DAS PROMOS #24 (120363428379…)"'
+                  - option "Radar Teste (120363431279…)"
+                  - option "RAINHA das PROMO (120363425530…)"
+                  - 'option "Reunião Secreta 11/02 #1 (120363378905…)"'
+                  - option "Royal Masculine | 1 (120363426060…)"
+                  - option "TÉCNICO INFORMÁTICA - CEDUP - 4INFO3 (120363383051…)"
+                  - 'option "Vasculha 🔎 Ofertas #23 (120363424622…)"'
+            - generic [ref=f4e132]:
+              - button "➕ Adicionar regra" [ref=f4e133] [cursor=pointer]
+              - button "🔄 Carregar grupos da conta" [ref=f4e134] [cursor=pointer]
+              - generic [ref=f4e135]: 33 grupos carregados
+            - generic [ref=f4e136]: "Dica: para dar mais de um destino à mesma origem, escolha a mesma origem de novo com outro destino."
+          - generic [ref=f4e137]:
+            - generic [ref=f4e138]: 🔒 Permissões do grupo — quem pode falar/comentar
+            - generic [ref=f4e139]:
+              - combobox [ref=f4e140]:
+                - option "— escolha o grupo —" [selected]
+                - option "Grupo Acólitos (120363423100…)"
+                - option "#18 Python - Lira da Hashtag (120363399706…)"
+                - option "#55 Emipe Promoções Tech 💜⚡ (120363429892…)"
+                - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363420989…)"
+                - option "🇺🇸4️⃣Tudo sobre EB-3 | Vollare Immigration (120363423345…)"
+                - option "120363405987968901@g.us (120363405987…)"
+                - option "A Promessa da Pizza do Luciano 🍕 (120363423747…)"
+                - option "Ação Solidária em para Remédios do Thor (120363409965…)"
+                - option "Aluno e professor (120363432133…)"
+                - option "Cedup - Banco de Dados (120363400031…)"
+                - option "Clube dos Achadinhos🛍️🛍️ (120363407207…)"
+                - option "Comunidade Morar-EUA - Joinville (120363402031…)"
+                - option "Edições de vídeos e fotos (120363414071…)"
+                - option "Eucurso 25A (120363417838…)"
+                - 'option "Herói do Perfume #242 (120363429408…)"'
+                - option "Introdução à Computação 👩‍💻👨‍💻 (120363405118…)"
+                - 'option "Leleco Tech Ofertas e Cupons #4 (120363409461…)"'
+                - option "LOGICA DE PROGRAMAÇÃO - INTRODUÇÃO A COMPUTAÇÃO. (120363417755…)"
+                - option "Mano dos Achadinhos (120363412937…)"
+                - option "MBX - Tech SC (120363423133…)"
+                - option "MBX | Data Science & Tecnologia 1 (120363404134…)"
+                - option "MBX | Data Science & Tecnologia 1 (120363423204…)"
+                - 'option "Perfomance Lab #76 (120363424159…)"'
+                - 'option "Poison Promos Club #5 (120363402549…)"'
+                - 'option "Promoção Bruta Oficial #01 (120363430511…)"'
+                - option "PROMOS DE BROTHER 470 (120363411920…)"
+                - 'option "RADAR DAS PROMOS #24 (120363428379…)"'
+                - option "Radar Teste (120363431279…)"
+                - option "RAINHA das PROMO (120363425530…)"
+                - 'option "Reunião Secreta 11/02 #1 (120363378905…)"'
+                - option "Royal Masculine | 1 (120363426060…)"
+                - option "TÉCNICO INFORMÁTICA - CEDUP - 4INFO3 (120363383051…)"
+                - 'option "Vasculha 🔎 Ofertas #23 (120363424622…)"'
+              - button "🔒 Só admins falam" [ref=f4e141] [cursor=pointer]
+              - button "🔓 Todos falam" [ref=f4e142] [cursor=pointer]
+              - button "🛡 Só admins editam" [ref=f4e143] [cursor=pointer]
+              - button "🔓 Todos editam" [ref=f4e144] [cursor=pointer]
+            - generic [ref=f4e145]: "\"Só admins falam\" bloqueia mensagens e comentários dos participantes (modo anúncio do WhatsApp). A conta pareada precisa ser admin do grupo."
+          - generic [ref=f4e146]:
+            - generic [ref=f4e147]: 🔗 Regras ativas · 10
+            - generic [ref=f4e148]:
+              - generic [ref=f4e149]:
+                - generic [ref=f4e150]:
+                  - generic [ref=f4e151]: "🔎 #55 Emipe Promoções Tech 💜⚡ 120363429892871960@g.us"
+                  - generic [ref=f4e152]:
+                    - button "ON" [ref=f4e153] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e154] [cursor=pointer]
+                - generic [ref=f4e155]:
+                  - generic [ref=f4e156]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e157]:
+                    - button "ON" [ref=f4e158] [cursor=pointer]
+                    - button "✕" [ref=f4e159] [cursor=pointer]
+              - generic [ref=f4e160]:
+                - generic [ref=f4e161]:
+                  - generic [ref=f4e162]: "🔎 Herói do Perfume #242 120363429408893575@g.us"
+                  - generic [ref=f4e163]:
+                    - button "ON" [ref=f4e164] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e165] [cursor=pointer]
+                - generic [ref=f4e166]:
+                  - generic [ref=f4e167]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e168]:
+                    - button "ON" [ref=f4e169] [cursor=pointer]
+                    - button "✕" [ref=f4e170] [cursor=pointer]
+              - generic [ref=f4e171]:
+                - generic [ref=f4e172]:
+                  - generic [ref=f4e173]: 🔎 PROMOS DE BROTHER 470 120363411920451567@g.us
+                  - generic [ref=f4e174]:
+                    - button "ON" [ref=f4e175] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e176] [cursor=pointer]
+                - generic [ref=f4e177]:
+                  - generic [ref=f4e178]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e179]:
+                    - button "ON" [ref=f4e180] [cursor=pointer]
+                    - button "✕" [ref=f4e181] [cursor=pointer]
+              - generic [ref=f4e182]:
+                - generic [ref=f4e183]:
+                  - generic [ref=f4e184]: 🔎 Royal Masculine | 1 120363426060327282@g.us
+                  - generic [ref=f4e185]:
+                    - button "ON" [ref=f4e186] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e187] [cursor=pointer]
+                - generic [ref=f4e188]:
+                  - generic [ref=f4e189]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e190]:
+                    - button "ON" [ref=f4e191] [cursor=pointer]
+                    - button "✕" [ref=f4e192] [cursor=pointer]
+              - generic [ref=f4e193]:
+                - generic [ref=f4e194]:
+                  - generic [ref=f4e195]: "🔎 Vasculha 🔎 Ofertas #23 120363424622027877@g.us"
+                  - generic [ref=f4e196]:
+                    - button "ON" [ref=f4e197] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e198] [cursor=pointer]
+                - generic [ref=f4e199]:
+                  - generic [ref=f4e200]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e201]:
+                    - button "ON" [ref=f4e202] [cursor=pointer]
+                    - button "✕" [ref=f4e203] [cursor=pointer]
+              - generic [ref=f4e204]:
+                - generic [ref=f4e205]:
+                  - generic [ref=f4e206]: "🔎 RADAR DAS PROMOS #24 120363428379194527@g.us"
+                  - generic [ref=f4e207]:
+                    - button "ON" [ref=f4e208] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e209] [cursor=pointer]
+                - generic [ref=f4e210]:
+                  - generic [ref=f4e211]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e212]:
+                    - button "ON" [ref=f4e213] [cursor=pointer]
+                    - button "✕" [ref=f4e214] [cursor=pointer]
+              - generic [ref=f4e215]:
+                - generic [ref=f4e216]:
+                  - generic [ref=f4e217]: "🔎 Leleco Tech Ofertas e Cupons #4 120363409461232125@g.us"
+                  - generic [ref=f4e218]:
+                    - button "OFF" [ref=f4e219] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e220] [cursor=pointer]
+                - generic [ref=f4e221]:
+                  - generic [ref=f4e222]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e223]:
+                    - button "OFF" [ref=f4e224] [cursor=pointer]
+                    - button "✕" [ref=f4e225] [cursor=pointer]
+              - generic [ref=f4e226]:
+                - generic [ref=f4e227]:
+                  - generic [ref=f4e228]: 🔎 Clube dos Achadinhos🛍️🛍️ 120363407207680847@g.us
+                  - generic [ref=f4e229]:
+                    - button "OFF" [ref=f4e230] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e231] [cursor=pointer]
+                - generic [ref=f4e232]:
+                  - generic [ref=f4e233]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e234]:
+                    - button "OFF" [ref=f4e235] [cursor=pointer]
+                    - button "✕" [ref=f4e236] [cursor=pointer]
+              - generic [ref=f4e237]:
+                - generic [ref=f4e238]:
+                  - generic [ref=f4e239]: 🔎 RAINHA das PROMO 120363425530645842@g.us
+                  - generic [ref=f4e240]:
+                    - button "OFF" [ref=f4e241] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e242] [cursor=pointer]
+                - generic [ref=f4e243]:
+                  - generic [ref=f4e244]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e245]:
+                    - button "OFF" [ref=f4e246] [cursor=pointer]
+                    - button "✕" [ref=f4e247] [cursor=pointer]
+              - generic [ref=f4e248]:
+                - generic [ref=f4e249]:
+                  - generic [ref=f4e250]: "🔎 Promoção Bruta Oficial #01 120363430511514879@g.us"
+                  - generic [ref=f4e251]:
+                    - button "OFF" [ref=f4e252] [cursor=pointer]
+                    - button "✕ origem" [ref=f4e253] [cursor=pointer]
+                - generic [ref=f4e254]:
+                  - generic [ref=f4e255]: → Mano dos Achadinhos (120363412937…) 120363412937047408@g.us
+                  - generic [ref=f4e256]:
+                    - button "OFF" [ref=f4e257] [cursor=pointer]
+                    - button "✕" [ref=f4e258] [cursor=pointer]
+          - generic [ref=f4e259]:
+            - button "🧹 Zerar contadores" [ref=f4e260] [cursor=pointer]
+            - button "♻️ Limpar dedup" [ref=f4e261] [cursor=pointer]
+            - button "🗑 Esvaziar fila" [ref=f4e262] [cursor=pointer]
+          - generic [ref=f4e263]:
+            - generic [ref=f4e264]:
+              - generic [ref=f4e265]: Testar reconhecimento (cole a mensagem recebida)
+              - textbox "Cole aqui uma mensagem com link de afiliado..." [ref=f4e266]
+              - generic [ref=f4e267]:
+                - combobox [ref=f4e268]:
+                  - option "primeira origem das regras" [selected]
+                  - option "#55 Emipe Promoções Tech 💜⚡"
+                  - 'option "Herói do Perfume #242"'
+                  - option "PROMOS DE BROTHER 470"
+                  - option "Royal Masculine | 1"
+                  - 'option "Vasculha 🔎 Ofertas #23"'
+                  - 'option "RADAR DAS PROMOS #24"'
+                  - 'option "Leleco Tech Ofertas e Cupons #4"'
+                  - option "Clube dos Achadinhos🛍️🛍️"
+                  - option "RAINHA das PROMO"
+                  - 'option "Promoção Bruta Oficial #01"'
+                - button "🧪 Testar" [ref=f4e269] [cursor=pointer]
+            - generic [ref=f4e271]: Últimos eventos do monitor
+  - contentinfo "Developed by EX Technologies":
+    - img "EX Technologies"
+    - generic:
+      - text: Developed by
+      - strong: EX Technologies
