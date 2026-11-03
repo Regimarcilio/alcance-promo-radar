@@ -33,6 +33,7 @@ import {
   removerContato, sincronizar as sincronizarClientes, estadoSync, enfileirarCampanha,
   estadoFilaClientes, limparFilaClientes, iniciarClientesWorker, pararClientesWorker,
   removerItensDaFila, atualizarItensDaFila,
+  pausarFilaClientes, retomarFilaClientes,
 } from "../clientes/clientes.js";
 import {
   listarDisparos, resumoDisparos, criarDisparo, editarDisparo, excluirDisparo,
@@ -1200,6 +1201,16 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     json(200, { ok: true, removidos: limparFilaClientes(), fila: estadoFilaClientes() });
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/clientes/fila/pausar") {
+    pausarFilaClientes();
+    json(200, { ok: true, fila: estadoFilaClientes() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/fila/retomar") {
+    retomarFilaClientes();
+    json(200, { ok: true, fila: estadoFilaClientes() });
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/clientes/midia") {
     // Upload de imagem/vídeo para o disparo. JSON base64 (o painel lê o
     // arquivo local; multipart exigiria parser e não traz ganho aqui).
@@ -2270,6 +2281,8 @@ Tem achadinho novo todos os dias. 🔥
 <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
 <button class="buscar" style="margin-top:0;width:auto" onclick="dispararClientes()">🚀 Disparar</button>
 <button class="mbtn" onclick="limparFilaClientesUI()">🗑 Cancelar fila</button>
+<button class="mbtn" id="btnPausarFila" onclick="pausarFilaClientesUI()" style="display:none">⏸ Pausar fila</button>
+<button class="mbtn ok" id="btnRetomarFila" onclick="retomarFilaClientesUI()" style="display:none">▶️ Retomar fila</button>
 <span class="mini" id="clifila"></span></div></div>
 </div>
 </section>
@@ -2721,8 +2734,18 @@ async function carregarClientes(){
       : (s.ultimoSync ? ('último sync: '+new Date(s.ultimoSync).toLocaleString('pt-BR')+' · '+(s.contatos||0)+' contatos'
         +(s.erros?(' · ⚠️ '+(s.erros)+' grupo(s) falharam: '+(s.ultimoErro||'rate limit')):'')) : 'nunca sincronizado');
     const f=d.fila||{};
-    $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s';
+    $('clifila').textContent='fila: '+(f.pendentes||0)+' pendente(s) · enviados: '+(f.enviados||0)+(f.erros?(' · erros: '+f.erros):'')+' · 1 a cada '+(f.intervalo||60)+'s'+(f.pausado?' · ⏸ PAUSADA':'');
     kp('kpi-clifila',f.pendentes||0);
+    // Botões Pausar/Retomar
+    const btnPausar=$('btnPausarFila'), btnRetomar=$('btnRetomarFila');
+    if(btnPausar && btnRetomar){
+      if(f.pendentes>0){
+        if(f.pausado){btnPausar.style.display='none'; btnRetomar.style.display='inline-flex';}
+        else {btnPausar.style.display='inline-flex'; btnRetomar.style.display='none';}
+      }else{
+        btnPausar.style.display='none'; btnRetomar.style.display='none';
+      }
+    }
     // Dropdown de grupos: nomes dos grupos em que os contatos foram capturados.
     const nomesGrupos=[];
     (CLIENTES.contatos||[]).forEach(function(c){
@@ -2984,6 +3007,16 @@ async function dispararClientes(){
 async function limparFilaClientesUI(){
   if(!confirm('Cancelar a fila de disparo? O que já saiu não volta.'))return;
   const r=await (await fetch('/api/clientes/fila/limpar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+async function pausarFilaClientesUI(){
+  const r=await (await fetch('/api/clientes/fila/pausar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)return alert(r.erro);
+  carregarClientes();
+}
+async function retomarFilaClientesUI(){
+  const r=await (await fetch('/api/clientes/fila/retomar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
   if(r.erro)return alert(r.erro);
   carregarClientes();
 }

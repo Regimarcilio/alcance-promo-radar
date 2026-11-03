@@ -312,7 +312,8 @@ export function instanciaRuim(instancia: string): boolean {
 
 /** Primeira candidata de serviço (compatibilidade). */
 export async function instanciaParaServico(): Promise<string> {
-  return instanciasParaServico()[0] ?? padrao();
+  const lista = await instanciasParaServico();
+  return lista[0] ?? padrao();
 }
 
 export function registrarEnvio(instancia: string): void {

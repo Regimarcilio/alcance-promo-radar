@@ -68,6 +68,8 @@ interface StoreFila {
   ultimoEnvio: string | null;
   enviados: number;
   erros: number;
+  /** true quando a fila está pausada pelo usuário */
+  pausado: boolean;
 }
 
 let cache: Store | null = null;
@@ -102,17 +104,18 @@ function salvar(s: Store): void {
 
 function carregarFila(): StoreFila {
   try {
-    if (!existsSync(filaFile)) return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0 };
+    if (!existsSync(filaFile)) return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0, pausado: false };
     const raw: any = JSON.parse(readFileSync(filaFile, "utf8"));
     cacheFila = {
       itens: Array.isArray(raw?.itens) ? raw.itens : [],
       ultimoEnvio: raw?.ultimoEnvio ?? null,
       enviados: Number(raw?.enviados ?? 0),
       erros: Number(raw?.erros ?? 0),
+      pausado: Boolean(raw?.pausado),
     };
     return cacheFila;
   } catch {
-    return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0 };
+    return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0, pausado: false };
   }
 }
 
@@ -381,17 +384,35 @@ export function removerLista(id: string): boolean {
 
 /** Intervalo entre contatos (env CLIENTES_INTERVALO_S, default 60s). */
 export function intervaloClientesMs(): number {
-  const s = Number(process.env.CLIENTES_INTERVALO_S ?? 60);
-  return (Number.isFinite(s) && s > 0 ? s : 60) * 1000;
+  const base = Number(process.env.CLIENTES_INTERVALO_S ?? 60);
+  return (Number.isFinite(base) && base > 0 ? base : 60) * 1000;
 }
 
 export function intervaloClientes(): number {
   return Math.round(intervaloClientesMs() / 1000);
 }
 
-export function estadoFilaClientes(): { pendentes: number; enviados: number; erros: number; intervalo: number } {
+export function estadoFilaClientes(): { pendentes: number; enviados: number; erros: number; intervalo: number; pausado: boolean; horarioComercial: boolean } {
   const s = carregarFila();
-  return { pendentes: s.itens.length, enviados: s.enviados, erros: s.erros, intervalo: intervaloClientes() };
+  return { pendentes: s.itens.length, enviados: s.enviados, erros: s.erros, intervalo: intervaloClientes(), pausado: s.pausado, horarioComercial: dentroDaJanelaComercial() };
+}
+
+export function pausarFilaClientes(): void {
+  const s = carregarFila();
+  if (!s.pausado) {
+    s.pausado = true;
+    salvarFila(s);
+  }
+}
+
+/** Retoma a fila de clientes pausada. */
+export function retomarFilaClientes(): void {
+  const s = carregarFila();
+  if (s.pausado) {
+    s.pausado = false;
+    s.ultimoEnvio = null; // libera o próximo imediatamente
+    salvarFila(s);
+  }
 }
 
 export interface CampanhaArgs {
@@ -473,12 +494,38 @@ export function limparFilaClientes(): number {
   return n;
 }
 
-/** Libera o próximo contato se já passou o intervalo. */
+/** Verifica se está dentro do horário comercial (8h-23h, TZ America/Sao_Paulo). */
+function dentroDaJanelaComercial(): boolean {
+  const ini = Number(process.env.JANELA_INICIO ?? 8);
+  const fim = Number(process.env.JANELA_FIM ?? 23);
+  const horaLocal = Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(new Date())
+  );
+  return horaLocal >= ini && horaLocal < fim;
+}
+
+/** Intervalo com variação de 15-20s ± 1 minuto para evitar detecção de mecanização. */
+export function intervaloClientesMsComVariacao(): number {
+  const base = intervaloClientesMs(); // ex.: 60s = 60000ms
+  // Variação: ± 1 minuto (60s) = base ± 60000ms
+  // Adicional: 15-20s aleatórios para humanização extra
+  const variacaoMinuto = (Math.random() - 0.5) * 2 * 60 * 1000; // ±60000ms
+  const variacaoSegundos = 15000 + Math.random() * 5000; // 15-20s
+  return Math.max(1000, Math.round(base + variacaoMinuto + variacaoSegundos));
+}
+
+/** Libera o próximo contato se já passou o intervalo e a fila não está pausada. */
 export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
   const s = carregarFila();
   if (!s.itens.length) return null;
+  if (s.pausado) return null;
+  
+  // Verifica horário comercial (8h-23h)
+  if (!dentroDaJanelaComercial()) return null;
+  
   const desde = s.ultimoEnvio ? Date.now() - new Date(s.ultimoEnvio).getTime() : Infinity;
-  if (desde < intervaloClientesMs()) return null;
+  const intervaloComVariacao = intervaloClientesMsComVariacao();
+  if (desde < intervaloComVariacao) return null;
 
   const item = s.itens.shift()!;
   s.ultimoEnvio = new Date().toISOString();
@@ -497,7 +544,7 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     s.enviados++;
     salvarFila(s);
     if (item.disparoId) registrarResultadoDisparo(item.disparoId, true);
-    console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId}`);
+    console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId} intervalo=${Math.round(intervaloComVariacao/1000)}s`);
   } catch (e: any) {
     s.erros++;
     salvarFila(s);

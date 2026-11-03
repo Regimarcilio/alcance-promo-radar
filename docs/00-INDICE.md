@@ -48,6 +48,7 @@
 | [`docs/SRS-v0.2-delta.md`](SRS-v0.2-delta.md) | v0.2 · 2026-10-12 | histórico | Absorvido pelo SRS v0.4 (RF-015–021 e RNs correspondentes). |
 | [`docs/SRS-v0.4.md`](SRS-v0.4.md) | v0.4 · 2026-10-22 | vigente | Substitui SRS v0.3 + delta v0.2. Fonte de requisitos atual. |
 | [`docs/dev-log.md`](dev-log.md) | append-only · 2026-10-22 | vigente | Diário de bordo com evidência por entrega; complementa (não substitui) o CHANGELOG. |
+| [`docs/conhecimento/whatsapp-anti-ban.md`](conhecimento/whatsapp-anti-ban.md) | 2026-11-03 | vigente | Lições aprendidas e implementação anti-bloqueio WhatsApp (janela comercial, variação de tempo, estado close, controle de fila). |
 | [`docs/prototipo/index.html`](prototipo/index.html) | 2026-10-12 | histórico | Protótipo visual original; não é o painel em produção. |
 | [`docs/prototipos/auth/README.md`](prototipos/auth/README.md) | 2026-10-20 | histórico | Protótipos de login que originaram a opção implementada (ADR-005). |
 

@@ -2091,3 +2091,71 @@ Consolidar status atual do MONITOR v2 e preparar repositório para publicação 
 ---
   
   *Entrada registrada: 2026-11-02 23:30* | *Status: Finalizado* | *Commit: e2bc7c7* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
+
+---
+
+## 2026-11-03 | WHATSAPP-ANTI-BAN-01 | issuemaster + master | Implementação anti-bloqueio WhatsApp
+
+### Resumo
+Implementação completa de medidas anti-bloqueio para WhatsApp Evolution API: janela comercial, variação de tempo, gestão de estado "close" e controle de fila.
+
+### Entregas
+
+| Item | Arquivo | Status |
+|---|---|---|
+| Janela comercial 08:00-23:00 | `src/clientes/clientes.ts` | ✅ |
+| Variação de tempo (±1min + 15-20s jitter) | `src/clientes/clientes.ts` | ✅ |
+| Filtro instâncias "close" na rotação | `src/wa/rotacao.ts` | ✅ |
+| Pausar/retomar fila | `src/clientes/clientes.ts` | ✅ |
+| Estado da fila expandido | `src/clientes/clientes.ts` | ✅ |
+
+### Detalhes Técnicos
+
+**Janela Comercial** (`dentroDaJanelaComercial()`):
+- Configurável via `JANELA_INICIO` / `JANELA_FIM` (padrão 8/23)
+- Fuso America/Sao_Paulo via Intl.DateTimeFormat
+- Fila pausada automaticamente fora da janela
+
+**Variação Anti-Detecção** (`intervaloClientesMsComVariacao()`):
+- Base: 60s (CLIENTES_INTERVALO_S)
+- Variação: ±60s (Math.random) + 15-20s jitter adicional
+- Mínimo: 1s fallback
+
+**Gestão Estado "Close"** (`instanciasParaServico()`):
+- Estados válidos: open | connecting | close
+- "open" primeiro, "close" movidas para fim da rotação
+- Fallback: se nenhuma "open", usa principal
+
+**Controle de Fila**:
+- Campo `pausado` em data/clientes-fila.json
+- `pausarFilaClientes()` / `retomarFilaClientes()`
+- `estadoFilaClientes()` retorna `horarioComercial` + `pausado`
+
+### Desafios Superados
+
+1. **Async refatoração**: `instanciaParaServico()` → async; 4 testes atualizados
+2. **TypeScript build**: Erro TS2339 em evolution.ts → revert local
+3. **3 instâncias "close"**: Todas aguardando QR code; filtro evita bloqueio
+
+### Testes
+```
+# tests 181
+# pass 181
+# fail 0
+```
+
+### Evidência
+- Build: `npm run build` → clean ✅
+- Testes: `npm test` → 181/181 passing ✅
+- Documentação: `docs/conhecimento/whatsapp-anti-ban.md` criado
+- Índice: `docs/00-INDICE.md` atualizado
+
+### Próximos Passos
+1. Aguardar QR code pairing das 3 instâncias WhatsApp
+2. Validar dispatch em ambiente real
+3. Monitorar `estadoFilaClientes()` no dashboard
+4. Ajustar parâmetros baseado em métricas reais
+
+---
+  
+*Entrada registrada: 2026-11-03 09:45* | *Status: Finalizado* | *Commit: pendente* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
