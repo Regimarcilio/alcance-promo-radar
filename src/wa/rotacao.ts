@@ -221,7 +221,20 @@ export async function proximaInstancia(excluir: string[] = []): Promise<string> 
     ativos.map(async (i) => ({ i, e: await estadoInstancia(i.instancia) }))
   );
   const abertos = comEstado.filter((x) => x.e === "open").map((x) => x.i);
-  let candidatos = abertos.length > 0 ? abertos : ativos;
+  // CRITÉRIO: Nenhuma instância com state "open" conhecida?
+  // - Não confiar cegamente em "open" de instâncias possivelmente zumbis.
+  // - Usar apenas instâncias que SABEM estar saudáveis.
+  // - O retry em comRetry() marca como "ruim" e tenta outra instância.
+  // - Isto evita enviar com instâncias offline, reduzindo falhas.
+  const ativosSaudaveis = ativos.filter((i) => !instanciaRuim(i.instancia));
+
+  // NÃO confiar cegamente em "open" de instâncias possivelmente zumbis.
+  // Se a principal estiver falhando, priorizar outras saudáveis.
+  const abertosSaudaveis = abertos.filter((i) => !instanciaRuim(i.instancia));
+
+  let candidatos = abertosSaudaveis.length > 0
+    ? abertosSaudaveis
+    : (ativosSaudaveis.length > 0 ? ativosSaudaveis : ativos);
 
   // Falhou agora (ex.: upload "Connection Closed")? não sorteia de novo na
   // mesma entrega; se só sobrar ele, o fallback abaixo mantém o envio vivo.

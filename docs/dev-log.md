@@ -2157,5 +2157,33 @@ Implementação completa de medidas anti-bloqueio para WhatsApp Evolution API: j
 4. Ajustar parâmetros baseado em métricas reais
 
 ---
-  
-*Entrada registrada: 2026-11-03 09:45* | *Status: Finalizado* | *Commit: pendente* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
+    
+## 2026-11-04 | FIX-ZOMBIE-INSTANCIA-01 | Correção seleção instância zumbi em envio de mensagens
+
+**Problema identificado**: Instância `radar-47992521346-3ga` (zumbi) com `principal: true` retorna `connectionState: "open"` na API Evolution, mas falha com "Connection Closed" em operações reais. A rotação não a exclusão da seleção.
+
+**Implementação** (`src/wa/rotacao.ts:216-248`):
+- Implementado filtro robusto em `proximaInstancia()`: `abertos` e `ativosSaudaveis` passam por `instanciaRuim()` antes de serem usados
+- Novo fluxo: prioriza `open` + saudável, depois `ativos` + saudáveis, fallback `ativos` brutos
+- Lógica de fallback encadeada evita usar instâncias marcadas como "ruim" (bad) mesmo que reportem estado "open"
+- Comentário atualizado sobre `principal` sendo relevante apenas para operações de serviço, não envio regular
+
+**Validação concluída**:
+- `npm test`: **189/189** testes passam (inclui test 189: "envio: instância marcada como ruim não é sorteada")
+- `npm run build`: ✅ sucesso
+- `npm run typecheck`: ✅ limpo
+
+**Ação tomada**:
+- Instância `radar-47992521346-3ga` marcada como "ruim" via `marcarInstanciaRuim()` (memória volátil, 5 min TTL)
+- Verificação: `instanciaRuim('radar-47992521346-3ga')` retorna `true`
+- Outras instâncias (`radar-celular-1-qzl`, `radar-47997136647-m28`) permanecem saudáveis (`false`)
+
+**Próximos passos**:
+1. Monitorar envios reais - zombie não será mais sorteado para mensagens
+2. Se o problema persistir, investigar causa raiz na conexão Evolution (possível problema de rede/banco de mensagens)
+3. Considerar implementar health-check mais agressivo para detecção precoce de zumbis
+
+---
+    
+*Entrada registrada: 2026-11-04* | *Status: Concluído* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
+<!-- End of file - total lines: 2190 -->
