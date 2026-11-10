@@ -22,6 +22,18 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+/** Fluxos de envio que compartilham o rodízio de números. */
+export type FluxoEnvio = "piloto" | "monitor" | "disparo";
+
+/** Permissões por número: em quais fluxos ele pode ser remetente. */
+export interface PermissoesInstancia {
+  piloto: boolean;
+  monitor: boolean;
+  disparo: boolean;
+}
+
+const PERMISSOES_PADRAO: PermissoesInstancia = { piloto: true, monitor: true, disparo: true };
+
 export interface InstanciaWhats {
   instancia: string; // nome da instância na Evolution
   nome: string; // rótulo amigável ("Celular 2")
@@ -32,6 +44,20 @@ export interface InstanciaWhats {
   criadaEm: string;
   /** principal = preferido para operações de serviço (também participa do envio) */
   principal?: boolean;
+  /** em quais fluxos este número pode enviar (migração: todos true) */
+  permissoes: PermissoesInstancia;
+  /** pausa o número INTEIRO (todos os fluxos) sem desativá-lo */
+  pausado: boolean;
+}
+
+/** Normaliza permissões vindas do JSON (campo ausente = permitido). */
+function normalizarPermissoes(raw: any): PermissoesInstancia {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    piloto: r.piloto !== false,
+    monitor: r.monitor !== false,
+    disparo: r.disparo !== false,
+  };
 }
 
 interface Store {
@@ -78,6 +104,8 @@ function vazio(): Store {
         enviadas: 0,
         ultimaEm: null,
         criadaEm: new Date().toISOString(),
+        permissoes: { ...PERMISSOES_PADRAO },
+        pausado: false,
       },
     ],
   };
@@ -102,6 +130,9 @@ function carregar(): Store {
               ultimaEm: i.ultimaEm ?? null,
               criadaEm: i.criadaEm ?? new Date().toISOString(),
               ...(i.principal ? { principal: true } : {}),
+              // migração retrocompatível: sem os campos novos = tudo permitido
+              permissoes: normalizarPermissoes(i.permissoes),
+              pausado: i.pausado === true,
             })),
         };
         if (cache.itens.length > 0) {
@@ -213,10 +244,20 @@ export function ultimaInstanciaUsada(): string | null {
   return ultimaUsada;
 }
 
-export async function proximaInstancia(excluir: string[] = []): Promise<string> {
+export async function proximaInstancia(fluxo?: FluxoEnvio, excluir: string[] = []): Promise<string> {
   const s = carregar();
-  const ativos = s.itens.filter((i) => i.ativo);
-  if (ativos.length === 0) return padrao();
+  // pausado vale para TODOS os fluxos (inclusive chamadas sem fluxo)
+  const ativos = s.itens.filter(
+    (i) => i.ativo && !i.pausado && (!fluxo || i.permissoes[fluxo] === true)
+  );
+  if (ativos.length === 0) {
+    if (fluxo) {
+      throw new Error(
+        `Nenhum número ativo e permitido para o fluxo "${fluxo}" — verifique permissões e pausa na aba Números`
+      );
+    }
+    return padrao();
+  }
   const comEstado = await Promise.all(
     ativos.map(async (i) => ({ i, e: await estadoInstancia(i.instancia) }))
   );
@@ -406,6 +447,8 @@ export async function adicionarInstancia(nome: string): Promise<{ instancia: str
     enviadas: 0,
     ultimaEm: null,
     criadaEm: new Date().toISOString(),
+    permissoes: { ...PERMISSOES_PADRAO },
+    pausado: false,
   });
   salvar(s);
   return { instancia, nome: rotulo, qr };
@@ -424,6 +467,31 @@ export function definirPeso(instancia: string, peso: number): void {
   const i = s.itens.find((x) => x.instancia === instancia);
   if (!i) return;
   i.peso = Math.min(10, Math.max(1, Number(peso) || 1));
+  salvar(s);
+}
+
+/** Liga/desliga em quais fluxos o número pode enviar. */
+export function definirPermissoes(
+  instancia: string,
+  permissoes: Partial<PermissoesInstancia>
+): void {
+  const s = carregar();
+  const i = s.itens.find((x) => x.instancia === instancia);
+  if (!i) return;
+  i.permissoes = {
+    piloto: permissoes.piloto ?? i.permissoes.piloto,
+    monitor: permissoes.monitor ?? i.permissoes.monitor,
+    disparo: permissoes.disparo ?? i.permissoes.disparo,
+  };
+  salvar(s);
+}
+
+/** Pausa/continua o número inteiro (todos os fluxos) sem alterar `ativo`. */
+export function definirPausado(instancia: string, pausado: boolean): void {
+  const s = carregar();
+  const i = s.itens.find((x) => x.instancia === instancia);
+  if (!i) return;
+  i.pausado = !!pausado;
   salvar(s);
 }
 

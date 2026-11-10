@@ -227,3 +227,90 @@ test("envio: instância marcada como ruim não é sorteada", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+/* --------------- permissões por número / pausa (issue #36) ---------------- */
+
+const ITENS_PERM = [
+  { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: false, monitor: true, disparo: false } },
+  { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: false, disparo: true } },
+  { instancia: "cel-3", nome: "Celular 3", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: true, disparo: false } },
+];
+
+test("permissões: fluxo de disparo nunca sorteia número sem permissão", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_PERM);
+  try {
+    for (let i = 0; i < 25; i++) assert.equal(await mod.proximaInstancia("disparo"), "cel-2");
+    for (let i = 0; i < 25; i++) assert.notEqual(await mod.proximaInstancia("monitor"), "cel-2");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("permissões: nenhum número permitido no fluxo → erro claro, sem sortear proibido", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: true, disparo: false } },
+  ]);
+  try {
+    await assert.rejects(
+      () => mod.proximaInstancia("disparo"),
+      /Nenhum número ativo e permitido para o fluxo "disparo"/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pausa: número pausado sai de TODOS os fluxos (inclusive chamada sem fluxo)", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_PERM.map((i) => ({ ...i, pausado: i.instancia === "cel-1" })));
+  try {
+    for (let n = 0; n < 25; n++) assert.notEqual(await mod.proximaInstancia(), "cel-1");
+    for (let n = 0; n < 25; n++) assert.notEqual(await mod.proximaInstancia("monitor"), "cel-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pausa: todos pausados → erro no fluxo (não envia com número proibido)", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: true, disparo: true }, pausado: true },
+  ]);
+  try {
+    await assert.rejects(() => mod.proximaInstancia("piloto"), /Nenhum número ativo e permitido/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("definirPermissoes/definirPausado: persistem e valem no sorteio", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 1, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: true, disparo: true } },
+    { instancia: "cel-2", nome: "Celular 2", ativo: true, peso: 1, enviadas: 0, ultimaEm: null, criadaEm: "", permissoes: { piloto: true, monitor: true, disparo: true } },
+  ]);
+  try {
+    mod.definirPermissoes("cel-1", { disparo: false });
+    mod.definirPausado("cel-2", true);
+    const porNome = Object.fromEntries(mod.listarInstancias().map((i: any) => [i.instancia, i]));
+    assert.deepEqual(porNome["cel-1"].permissoes, { piloto: true, monitor: true, disparo: false });
+    assert.equal(porNome["cel-2"].pausado, true);
+    // cel-1 segue permitido no piloto; cel-2 pausado sai de tudo
+    for (let n = 0; n < 20; n++) assert.equal(await mod.proximaInstancia("piloto"), "cel-1");
+    // disparo: cel-1 sem permissão e cel-2 pausado → nenhum permitido
+    await assert.rejects(() => mod.proximaInstancia("disparo"), /Nenhum número ativo e permitido/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("migração: instância antiga ganha as 3 permissões ligadas e pausado=false", async () => {
+  const { mod, dir } = await carregarRotacao("1", [
+    { instancia: "cel-1", nome: "Celular 1", ativo: true, peso: 5, enviadas: 0, ultimaEm: null, criadaEm: "" },
+  ]);
+  try {
+    const i = mod.listarInstancias()[0];
+    assert.deepEqual(i.permissoes, { piloto: true, monitor: true, disparo: true });
+    assert.equal(i.pausado, false);
+    assert.equal(await mod.proximaInstancia("monitor"), "cel-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -43,7 +43,7 @@ if (cmd === "categorias:list") {
     if (process.argv.includes("--enviar")) {
       const r = await enviarParaGrupo({
         grupo: process.env.GRUPO_TESTE ?? "grupo-teste",
-        imagem: o.imagem, legenda: msg, dryRun,
+        imagem: o.imagem, legenda: msg, dryRun, fluxo: "piloto",
       });
       console.log(`enviado: ${r.messageId} dryRun=${r.dryRun}`);
       if (!r.dryRun) registrarEnvio(o.mlbId, o.precoAtual, o.cupom);

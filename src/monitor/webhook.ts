@@ -252,6 +252,7 @@ export async function processar(
         imagem: foto,
         legenda: corpo,
         dryRun: true,
+        fluxo: "monitor",
       });
       simulados.push({ jid: destino.jid, messageId: r.messageId });
     }

@@ -2220,3 +2220,20 @@ imediata de toda demanda aberta.
 - Imagem do container roda `dist` embutido; o envio direto ao grupo VIP editado
   em `server.ts` só entra com `docker compose build` (não feito para não
   interromper a campanha).
+
+## 2026-11-10 — Issue #36 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** permissões por número (Piloto/Monitor/Disparo) + pausar/continuar o número inteiro.
+- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Decisões:** `InstanciaWhats` ganhou `permissoes` (default todas true) e `pausado` (default false),
+  com migração retrocompatível em `carregar()`. `proximaInstancia(fluxo, excluir)` filtra por
+  permissão + pausa + ativo e, se não sobrar candidato no fluxo, lança erro claro em vez de
+  sortear número proibido. `dispatch` propaga o fluxo e cada chamador informa o seu
+  (piloto/monitor/disparo). Aba Números mantida, apenas com toggles de permissão e
+  Pausar/Continuar por linha, além do indicador "em uso"/"pausado".
+- **Arquivos:** src/wa/rotacao.ts, src/wa/dispatch.ts, src/ml/piloto.ts, src/jobs/auto.ts,
+  src/cli.ts, src/monitor/fila.ts, src/monitor/webhook.ts, src/clientes/clientes.ts,
+  src/clientes/boas-vindas.ts, src/manager/server.ts, rotacao.test.ts, dispatch.test.ts
+- **Testes:** 197/197 (`npm test`) e `npm run build` verdes.
+- **SAST:** sem segredo novo no diff; `npm audit` acusa 1 high pré-existente (zod <4.6.6,
+  exige upgrade major 4.x — fora do escopo).
+- **Pendências:** override manual por fluxo (#37).

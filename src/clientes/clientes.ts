@@ -540,6 +540,7 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
       imagem: item.imagem,
       legenda: item.texto,
       dryRun: dry,
+      fluxo: "disparo",
       mediatype: item.midia?.tipo === "video" ? "video" : undefined,
       mimetype: item.midia?.mime,
     });
