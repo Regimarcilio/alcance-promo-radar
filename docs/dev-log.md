@@ -2223,7 +2223,7 @@ imediata de toda demanda aberta.
 
 ## 2026-11-10 — Issue #36 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
 - **Objetivo:** permissões por número (Piloto/Monitor/Disparo) + pausar/continuar o número inteiro.
-- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Branch:** ISSUE · **PR:** #39 (merged)
 - **Decisões:** `InstanciaWhats` ganhou `permissoes` (default todas true) e `pausado` (default false),
   com migração retrocompatível em `carregar()`. `proximaInstancia(fluxo, excluir)` filtra por
   permissão + pausa + ativo e, se não sobrar candidato no fluxo, lança erro claro em vez de
@@ -2240,7 +2240,7 @@ imediata de toda demanda aberta.
 
 ## 2026-11-10 — Issue #37 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
 - **Objetivo:** Radar automático entre ativos (padrão) com override manual opcional por fluxo.
-- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Branch:** ISSUE · **PR:** #40 (merged)
 - **Decisões:** `InstanciaWhats.override?: { piloto?, monitor?, disparo? }` guarda o nome da
   instância fixada (null/ausente = automático). `proximaInstancia(fluxo)` usa o override só se
   a instância existir, estiver ativa, permitida no fluxo, despausada, `open` e não tiver
@@ -2256,7 +2256,7 @@ imediata de toda demanda aberta.
 
 ## 2026-11-10 — Issue #38 — @datamaster/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
 - **Objetivo:** contador do Rastreio parado em 5000 → total histórico real + histórico maior.
-- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Branch:** ISSUE · **PR:** #41 (merged)
 - **Decisões:** `RASTREIO_LIMITE` (default 50000, piso 1000) controla o teto do arquivo;
   `data/rastreio-total.json` guarda o total histórico injetado em `registrarPublicacao()`.
   `resumoRastreio()` agora devolve `total` (histórico), `armazenados` (arquivo) e `limite`.
