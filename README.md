@@ -178,6 +178,47 @@ Arquivos relevantes:
   `127.0.0.1`; o `docker-compose.yml` publica `${MANAGER_PORT:-8091}` em todas as interfaces e exige
   firewall/reverse proxy consciente.
 
+## Telemetria (Prometheus + Grafana)
+
+O manager expõe métricas em formato Prometheus no endpoint `/metrics` (porta 8091).
+
+**Stack de monitoramento opcional:**
+
+```bash
+# 1. Suba o stack com Prometheus + Grafana
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
+
+# 2. Grafana estará em http://127.0.0.1:3000 (usuário e senha no .env)
+# 3. Prometheus coleta de http://manager:8091/metrics a cada 10s
+# 4. Dashboard "Alcance Promo Radar - Overview" já está provisionado
+
+# Alternativamente, use apenas o manager e acesse:
+curl http://127.0.0.1:8091/metrics
+```
+
+**Métricas disponíveis:**
+
+| Métrica | Tipo | Descrição |
+|---------|------|-----------|
+| `alcance_up` | gauge | Sistema online (1/0) |
+| `alcance_monitor_recebidas_total` | counter | Mensagens recebidas |
+| `alcance_monitor_encaminhadas_total` | counter | Mensagens encaminhadas |
+| `alcance_monitor_duplicadas_total` | counter | Mensagens duplicadas |
+| `alcance_monitor_erros_total` | counter | Mensagens com erro |
+| `alcance_fila_tamanho` | gauge | Itens na fila |
+| `alcance_instancias_ativas_total` | gauge | Instâncias ativas |
+| `alcance_disparos_total` | counter | Campanhas criadas |
+| `alcance_janela_aberta` | gauge | Fora da janela 08:00-23:00 |
+
+**Variáveis de ambiente:**
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `PROMETHEUS_PORT` | 9090 | Porta do Prometheus |
+| `GRAFANA_PORT` | 3000 | Porta do Grafana |
+| `GRAFANA_ADMIN_USER` | admin | Usuário admin |
+| `GRAFANA_ADMIN_PASSWORD` | (obrigatório) | Senha admin |
+
 ## Licença
 
 Uso privado. Consulte o responsável pelo projeto antes de redistribuir.

@@ -2187,3 +2187,36 @@ Implementação completa de medidas anti-bloqueio para WhatsApp Evolution API: j
     
 *Entrada registrada: 2026-11-04* | *Status: Concluído* | *Para revisionamento: abrir issue em `alcance-promo-radar`*
 <!-- End of file - total lines: 2190 -->
+
+## 2026-11-10 | FIX-ENVIO-CLIENTES + DIRETIVA-RESOLUCAO | issuemaster | Envio travado/lento e regra de resolução obrigatória
+
+### Resumo
+Campanha de clientes (550 contatos) parecia "parada no mesmo horário". Diagnóstico
+mostrou que estava escoando (~1,5 msg/min) mas com apenas 1 número saudável, e a
+fonte `clientes.ts` havia regredido na checagem da janela de envio. Corrigido em
+runtime e na fonte. Adicionada Regra de Ouro no `AGENTS.md` obrigando resolução
+imediata de toda demanda aberta.
+
+### Entregas
+- `data/instancias.json` (runtime): habilitada `radar-47997035385-zxs` (open);
+  desativadas `radar-47992521346-3ga` e `radar-47997595849-oco` (close);
+  principal movido para `radar-47997136647-uzz`. Agora 2 números enviam.
+- `src/clientes/clientes.ts`: restaurado uso de `podeEnviarAgora()`
+  (`monitor/janela.ts`) e `dentroDaJanela()` (`util/janela.ts`), eliminando a
+  regressão `Number("08:00") -> NaN` que zeraria os envios num rebuild.
+- `AGENTS.md`: nova Seção 0 "REGRA DE OURO — demanda aberta = resolução imediata
+  e obrigatória", com exceções explícitas e atalho para defeitos (sem protótipo).
+
+### Evidência
+- `npm run build`: ✅ sucesso (tsc limpo).
+- Runtime: disparo `560ed803` ENVIANDO, 159/550+, 2 falhas (número inválido
+  `554999143255`), 0 erros de conexão; `zxs` e `uzz` incrementando `enviadas`.
+- `docker logs`: envios contínuos a cada ~40-60s sem buraco.
+
+### Pendências
+- Reginaldo `554792521346` (`radar-47992521346-3ga`) = `device_removed`: exige
+  novo pareamento por QR; há instância duplicada `radar-47997136647-m28` (close)
+  e 2 instâncias "connecting" órfãs a limpar (ação destrutiva — requer OK).
+- Imagem do container roda `dist` embutido; o envio direto ao grupo VIP editado
+  em `server.ts` só entra com `docker compose build` (não feito para não
+  interromper a campanha).
