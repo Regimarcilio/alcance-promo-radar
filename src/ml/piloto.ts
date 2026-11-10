@@ -608,7 +608,7 @@ async function tick(id: number): Promise<void> {
           cupom, link: linkAfiliado,
           categoria: `${catName} • auto`, score: op.score,
         });
-      const r = await enviarParaGrupo({ grupo: loop.grupo, imagem, legenda: mensagem, dryRun: false });
+      const r = await enviarParaGrupo({ grupo: loop.grupo, imagem, legenda: mensagem, dryRun: false, fluxo: "piloto" });
       registrarEnvio(op.mlbId, precoPix, cupom);
       // FAVORITOS ML: guarda o item na lista de favoritos do afiliado (inerte
       // sem ML_ACCESS_TOKEN). Nunca pode derrubar a publicação.

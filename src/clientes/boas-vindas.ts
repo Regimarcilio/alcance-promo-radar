@@ -237,7 +237,7 @@ export async function enviarBoasVindas(
   let instancia: string | undefined;
 
   for (let t = 0; t < tentativas; t++) {
-    instancia = t === 0 && opts.instancia ? opts.instancia : await proximaInstancia(falhas);
+    instancia = t === 0 && opts.instancia ? opts.instancia : await proximaInstancia("disparo", falhas);
     try {
       const res = await fetch(`${evoUrl}/message/sendMedia/${instancia}`, {
         method: "POST",

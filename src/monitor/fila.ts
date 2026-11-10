@@ -179,6 +179,7 @@ export async function entregarItem(
         imagem: item.imagem,
         legenda: item.mensagem,
         dryRun: dry,
+        fluxo: "monitor",
       });
       enviados.push({ jid, messageId: r.messageId });
       registrarEvento({

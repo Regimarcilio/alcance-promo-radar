@@ -59,6 +59,7 @@ import {
   listarInstancias, estadoInstancia as estadoInstanciaWhats, adicionarInstancia, qrInstancia,
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
   definirPrincipal, listarInstancias as listarInstanciasWhats, instanciaParaServico,
+  definirPermissoes, definirPausado, ultimaInstanciaUsada,
 } from "../wa/rotacao.js";
 import {
   autenticar, auditar, checarLimite, carregarUsuarios, configurarAuth, cookieExpirado, cookieSessao,
@@ -919,8 +920,13 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   }
   // ---------- E6 MONITOR ----------
   if (req.method === "GET" && url.pathname === "/api/instancias") {
+    const ultima = ultimaInstanciaUsada();
     const itens = await Promise.all(
-      listarInstancias().map(async (i) => ({ ...i, estado: await estadoInstanciaWhats(i.instancia) }))
+      listarInstancias().map(async (i) => ({
+        ...i,
+        estado: await estadoInstanciaWhats(i.instancia),
+        emUso: ultima === i.instancia,
+      }))
     );
     json(200, { max: MAX_INSTANCIAS, itens });
     return;
@@ -967,6 +973,30 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     try {
       const b = JSON.parse(await lerCorpo(req));
       definirPeso(String(b.instancia ?? ""), Number(b.peso));
+      json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/permissoes") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirPermissoes(String(b.instancia ?? ""), {
+        piloto: typeof b.piloto === "boolean" ? b.piloto : undefined,
+        monitor: typeof b.monitor === "boolean" ? b.monitor : undefined,
+        disparo: typeof b.disparo === "boolean" ? b.disparo : undefined,
+      });
+      json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/pausar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      definirPausado(String(b.instancia ?? ""), b.pausado === true);
       json(200, { ok: true });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
@@ -2637,15 +2667,24 @@ async function carregarInstancias(){
     if(!itens.length){$('minstlist').textContent='nenhum número — adicione um.';return;}
     $('minstlist').innerHTML=itens.map(function(i){
       const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
+      const perm=i.permissoes||{piloto:true,monitor:true,disparo:true};
       let acoes='';
       const inst=esc(i.instancia);
       if(i.estado!=='open') acoes+='<button class="mbtn" data-acao="qr" data-inst="'+inst+'">QR</button>';
       acoes+='<button class="mbtn" data-acao="principal" data-valor="'+(i.principal?'false':'true')+'" data-inst="'+inst+'">'+(i.principal?'★ principal':'☆ principal')+'</button>';
       acoes+='<button class="mbtn" data-acao="ativo" data-valor="'+(i.ativo?'false':'true')+'" data-inst="'+inst+'">'+(i.ativo?'desativar':'ativar')+'</button>';
       acoes+='<button class="mbtn" data-acao="peso" data-valor="'+esc(Number(i.peso)||0)+'" data-inst="'+inst+'">peso</button>';
+      // permissões por fluxo: botão ligado = número permitido naquele fluxo
+      const tog=function(fluxo,rotulo,on){
+        return '<button class="mbtn'+(on?' ok':'')+'" data-acao="permissao" data-fluxo="'+fluxo+'" data-valor="'+(on?'false':'true')+'" data-inst="'+inst+'" title="'+(on?'Desligar':'Ligar')+' no fluxo '+rotulo+'">'+rotulo+'</button>';
+      };
+      acoes+=tog('piloto','Piloto',perm.piloto!==false);
+      acoes+=tog('monitor','Monitor',perm.monitor!==false);
+      acoes+=tog('disparo','Disparo',perm.disparo!==false);
+      acoes+='<button class="mbtn'+(i.pausado?' ok':'')+'" data-acao="pausar" data-valor="'+(i.pausado?'false':'true')+'" data-inst="'+inst+'">'+(i.pausado?'▶ continuar':'⏸ pausar')+'</button>';
       acoes+='<button class="mbtn" data-acao="remover" data-inst="'+inst+'">🗑</button>';
       return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">'+
-        '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+esc(i.peso)+' · '+esc(i.enviadas)+' env'+(i.ativo?'':' · OFF')+'</span></span>'+
+        '<span>'+esc(i.nome)+' <span class="mini">'+ic+' '+esc(i.estado)+' · peso '+esc(i.peso)+' · '+esc(i.enviadas)+' env'+(i.ativo?'':' · OFF')+(i.pausado?' · ⏸ pausado':'')+(i.emUso?' · em uso':'')+'</span></span>'+
         '<span style="display:flex;gap:4px;flex-wrap:wrap">'+acoes+'</span></div>';
     }).join('');
   }catch(e){}
@@ -2682,6 +2721,15 @@ async function instPeso(inst,peso){
   const v=prompt('Peso no sorteio (1 a 10). Maior = recebe mais mensagens:',String(peso));
   if(v===null)return;
   await fetch('/api/instancias/peso',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,peso:Number(v)})});
+  carregarInstancias();
+}
+async function instPermissao(inst,fluxo,valor){
+  const corpo={instancia:inst};corpo[fluxo]=valor;
+  await fetch('/api/instancias/permissoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+  carregarInstancias();
+}
+async function instPausar(inst,pausado){
+  await fetch('/api/instancias/pausar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,pausado:pausado})});
   carregarInstancias();
 }
 async function instRemover(inst){
@@ -2737,6 +2785,8 @@ document.addEventListener('click',function(e){
   else if(acao==='principal')instPrincipal(inst,b.getAttribute('data-valor')==='true');
   else if(acao==='ativo')instAtivo(inst,b.getAttribute('data-valor')==='true');
   else if(acao==='peso')instPeso(inst,Number(b.getAttribute('data-valor'))||0);
+  else if(acao==='permissao')instPermissao(inst,b.getAttribute('data-fluxo'),b.getAttribute('data-valor')==='true');
+  else if(acao==='pausar')instPausar(inst,b.getAttribute('data-valor')==='true');
   else if(acao==='remover')instRemover(inst);
 });
 // ---------- TITULOS DOS CARDS ----------

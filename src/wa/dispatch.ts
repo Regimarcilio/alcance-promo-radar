@@ -1,5 +1,5 @@
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
-import { marcarInstanciaRuim, proximaInstancia, registrarEnvio } from "./rotacao.js";
+import { marcarInstanciaRuim, proximaInstancia, registrarEnvio, type FluxoEnvio } from "./rotacao.js";
 import { marcarEnvioAtivo } from "../monitor/envio-lock.js";
 import { ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
 
@@ -17,12 +17,16 @@ export function ehErroTransitorio(msg: string): boolean {
  * Repete só erros TRANSITÓRIOS (WhatsApp/Evolution cai e volta em segundos).
  * Um 500 isolado não deve custar a oferta do ciclo.
  */
-async function comRetry<T>(fn: (instancia: string) => Promise<T>, tentativas = 3): Promise<T> {
+async function comRetry<T>(
+  fn: (instancia: string) => Promise<T>,
+  fluxo?: FluxoEnvio,
+  tentativas = 3
+): Promise<T> {
   let ultimo: any;
   const falhas: string[] = [];
   for (let i = 0; i < tentativas; i++) {
     // cada tentativa sorteia de novo, ignorando quem acabou de falhar
-    const instancia = await proximaInstancia(falhas);
+    const instancia = await proximaInstancia(fluxo, falhas);
     try {
       const r = await fn(instancia);
       registrarEnvio(instancia);
@@ -116,6 +120,7 @@ async function prepararImagem(imagem: string): Promise<{ media: string; mimetype
 async function enviarTexto(args: {
   grupo: string;
   legenda: string;
+  fluxo?: FluxoEnvio;
 }): Promise<EnvioResult> {
   const evoUrl = process.env.EVO_URL;
   const evoKey = process.env.EVO_KEY;
@@ -131,7 +136,7 @@ async function enviarTexto(args: {
     if (!res.ok) throw new Error(`Evolution sendText ${res.status}: ${body.slice(0, 300)}`);
     const json: any = JSON.parse(body);
     return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
-  });
+  }, args.fluxo);
 }
 
 export async function enviarParaGrupo(args: {
@@ -139,6 +144,8 @@ export async function enviarParaGrupo(args: {
   imagem?: string;
   legenda: string;
   dryRun: boolean;
+  /** fluxo de origem: filtra números por permissão/pausa (issues #36/#37). */
+  fluxo?: FluxoEnvio;
   /** "video" envia como vídeo (upload da tela Clientes); padrão imagem. */
   mediatype?: "image" | "video" | "document";
   mimetype?: string;
@@ -186,6 +193,7 @@ export async function enviarMidia(args: {
   imagem: string;
   legenda: string;
   dryRun: boolean;
+  fluxo?: FluxoEnvio;
   mediatype?: "image" | "video" | "document";
   mimetype?: string;
 }): Promise<EnvioResult> {
@@ -240,5 +248,5 @@ export async function enviarMidia(args: {
     } catch {
       return { messageId: `midia-${Date.now()}`, dryRun: false };
     }
-  });
+  }, args.fluxo);
 }

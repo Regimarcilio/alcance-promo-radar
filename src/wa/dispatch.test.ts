@@ -1,7 +1,7 @@
 /** Segurança do envio: allowlist de mídia local e anti-SSRF em URL. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validarImagem } from "./dispatch.js";
+import { validarImagem, enviarParaGrupo } from "./dispatch.js";
 
 test("validarImagem: aceita vazio, https público e data:image", () => {
   assert.doesNotThrow(() => validarImagem(""));
@@ -62,6 +62,78 @@ test("envio: se o sendMedia falhar, reenvia só o texto (não perde a oferta)", 
     assert.equal(r.messageId, "txt-1");
     assert.equal(media, 3, "sendMedia deve esgotar as tentativas");
     assert.equal(texto, 1, "depois do media, envia o texto uma vez");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: fluxo sem número permitido falha antes de chamar a Evolution", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-perm-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [{
+      instancia: "inst-monitor", nome: "Monitor", ativo: true, peso: 1,
+      enviadas: 0, ultimaEm: null, criadaEm: "",
+      permissoes: { piloto: false, monitor: true, disparo: false }, pausado: false,
+    }],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`não deveria chamar a Evolution: ${url}`);
+  });
+  try {
+    await assert.rejects(
+      () => enviarParaGrupo({ grupo: "120363@g.us", legenda: "x", dryRun: false, fluxo: "disparo" }),
+      /Nenhum número ativo e permitido para o fluxo "disparo"/
+    );
+    assert.equal(m.chamadas.filter((u) => u.includes("/message/")).length, 0);
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: fluxo permitido envia normalmente", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-ok-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [{
+      instancia: "inst-piloto", nome: "Piloto", ativo: true, peso: 1,
+      enviadas: 0, ultimaEm: null, criadaEm: "",
+      permissoes: { piloto: true, monitor: false, disparo: false }, pausado: false,
+    }],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), { headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/message/sendText/inst-piloto")) {
+      return new Response(JSON.stringify({ key: { id: "ok-1" } }), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`url inesperada: ${url}`);
+  });
+  try {
+    const r = await enviarParaGrupo({ grupo: "120363@g.us", legenda: "x", dryRun: false, fluxo: "piloto" });
+    assert.equal(r.messageId, "ok-1");
   } finally {
     m.restaurar();
     rmSync(dir, { recursive: true, force: true });

@@ -103,7 +103,7 @@ export async function runAuto(o: AutoOpts): Promise<string[]> {
     });
     if (modoAuto) {
       const r = await enviarParaGrupo({
-        grupo, imagem: op.imagem, legenda: msg, dryRun: !o.live,
+        grupo, imagem: op.imagem, legenda: msg, dryRun: !o.live, fluxo: "piloto",
       });
       log.push(`ENVIADO AUTO score=${op.score} ${op.mlbId} → ${grupo} id=${r.messageId} dryRun=${r.dryRun}`);
       if (o.live) registrarEnvio(op.mlbId, op.precoAtual, op.cupom);
@@ -129,7 +129,7 @@ export async function filaApprove(mlbId: string, live: boolean): Promise<string>
   const item = fila[i];
   const r = await enviarParaGrupo({
     grupo: item.grupo ?? process.env.GRUPO_TESTE ?? "grupo-teste",
-    imagem: item.imagem ?? "", legenda: item.mensagem, dryRun: !live,
+    imagem: item.imagem ?? "", legenda: item.mensagem, dryRun: !live, fluxo: "piloto",
   });
   if (live) {
     fila.splice(i, 1);
