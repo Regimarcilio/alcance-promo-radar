@@ -39,6 +39,8 @@ export interface EstadoAdicao {
   finishedEm: string | null;
   /** fora da janela 6h–22h: aguardar até 6h do dia seguinte */
   foraJanela: boolean;
+  /** job pausado (para cancelar continuação) */
+  pausado: boolean;
 }
 
 const vazio = (): EstadoAdicao => ({
@@ -55,6 +57,7 @@ const vazio = (): EstadoAdicao => ({
   limitado: false,
   finishedEm: null,
   foraJanela: false,
+  pausado: false,
 });
 
 let estado: EstadoAdicao = vazio();
@@ -153,6 +156,9 @@ export async function iniciarAdicaoGrupo(
   void (async () => {
     for (const num of lista) {
       // O envio tem prioridade: a adição só acontece na folga entre envios.
+      while (estado.pausado) {
+        await new Promise((s) => setTimeout(s, 1000));
+      }
       await aguardarEnvioLivre();
       const r = await adicionarUmParticipante(grupoJid, num, { esperas: espera, tentativas });
       if (r.ok && !r.jaNoGrupo) {
@@ -191,4 +197,23 @@ export async function iniciarAdicaoGrupo(
   });
 
   return estadoAdicao();
+}
+
+/**
+ * Cancela a continuação do job atual (pausa). Não interrompe o contato que
+ * está sendo processado no momento, mas para na próxima iteração.
+ */
+export function pausarAdicaoGrupo(): boolean {
+  if (!estado.rodando || estado.pausado) return false;
+  estado.pausado = true;
+  return true;
+}
+
+/**
+ * Retoma um job pausado. Se o job não estiver pausado, não faz nada.
+ */
+export function retomarAdicaoGrupo(): boolean {
+  if (!estado.pausado) return false;
+  estado.pausado = false;
+  return true;
 }

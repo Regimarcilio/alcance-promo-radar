@@ -30,14 +30,14 @@ import { eventos as eventosMonitor, resumo as resumoMonitor, zerarContadores, li
 import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker, pararFilaWorker, aguardarProcessamento } from "../monitor/fila.js";
 import {
   listarContatos, listarListas, criarLista, removerLista, adicionarContato, renomearContato,
-  removerContato, sincronizar as sincronizarClientes, estadoSync, enfileirarCampanha,
+  removerContato, sincronizarClientes, estadoSync, enfileirarCampanha,
   estadoFilaClientes, limparFilaClientes, iniciarClientesWorker, pararClientesWorker,
   removerItensDaFila, atualizarItensDaFila,
   pausarFilaClientes, retomarFilaClientes,
 } from "../clientes/clientes.js";
 import {
   listarDisparos, resumoDisparos, criarDisparo, editarDisparo, excluirDisparo,
-  duplicarDisparo, type MidiaDisparo,
+  duplicarDisparo, type MidiaDisparo, textoComLink, registrarResultadoDisparo,
 } from "../clientes/disparos.js";
 import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
@@ -50,7 +50,7 @@ import {
   buscarPermissaoGrupo, definirPermissaoGrupo, gruposDoCache,
   type AcaoGrupo,
 } from "../monitor/evolution.js";
-import { estadoAdicao, iniciarAdicaoGrupo } from "../monitor/grupo-add.js";
+import { estadoAdicao, iniciarAdicaoGrupo, pausarAdicaoGrupo, retomarAdicaoGrupo } from "../monitor/grupo-add.js";
 import { enviarBoasVindas, estadoBoasVindas } from "../clientes/boas-vindas.js";
 import {
   estadoSyncGrupos, iniciarSyncGruposDiario, pararSyncGruposDiario, sincronizarGruposAgora,
@@ -214,6 +214,17 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     } catch {
       json(503, { ok: false, erro: "data dir não gravável" });
     }
+    return;
+  }
+
+  // ---------- metrics (público, sem detalhes sensíveis) ----------
+  if (metodo === "GET" && caminho === "/metrics") {
+    const { exportarMetricas } = await import("../monitor/metrics.js");
+    res.writeHead(200, {
+      "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(exportarMetricas());
     return;
   }
 
@@ -1181,6 +1192,18 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     }
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/clientes/grupo/pausar") {
+    // PAUSA: cancela a continuação do job de adição a grupos
+    const ok = pausarAdicaoGrupo();
+    json(200, { ok, job: estadoAdicao() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/clientes/grupo/retomar") {
+    // RETOMA: retoma um job pausado
+    const ok = retomarAdicaoGrupo();
+    json(200, { ok, job: estadoAdicao() });
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/clientes/enviar") {
     try {
       const b = JSON.parse(await lerCorpo(req, 8 * 1024 * 1024));
@@ -1275,15 +1298,32 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         listaNome,
         jids,
       });
-      try {
-        enfileirarCampanha({
-          texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+
+      // Detecta se jids contém apenas um grupo (@g.us) - envia direto
+      if (jids.length === 1 && jids[0].endsWith("@g.us")) {
+        const grupoJid = jids[0];
+        const texto = textoComLink(d.texto, d.link);
+        const imagem = d.midia?.arquivo || String(b.imagem ?? "").trim();
+        await enviarParaGrupo({
+          grupo: grupoJid,
+          imagem,
+          legenda: texto,
+          dryRun: false,
         });
-      } catch (e) {
-        excluirDisparo(d.id); // rollback: não deixa disparo sem fila
-        throw e;
+        registrarResultadoDisparo(d.id, true);
+        json(200, { ok: true, disparo: d, enviado: true, grupo: grupoJid });
+      } else {
+        // Fluxo normal: enfileira individualmente
+        try {
+          enfileirarCampanha({
+            texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+          });
+        } catch (e) {
+          excluirDisparo(d.id); // rollback: não deixa disparo sem fila
+          throw e;
+        }
+        json(200, { ok: true, disparo: d, fila: estadoFilaClientes() });
       }
-      json(200, { ok: true, disparo: d, fila: estadoFilaClientes() });
     } catch (e: any) {
       json(400, { erro: String(e?.message ?? e) });
     }
@@ -3182,21 +3222,34 @@ async function acompanharAdicaoGrupo(){
     const j=d.job||{};
     if(j.rodando){
       const extra=j.limitado?' · ⚠️ WhatsApp limitou, aguardando janela livre':'';
-      $('cliaddmsg').innerHTML='<span class="mini">adicionando… '+j.feitos+'/'+j.total+' · '+j.adicionados+' no grupo'+(j.jaNoGrupo?(' · '+j.jaNoGrupo+' já estavam'):'')+(j.boasVindas?(' · '+j.boasVindas+' boas-vindas'):'')+extra+'</span>';
+      const btn=j.pausado
+        ?'<button class="mini" onclick="retomarAdicaoGrupoUI()" style="margin-left:8px">▶ resume</button>'
+        :'<button class="mini" onclick="pausarAdicaoGrupoUI()" style="margin-left:8px">⏸ pausa</button>';
+      $('cliaddmsg').innerHTML='<span class="mini">adicionando… '+j.feitos+'/'+j.total+' · '+j.adicionados+' no grupo'+(j.jaNoGrupo?(' · '+j.jaNoGrupo+' já estavam'):'')+(j.boasVindas?(' · '+j.boasVindas+' boas-vindas'):'')+extra+btn;
       await new Promise(r=>setTimeout(r,2000));
       continue;
     }
     if(j.total>0){
       const extra=j.limitado?' <span style="color:var(--danger-tx)">· o WhatsApp limitou algumas adições</span>':'';
       $('cliaddmsg').innerHTML='<span style="color:var(--ok-tx)">'+j.adicionados+' adicionado(s) ✓</span>'
-        +(j.jaNoGrupo?(' <span class="mini">· '+j.jaNoGrupo+' já estavam no grupo</span>'):'')
-        +(j.boasVindas?(' <span class="mini">· '+j.boasVindas+' boas-vindas</span>'):'')
-        +(j.falhos&&j.falhos.length?(' <span style="color:var(--danger-tx)">· '+j.falhos.length+' não entraram</span>'):'')
-        +extra;
+      +(j.jaNoGrupo?(' <span class="mini">· '+j.jaNoGrupo+' já estavam no grupo</span>'):'')
+      +(j.boasVindas?(' <span class="mini">· '+j.boasVindas+' boas-vindas</span>'):'')
+      +(j.falhos&&j.falhos.length?(' <span style="color:var(--danger-tx)">· '+j.falhos.length+' não entraram</span>'):'')
+      +extra;
       return;
     }
     return;
   }
+}
+async function pausarAdicaoGrupoUI(){
+  const r=await (await fetch('/api/clientes/grupo/pausar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)alert(r.erro);
+  carregarClientes();
+}
+async function retomarAdicaoGrupoUI(){
+  const r=await (await fetch('/api/clientes/grupo/retomar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(r.erro)alert(r.erro);
+  carregarClientes();
 }
 $('clilist').addEventListener('change',function(ev){
   const el=ev.target;
