@@ -11,6 +11,7 @@ import { formatar } from "../wa/formatter.js";
 import { jaEnviado, registrarEnvio, diaLocal } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import catsJson from "../categorias.json" with { type: "json" };
+import { extrairHora } from "../util/janela.js";
 
 const CATS = catsJson as { id: string; name: string }[];
 const dataDir = process.env.ALCANCE_DATA_DIR || join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
@@ -24,11 +25,19 @@ export interface AutoOpts extends Filtros {
   grupo?: string; // override de grupo; vazio = mapa da categoria > GRUPO_TESTE
 }
 
-const hora = () => Number(process.env.HORA_OVERRIDE ?? new Date().getHours());
+/** Extrai a hora do ambiente, suportando HORA_OVERRIDE em formato "HH:MM" ou numérico */
+function hora(): number {
+  const override = process.env.HORA_OVERRIDE;
+  if (override) {
+    // Suporta "HH:MM" ou apenas "HH"
+    return Number(override.split(":")[0]);
+  }
+  return new Date().getHours();
+}
 
 export function dentroDaJanela(): boolean {
-  const ini = Number(process.env.JANELA_INICIO ?? 8);
-  const fim = Number(process.env.JANELA_FIM ?? 23);
+  const ini = extrairHora(process.env.JANELA_INICIO, 8);
+  const fim = extrairHora(process.env.JANELA_FIM, 23);
   const h = hora();
   return h >= ini && h < fim;
 }

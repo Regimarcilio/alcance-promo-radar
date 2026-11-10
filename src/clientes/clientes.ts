@@ -14,6 +14,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { instanciaParaServico } from "../wa/rotacao.js";
+import { dentroDaJanela } from "../util/janela.js";
+import { podeEnviarAgora } from "../monitor/janela.js";
 import {
   cancelarDisparo,
   registrarResultadoDisparo,
@@ -495,13 +497,8 @@ export function limparFilaClientes(): number {
 }
 
 /** Verifica se está dentro do horário comercial (8h-23h, TZ America/Sao_Paulo). */
-function dentroDaJanelaComercial(): boolean {
-  const ini = Number(process.env.JANELA_INICIO ?? 8);
-  const fim = Number(process.env.JANELA_FIM ?? 23);
-  const horaLocal = Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(new Date())
-  );
-  return horaLocal >= ini && horaLocal < fim;
+export function dentroDaJanelaComercial(): boolean {
+  return dentroDaJanela();
 }
 
 /** Intervalo com variação de 15-20s ± 1 minuto para evitar detecção de mecanização. */
@@ -520,8 +517,13 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
   if (!s.itens.length) return null;
   if (s.pausado) return null;
   
-  // Verifica horário comercial (8h-23h)
-  if (!dentroDaJanelaComercial()) return null;
+  // Verifica janela de envio (mantém compatibilidade se MONITOR_JANELA=0)
+  if (process.env.MONITOR_JANELA !== "0") {
+    if (!podeEnviarAgora()) return null;
+  } else {
+    // Fallback para janela antiga
+    if (!dentroDaJanelaComercial()) return null;
+  }
   
   const desde = s.ultimoEnvio ? Date.now() - new Date(s.ultimoEnvio).getTime() : Infinity;
   const intervaloComVariacao = intervaloClientesMsComVariacao();
@@ -570,3 +572,6 @@ export function pararClientesWorker(): void {
     timer = null;
   }
 }
+
+// Export alias for server import
+export { sincronizar as sincronizarClientes };

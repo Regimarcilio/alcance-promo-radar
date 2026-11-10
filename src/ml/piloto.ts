@@ -21,6 +21,7 @@ import { formatar } from "../wa/formatter.js";
 import { jaEnviado, registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { completarCandidato, tituloDoSlug } from "./item-page.js";
+import { extrairHora, horaSaoPaulo, dentroDaJanela } from "../util/janela.js";
 
 const CATS = catsJson as { id: string; name: string }[];
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -351,11 +352,9 @@ async function tick(id: number): Promise<void> {
   const tag = `#${loop.id}`;
   // 🌙 Pausa noturna 23h–8h (JANELA_INICIO/FIM no .env): gente dorme, robô não.
   // Agenda o despertar para as 8h em vez de checar a cada 5 min a noite toda.
-  const horaLocal = Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(new Date())
-  );
-  const ini = Number(process.env.JANELA_INICIO ?? 8);
-  const fim = Number(process.env.JANELA_FIM ?? 23);
+  const horaLocal = horaSaoPaulo();
+  const ini = extrairHora(process.env.JANELA_INICIO, 8);
+  const fim = extrairHora(process.env.JANELA_FIM, 23);
   if (horaLocal < ini || horaLocal >= fim) {
     const agora = new Date();
     const sp = new Date(agora.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
