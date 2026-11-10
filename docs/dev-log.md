@@ -2237,3 +2237,19 @@ imediata de toda demanda aberta.
 - **SAST:** sem segredo novo no diff; `npm audit` acusa 1 high pré-existente (zod <4.6.6,
   exige upgrade major 4.x — fora do escopo).
 - **Pendências:** override manual por fluxo (#37).
+
+## 2026-11-10 — Issue #37 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** Radar automático entre ativos (padrão) com override manual opcional por fluxo.
+- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Decisões:** `InstanciaWhats.override?: { piloto?, monitor?, disparo? }` guarda o nome da
+  instância fixada (null/ausente = automático). `proximaInstancia(fluxo)` usa o override só se
+  a instância existir, estiver ativa, permitida no fluxo, despausada, `open` e não tiver
+  falhado no retry; senão loga `[rotacao] override X inválido para fluxo Y — usando automático`
+  e cai no sorteio ponderado. `definirOverride` limpa o fluxo nos demais (um override por fluxo).
+  API `POST /api/instancias/override`; `GET /api/instancias` devolve `overrides`.
+  Aba Números ganhou um seletor discreto por fluxo + botão ↺ (voltar ao automático), sem
+  redesenhar o restante.
+- **Arquivos:** src/wa/rotacao.ts, src/manager/server.ts, src/wa/rotacao.test.ts
+- **Testes:** 202/202 (`npm test`), build verde, smoke OK; JS inline validado com `vm.Script`.
+- **SAST:** sem segredo novo no diff; mesmo high pré-existente do zod.
+- **Pendências:** nenhuma.

@@ -34,6 +34,27 @@ export interface PermissoesInstancia {
 
 const PERMISSOES_PADRAO: PermissoesInstancia = { piloto: true, monitor: true, disparo: true };
 
+/** Override manual por fluxo: nome da instância fixada (null/ausente = automático). */
+export interface OverrideFluxo {
+  piloto?: string | null;
+  monitor?: string | null;
+  disparo?: string | null;
+}
+
+const FLUXOS: FluxoEnvio[] = ["piloto", "monitor", "disparo"];
+
+/** Normaliza o override vindo do JSON (só strings não vazias ou null). */
+function normalizarOverride(raw: any): OverrideFluxo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o: OverrideFluxo = {};
+  for (const f of FLUXOS) {
+    const v = raw[f];
+    if (typeof v === "string" && v.trim()) o[f] = v;
+    else if (v === null) o[f] = null;
+  }
+  return Object.keys(o).length ? o : undefined;
+}
+
 export interface InstanciaWhats {
   instancia: string; // nome da instância na Evolution
   nome: string; // rótulo amigável ("Celular 2")
@@ -48,6 +69,8 @@ export interface InstanciaWhats {
   permissoes: PermissoesInstancia;
   /** pausa o número INTEIRO (todos os fluxos) sem desativá-lo */
   pausado: boolean;
+  /** override manual: fixa este número em um fluxo (ausente = automático) */
+  override?: OverrideFluxo;
 }
 
 /** Normaliza permissões vindas do JSON (campo ausente = permitido). */
@@ -133,6 +156,7 @@ function carregar(): Store {
               // migração retrocompatível: sem os campos novos = tudo permitido
               permissoes: normalizarPermissoes(i.permissoes),
               pausado: i.pausado === true,
+              ...(normalizarOverride(i.override) ? { override: normalizarOverride(i.override) } : {}),
             })),
         };
         if (cache.itens.length > 0) {
@@ -246,6 +270,32 @@ export function ultimaInstanciaUsada(): string | null {
 
 export async function proximaInstancia(fluxo?: FluxoEnvio, excluir: string[] = []): Promise<string> {
   const s = carregar();
+
+  // OVERRIDE manual: se o fluxo tem um número fixado e ele está saudável, usa.
+  // Se estiver inválido (pausado, desativado, sem permissão, desconectado ou
+  // acabou de falhar), cai no automático com aviso — nunca trava o envio.
+  if (fluxo) {
+    const fixada = overrideDoFluxo(fluxo);
+    if (fixada) {
+      const item = s.itens.find((i) => i.instancia === fixada);
+      const estado = item ? await estadoInstancia(fixada) : "?";
+      const valido =
+        !!item &&
+        item.ativo &&
+        !item.pausado &&
+        item.permissoes[fluxo] === true &&
+        estado === "open" &&
+        !instanciaRuim(fixada) &&
+        !excluir.includes(fixada);
+      if (valido) {
+        console.log(`[rotacao] override ${fixada} usado no fluxo ${fluxo}`);
+        ultimaUsada = fixada;
+        return fixada;
+      }
+      console.log(`[rotacao] override ${fixada} inválido para fluxo ${fluxo} — usando automático`);
+    }
+  }
+
   // pausado vale para TODOS os fluxos (inclusive chamadas sem fluxo)
   const ativos = s.itens.filter(
     (i) => i.ativo && !i.pausado && (!fluxo || i.permissoes[fluxo] === true)
@@ -492,6 +542,39 @@ export function definirPausado(instancia: string, pausado: boolean): void {
   const i = s.itens.find((x) => x.instancia === instancia);
   if (!i) return;
   i.pausado = !!pausado;
+  salvar(s);
+}
+
+/** Instância fixada manualmente para o fluxo (null = automático). */
+export function overrideDoFluxo(fluxo: FluxoEnvio): string | null {
+  for (const i of carregar().itens) {
+    const v = i.override?.[fluxo];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+
+/**
+ * Define/limpa o override de um fluxo.
+ * - `valor` = nome da instância a fixar; `null`/vazio limpa (volta ao automático).
+ * - `instancia` é a linha que carrega a configuração (na UI, a própria fixada).
+ * Só existe um override por fluxo: limpa nos demais antes de gravar.
+ */
+export function definirOverride(instancia: string, fluxo: FluxoEnvio, valor: string | null): void {
+  if (!FLUXOS.includes(fluxo)) throw new Error(`fluxo inválido: ${fluxo}`);
+  const s = carregar();
+  for (const i of s.itens) {
+    if (i.override) {
+      delete i.override[fluxo];
+      if (!Object.keys(i.override).length) delete i.override;
+    }
+  }
+  const nome = typeof valor === "string" ? valor.trim() : "";
+  if (nome) {
+    const alvo = s.itens.find((i) => i.instancia === instancia) ?? s.itens.find((i) => i.instancia === nome);
+    if (!alvo) throw new Error(`instância ${instancia} não encontrada`);
+    alvo.override = { ...(alvo.override ?? {}), [fluxo]: nome };
+  }
   salvar(s);
 }
 
