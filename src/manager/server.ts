@@ -3072,7 +3072,8 @@ async function carregarRastreio(){
     kp('kpi-rt-tag',d.comTag||0);
     kp('badge-rastreio',d.total||0);
     const ps=d.publicacoes||[];
-    $('rtinfo').textContent=ps.length+' publicação(ões) listada(s)';
+    const limiteInfo=(typeof d.armazenados==='number')?(' · armazenados: '+d.armazenados+' / '+(d.limite||'?')):'';
+    $('rtinfo').textContent=ps.length+' publicação(ões) listada(s)'+limiteInfo;
     if(!ps.length){$('rtlista').innerHTML='<div class="mini">Nada publicado ainda neste filtro.</div>';return;}
     $('rtlista').innerHTML='<div style="display:flex;flex-direction:column;gap:4px">'+ps.map(function(p){
       return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'

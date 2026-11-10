@@ -2253,3 +2253,16 @@ imediata de toda demanda aberta.
 - **Testes:** 202/202 (`npm test`), build verde, smoke OK; JS inline validado com `vm.Script`.
 - **SAST:** sem segredo novo no diff; mesmo high pré-existente do zod.
 - **Pendências:** nenhuma.
+
+## 2026-11-10 — Issue #38 — @datamaster/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** contador do Rastreio parado em 5000 → total histórico real + histórico maior.
+- **Branch:** ISSUE · **PR:** (ver relatório)
+- **Decisões:** `RASTREIO_LIMITE` (default 50000, piso 1000) controla o teto do arquivo;
+  `data/rastreio-total.json` guarda o total histórico injetado em `registrarPublicacao()`.
+  `resumoRastreio()` agora devolve `total` (histórico), `armazenados` (arquivo) e `limite`.
+  Migração: meta ausente → inicializa com o tamanho atual do arquivo e nunca retrocede.
+  Filtros/CSV continuam operando sobre o que está armazenado.
+- **Arquivos:** src/store/publicacoes.ts, src/store/publicacoes.test.ts, src/manager/server.ts
+- **Testes:** 207/207 (`npm test`), build verde, smoke OK; JS inline validado com `vm.Script`.
+- **SAST:** sem segredo novo no diff; mesmo high pré-existente do zod.
+- **Pendências:** paginação da lista (fora do escopo).

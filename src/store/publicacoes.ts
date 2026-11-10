@@ -13,12 +13,21 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { dataDirAtual } from "../config/paths.js";
-import { gravarJsonAtomico } from "./json.js";
+import { gravarJsonAtomico, lerJson } from "./json.js";
 
 const file = join(dataDirAtual(), "publicacoes.json");
+/** Contador histórico persistente: nunca diminui quando o arquivo é podado. */
+const arquivoTotal = join(dataDirAtual(), "rastreio-total.json");
 
-/** Mantém as últimas N publicações (o arquivo não cresce sem limite). */
-export const LIMITE_PUBLICACOES = 5000;
+const LIMITE_PADRAO = 50_000;
+const LIMITE_MINIMO = 1_000;
+
+/** Teto de armazenamento do arquivo (RASTREIO_LIMITE, default 50000, piso 1000). */
+export function limitePublicacoes(): number {
+  const n = Number(process.env.RASTREIO_LIMITE ?? LIMITE_PADRAO);
+  const v = Number.isFinite(n) ? Math.floor(n) : LIMITE_PADRAO;
+  return Math.max(LIMITE_MINIMO, v);
+}
 
 export type ProgramaPub = "ml" | "shopee" | "amazon" | "kabum" | "desconhecido";
 
@@ -53,7 +62,37 @@ function carregar(): Publicacao[] {
 }
 
 function salvar(arr: Publicacao[]): void {
-  gravarJsonAtomico(file, arr.slice(-LIMITE_PUBLICACOES));
+  gravarJsonAtomico(file, arr.slice(-limitePublicacoes()));
+}
+
+let totalCache: number | null = null;
+
+/**
+ * Total histórico de publicações (contador persistente, nunca diminui).
+ * Migração: se o meta não existe, inicializa com o tamanho atual do arquivo.
+ */
+function totalHistorico(): number {
+  if (totalCache !== null) return totalCache;
+  const armazenados = carregar().length;
+  const existeMeta = existsSync(arquivoTotal);
+  const meta = lerJson<{ total?: number }>(arquivoTotal, {});
+  const registrado = Number(meta?.total);
+  const total = Math.max(Number.isFinite(registrado) ? registrado : 0, armazenados);
+  // grava se o meta não existia ou se ficou abaixo do arquivo (nunca retrocede)
+  if (!existeMeta || registrado !== total) {
+    try {
+      gravarJsonAtomico(arquivoTotal, { total });
+    } catch {
+      /* rastreio é acessório */
+    }
+  }
+  totalCache = total;
+  return total;
+}
+
+function gravarTotal(total: number): void {
+  totalCache = total;
+  gravarJsonAtomico(arquivoTotal, { total });
 }
 
 /** Registra uma publicação. Nunca lança (rastreio não pode derrubar um post). */
@@ -61,7 +100,9 @@ export function registrarPublicacao(p: Publicacao): void {
   try {
     const arr = carregar();
     arr.push({ ...p, em: p.em || new Date().toISOString() });
+    const total = totalHistorico() + 1;
     salvar(arr);
+    gravarTotal(total);
   } catch {
     /* rastreio é acessório */
   }
@@ -94,6 +135,8 @@ export function listarPublicacoes(f: FiltroRastreio = {}): Publicacao[] {
 /** Resumo por programa/categoria/grupo (para os cards do painel). */
 export function resumoRastreio(f: FiltroRastreio = {}): {
   total: number;
+  armazenados: number;
+  limite: number;
   porPrograma: Record<string, number>;
   porCategoria: Record<string, number>;
   porGrupo: Record<string, number>;
@@ -110,7 +153,15 @@ export function resumoRastreio(f: FiltroRastreio = {}): {
     porGrupo[p.grupo] = (porGrupo[p.grupo] ?? 0) + 1;
     if (p.tag) comTag++;
   }
-  return { total: pubs.length, porPrograma, porCategoria, porGrupo, comTag };
+  return {
+    total: totalHistorico(),
+    armazenados: carregar().length,
+    limite: limitePublicacoes(),
+    porPrograma,
+    porCategoria,
+    porGrupo,
+    comTag,
+  };
 }
 
 /** CSV para abrir no Excel (separador ;, padrão do Excel em pt-BR). */
