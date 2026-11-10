@@ -314,3 +314,92 @@ test("migração: instância antiga ganha as 3 permissões ligadas e pausado=fal
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+/* ------------- override manual por fluxo (issue #37) ------------- */
+
+const ITENS_TODOS = ITENS_PERM.map((i) => ({
+  ...i,
+  permissoes: { piloto: true, monitor: true, disparo: true },
+}));
+
+const mockOpen = async () => {
+  const { mockFetch } = await import("../monitor/test-utils.js");
+  return mockFetch(async () =>
+    new Response(JSON.stringify({ instance: { state: "open" } }), {
+      headers: { "content-type": "application/json" },
+    })
+  );
+};
+
+test("override: fixa o celular no fluxo (monitor sempre em cel-2)", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_TODOS);
+  const m = await mockOpen();
+  try {
+    mod.definirOverride("cel-2", "monitor", "cel-2");
+    for (let i = 0; i < 20; i++) assert.equal(await mod.proximaInstancia("monitor"), "cel-2");
+    // persistiu no arquivo e o GET reflete
+    assert.equal(mod.overrideDoFluxo("monitor"), "cel-2");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("override: inválido (pausado) cai no automático e registra aviso", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_TODOS);
+  const m = await mockOpen();
+  const logs: string[] = [];
+  const original = console.log;
+  console.log = (...a: any[]) => { logs.push(a.join(" ")); };
+  try {
+    mod.definirOverride("cel-2", "monitor", "cel-2");
+    mod.definirPausado("cel-2", true);
+    for (let i = 0; i < 20; i++) assert.notEqual(await mod.proximaInstancia("monitor"), "cel-2");
+    assert.ok(logs.some((l) => /override cel-2 inválido para fluxo monitor/.test(l)), "deve avisar no log");
+  } finally {
+    console.log = original;
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("override: limpar volta ao sorteio automático", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_TODOS);
+  const m = await mockOpen();
+  try {
+    mod.definirOverride("cel-2", "monitor", "cel-2");
+    assert.equal(await mod.proximaInstancia("monitor"), "cel-2");
+    mod.definirOverride("cel-2", "monitor", null);
+    assert.equal(mod.overrideDoFluxo("monitor"), null);
+    const vistos = new Set<string>();
+    for (let i = 0; i < 40; i++) vistos.add(await mod.proximaInstancia("monitor"));
+    assert.ok(vistos.size >= 2, "sem override deve sortear entre os permitidos");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("override: é isolado por fluxo (piloto fixo não afeta monitor)", async () => {
+  const { mod, dir } = await carregarRotacao("0", ITENS_TODOS);
+  const m = await mockOpen();
+  try {
+    mod.definirOverride("cel-2", "piloto", "cel-2");
+    for (let i = 0; i < 15; i++) assert.equal(await mod.proximaInstancia("piloto"), "cel-2");
+    const vistos = new Set<string>();
+    for (let i = 0; i < 40; i++) vistos.add(await mod.proximaInstancia("monitor"));
+    assert.ok(vistos.has("cel-1") || vistos.has("cel-3"), "monitor deve seguir o automático");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("override: definirOverride em fluxo inválido lança erro", async () => {
+  const { mod, dir } = await carregarRotacao("1", ITENS_TODOS);
+  try {
+    assert.throws(() => mod.definirOverride("cel-1", "outro" as any, "cel-1"), /fluxo inválido/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -60,6 +60,7 @@ import {
   definirAtivo as definirAtivoWhats, definirPeso, removerInstancia, MAX_INSTANCIAS,
   definirPrincipal, listarInstancias as listarInstanciasWhats, instanciaParaServico,
   definirPermissoes, definirPausado, ultimaInstanciaUsada,
+  definirOverride, overrideDoFluxo, type FluxoEnvio,
 } from "../wa/rotacao.js";
 import {
   autenticar, auditar, checarLimite, carregarUsuarios, configurarAuth, cookieExpirado, cookieSessao,
@@ -928,7 +929,15 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         emUso: ultima === i.instancia,
       }))
     );
-    json(200, { max: MAX_INSTANCIAS, itens });
+    json(200, {
+      max: MAX_INSTANCIAS,
+      itens,
+      overrides: {
+        piloto: overrideDoFluxo("piloto"),
+        monitor: overrideDoFluxo("monitor"),
+        disparo: overrideDoFluxo("disparo"),
+      },
+    });
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/instancias") {
@@ -998,6 +1007,29 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       const b = JSON.parse(await lerCorpo(req));
       definirPausado(String(b.instancia ?? ""), b.pausado === true);
       json(200, { ok: true });
+    } catch (e: any) {
+      json(400, { erro: String(e.message ?? e) });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/instancias/override") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const fluxo = String(b.fluxo ?? "");
+      if (fluxo !== "piloto" && fluxo !== "monitor" && fluxo !== "disparo") {
+        throw new Error("fluxo inválido (use piloto, monitor ou disparo)");
+      }
+      const valor =
+        b.valor === null || b.valor === undefined || b.valor === "" ? null : String(b.valor);
+      definirOverride(String(b.instancia ?? ""), fluxo as FluxoEnvio, valor);
+      json(200, {
+        ok: true,
+        overrides: {
+          piloto: overrideDoFluxo("piloto"),
+          monitor: overrideDoFluxo("monitor"),
+          disparo: overrideDoFluxo("disparo"),
+        },
+      });
     } catch (e: any) {
       json(400, { erro: String(e.message ?? e) });
     }
@@ -2183,6 +2215,15 @@ body{padding:0;max-width:none;margin:0}
 <div class="panel ac-numeros">
 <div class="panel-head"><span><b id="tit-numeros">📱 Números</b> para envio rotativo <span class="mini" id="minstmax"></span></span><a class="lk-mini" href="#" onclick="renomearCard('numeros');return false">✏️ renomear</a></div>
 <div class="mini" style="margin-bottom:6px"><b>★ Principal</b> = número de casa, preferido para as <b>operações de serviço</b> (adicionar contatos ao grupo, permissões). <b>Todos os números abertos</b> — principal inclusive — participam do <b>envio de mensagens</b>, na proporção do peso. Se um cair, o envio continua pelos outros. A conta ML continua a mesma.</div>
+<div class="mini" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+<span><b>Remetente por fluxo</b> (padrão: automático)</span>
+<label>Piloto <select id="ov-piloto" onchange="definirOverrideUI('piloto',this.value)"><option value="">Automático</option></select></label>
+<button class="mbtn" onclick="definirOverrideUI('piloto','')" title="voltar ao automático">↺</button>
+<label>Monitor <select id="ov-monitor" onchange="definirOverrideUI('monitor',this.value)"><option value="">Automático</option></select></label>
+<button class="mbtn" onclick="definirOverrideUI('monitor','')" title="voltar ao automático">↺</button>
+<label>Disparo <select id="ov-disparo" onchange="definirOverrideUI('disparo',this.value)"><option value="">Automático</option></select></label>
+<button class="mbtn" onclick="definirOverrideUI('disparo','')" title="voltar ao automático">↺</button>
+</div>
 <div id="minstlist" class="mini">carregando…</div>
 <div style="display:flex;gap:6px;margin-top:8px">
 <input id="minstnome" placeholder="nome do celular (ex.: Celular 2)" maxlength="24" style="flex:1;">
@@ -2664,6 +2705,7 @@ async function carregarInstancias(){
     const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
     kp('kpi-numerosn',itens.length);kp('kpi-numeros-on',itens.filter(function(i){return i.estado==='open'}).length);kp('badge-numeros',itens.length);
     $('minstmax').textContent='· '+itens.length+'/'+d.max+' · sorteio ponderado';
+    preencherOverrides(itens,d.overrides);
     if(!itens.length){$('minstlist').textContent='nenhum número — adicione um.';return;}
     $('minstlist').innerHTML=itens.map(function(i){
       const ic=i.estado==='open'?'🟢':i.estado==='connecting'?'🟡':'🔴';
@@ -2730,6 +2772,22 @@ async function instPermissao(inst,fluxo,valor){
 }
 async function instPausar(inst,pausado){
   await fetch('/api/instancias/pausar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:inst,pausado:pausado})});
+  carregarInstancias();
+}
+function preencherOverrides(itens,overrides){
+  ['piloto','monitor','disparo'].forEach(function(f){
+    const sel=$('ov-'+f); if(!sel)return;
+    const atual=(overrides&&overrides[f])||'';
+    sel.innerHTML='<option value="">Automático</option>'+itens.map(function(i){
+      return '<option value="'+esc(i.instancia)+'">'+esc(i.nome)+'</option>';
+    }).join('');
+    sel.value=atual;
+    sel.title=atual?('manual: '+atual):'automático (rodízio)';
+  });
+}
+async function definirOverrideUI(fluxo,valor){
+  const r=await (await fetch('/api/instancias/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instancia:valor,fluxo:fluxo,valor:valor||null})})).json();
+  if(r.erro)return alert(r.erro);
   carregarInstancias();
 }
 async function instRemover(inst){
