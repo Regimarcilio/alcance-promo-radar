@@ -2299,7 +2299,7 @@ imediata de toda demanda aberta.
 ## 2026-11-11 — Issue #45 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
 - **Objetivo:** escolher, POR CAMPANHA, o número (instância) que envia as mensagens da aba
   Clientes — sem mexer no override global do fluxo `disparo` (aba Números).
-- **Branch:** ISSUE · **PR:** #45 (aberto para `develop`)
+- **Branch:** ISSUE · **PR:** #46 (aberto para `develop`)
 - **Decisões:**
   - `Disparo.instancia?: string | null` — nome da instância que envia a campanha;
     `null`/ausente = **Automático (rodízio)**. Disparos antigos (sem o campo) continuam
