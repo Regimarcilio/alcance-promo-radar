@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { Oportunidade } from "../hunter/schema.js";
+import { dataDirAtual } from "../config/paths.js";
 
 export interface Trace { data: string; modelo: string; ms: number; custoBRL: number; mlbId: string; score: number }
 
@@ -30,8 +30,7 @@ export function gerarHeadline(o: Oportunidade, variacao = 0): { headline: string
     mlbId: o.mlbId,
     score: o.score,
   };
-  const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
-  mkdirSync(dir, { recursive: true });
-  appendFileSync(join(dir, "trace.json"), JSON.stringify(trace) + "\n");
+  mkdirSync(dataDirAtual(), { recursive: true, mode: 0o700 });
+  appendFileSync(join(dataDirAtual(), "trace.json"), JSON.stringify(trace) + "\n", { mode: 0o600 });
   return { headline, subtitulo, trace };
 }

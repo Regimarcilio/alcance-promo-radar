@@ -1,0 +1,476 @@
+/**
+ * Cliente Evolution (v2) para o MODO MONITOR (E6).
+ * Lista os grupos da instância pareada, expõe o estado e permite trocar a conta
+ * (logout) para reparear outro celular.
+ */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { instanciaParaServico, instanciasParaServico, listarInstancias, marcarInstanciaRuim } from "../wa/rotacao.js";
+
+export interface GrupoWhats {
+  jid: string;
+  nome: string;
+  tamanho: number | null;
+  /** Instâncias em que o grupo aparece (união multi-número). */
+  instancias?: string[];
+}
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
+const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
+
+function base(): string {
+  return (process.env.EVO_URL ?? "http://localhost:8080").replace(/\/$/, "");
+}
+
+function key(): string {
+  return process.env.EVO_KEY ?? "";
+}
+
+/**
+ * Instância usada nas operações de serviço (grupos, estado, webhook).
+ *
+ * NUNCA use `EVO_INSTANCE` direto aqui: ele é só o nome de fábrica da PRIMEIRA
+ * instância. Depois que o operador cadastra/pareia um número, a fonte da
+ * verdade é `instancias.json` (principal). Sem isso, o painel continuava
+ * chamando uma instância antiga e recebia 404 em /group/fetchAllGroups.
+ */
+async function instAtual(): Promise<string> {
+  return instanciaParaServico();
+}
+
+async function evoGet<T = any>(path: string, timeoutMs = 60000): Promise<T> {
+  const res = await fetch(`${base()}${path}`, {
+    headers: { apikey: key() },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`Evolution ${res.status} em ${path}`);
+  return (await res.json()) as T;
+}
+
+/** Estado da conexão: open | connecting | close. */
+export async function estadoConexao(): Promise<string> {
+  try {
+    const alvo = await instAtual();
+    const j = await evoGet<any>(`/instance/connectionState/${alvo}`);
+    return j?.instance?.state ?? "?";
+  } catch {
+    return "erro";
+  }
+}
+
+/** Número/titular pareado (best-effort). */
+export async function contaPareada(): Promise<{ jid: string | null; nome: string | null }> {
+  try {
+    const alvo = await instAtual();
+    const arr = await evoGet<any[]>(`/instance/fetchInstances?instanceName=${alvo}`);
+    const i = Array.isArray(arr) ? arr[0] : null;
+    return { jid: i?.ownerJid ?? null, nome: i?.profileName ?? null };
+  } catch {
+    return { jid: null, nome: null };
+  }
+}
+
+/**
+ * Lista os grupos da conta pareada (RF-030: origem dos grupos reais).
+ * A Evolution demora ~15-30s nesse endpoint; cacheia por 10 min e aceita
+ * `forcar=true` para refazer a busca.
+ *
+ * RESILIÊNCIA: o WhatsApp limita consultas de metadados (429 rate-overlimit).
+ * Quando isso acontece a aba Monitor ficaria SEM lista de grupos. Por isso a
+ * última lista boa é gravada em data/grupos-cache.json e serve de fallback:
+ * a UI sempre mostra os grupos (marcando que veio do cache).
+ */
+let cacheGrupos: { em: number; dados: GrupoWhats[] } | null = null;
+const TTL_GRUPOS_MS = 10 * 60 * 1000;
+
+const CACHE_ARQ = join(dataDir, "grupos-cache.json");
+
+/** Última lista de grupos salva em disco (para fallback quando a Evolution falha). */
+export function gruposDoCache(): { grupos: GrupoWhats[]; em: string | null } {
+  try {
+    if (!existsSync(CACHE_ARQ)) return { grupos: [], em: null };
+    const raw = JSON.parse(readFileSync(CACHE_ARQ, "utf8")) as { grupos?: GrupoWhats[]; em?: string };
+    return { grupos: Array.isArray(raw.grupos) ? raw.grupos : [], em: raw.em ?? null };
+  } catch {
+    return { grupos: [], em: null };
+  }
+}
+
+function salvarCacheGrupos(dados: GrupoWhats[]): void {
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(
+      CACHE_ARQ,
+      JSON.stringify({ grupos: dados, em: new Date().toISOString() }, null, 2),
+    );
+  } catch {
+    /* cache é acessório: falhar aqui não pode derrubar a listagem */
+  }
+}
+
+/**
+ * Busca direto na Evolution, em TODAS as instâncias ativas, e devolve a união.
+ *
+ * Cada celular participa de grupos diferentes. Consultar só o principal
+ * escondia grupos que só o secundário vê (ex.: Leleco Tech, Clube dos
+ * Achadinhos). Se uma instância falhar, as demais continuam valendo.
+ */
+async function buscarGruposNaEvolution(): Promise<GrupoWhats[]> {
+  const alvos = listarInstancias().filter((i) => i.ativo).map((i) => i.instancia);
+  if (alvos.length === 0) alvos.push(await instAtual());
+
+  const resultados = await Promise.allSettled(
+    alvos.map(async (alvo) => {
+      const arr = await evoGet<any[]>(`/group/fetchAllGroups/${alvo}?getParticipants=false`, 120000);
+      if (!Array.isArray(arr)) throw new Error(`resposta inesperada de fetchAllGroups (${alvo})`);
+      return { alvo, arr };
+    }),
+  );
+
+  const mapa = new Map<string, GrupoWhats>();
+  const erros: string[] = [];
+  for (const r of resultados) {
+    if (r.status === "rejected") {
+      erros.push(String(r.reason?.message ?? r.reason));
+      continue;
+    }
+    for (const g of r.value.arr) {
+      const jid = String(g.id ?? "");
+      if (!jid.endsWith("@g.us")) continue;
+      const nome = String(g.subject || g.id || "(sem nome)");
+      const atual = mapa.get(jid);
+      if (atual) {
+        if (!atual.instancias?.includes(r.value.alvo)) atual.instancias?.push(r.value.alvo);
+      } else {
+        mapa.set(jid, {
+          jid,
+          nome,
+          tamanho: typeof g.size === "number" ? g.size : null,
+          instancias: [r.value.alvo],
+        });
+      }
+    }
+  }
+
+  if (mapa.size === 0 && erros.length > 0) throw new Error(erros[0]);
+  if (erros.length) console.warn(`[grupos] ${erros.length} instância(s) falharam: ${erros.join("; ")}`);
+
+  const dados = [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  cacheGrupos = { em: Date.now(), dados };
+  salvarCacheGrupos(dados);
+  return dados;
+}
+
+let revalidando = false;
+
+/**
+ * Lista de grupos da conta pareada.
+ *
+ * Stale-while-revalidate: sem cache em memória (ex.: após reiniciar o
+ * container) devolve IMEDIATAMENTE a última lista salva em disco e atualiza em
+ * segundo plano — assim o painel não fica 10-30s "carregando grupos…".
+ */
+export async function listarGrupos(forcar = false): Promise<GrupoWhats[]> {
+  const agora = Date.now();
+  if (!forcar && cacheGrupos && agora - cacheGrupos.em < TTL_GRUPOS_MS) {
+    return cacheGrupos.dados;
+  }
+  if (!forcar && !cacheGrupos) {
+    const salvo = gruposDoCache();
+    if (salvo.grupos.length) {
+      cacheGrupos = { em: agora, dados: salvo.grupos };
+      // revalida em background (não bloqueia a tela)
+      void (async () => {
+        if (revalidando) return;
+        revalidando = true;
+        try {
+          await buscarGruposNaEvolution();
+        } catch {
+          /* mantém a lista salva */
+        } finally {
+          revalidando = false;
+        }
+      })();
+      return salvo.grupos;
+    }
+  }
+  return buscarGruposNaEvolution();
+}
+
+/** Força reconexão do socket (destrava instância presa em "connecting"). */
+export async function reiniciar(): Promise<void> {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/instance/restart/${alvo}`, {
+    method: "POST",
+    headers: { apikey: key(), "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`Evolution restart ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+/**
+ * Desconecta a conta atual (logout) para permitir parear OUTRO celular.
+ * NÃO apaga a instância — depois use /instance/connect para um QR novo.
+ */
+export async function desconectar(): Promise<void> {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/instance/logout/${alvo}`, {
+    method: "DELETE",
+    headers: { apikey: key() },
+  });
+  if (!res.ok) throw new Error(`Evolution logout ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+/**
+ * Adiciona participantes a um grupo do WhatsApp (aba Clientes → "adicionar ao grupo").
+ *
+ * Evolution API v2: POST /group/updateParticipant/{instance}?groupJid=...
+ * body: { action: "add", participants: ["+5511999999999", ...] }
+ *
+ * Observações do WhatsApp: só funciona se a conta pareada for ADMIN do grupo e
+ * o grupo tiver o "link de convite" habilitado. Fora dessas condições a API
+ * devolve erro — o chamador deve reportar sem quebrar a interface.
+ */
+export interface ResultadoAdicao {
+  ok: boolean;
+  jaNoGrupo: boolean;
+  limitado: boolean;
+  erro?: string;
+  /** instância que atendeu a chamada (para a boas-vindas sair pelo mesmo número) */
+  instancia?: string;
+  /** true = o WhatsApp devolveu status 200/201 (entrou) ou 409 (já estava) */
+  confirmado?: boolean;
+}
+
+/** Erro de rede/conexão que vale repetir. */
+function transitorioAdicao(msg: string, http = 0): boolean {
+  if (http === 408 || http === 429 || http >= 500) return true;
+  const instavel =
+    /Connection Closed|fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|other side closed|rate-overlimit|too many/i;
+  if (http === 400 && instavel.test(msg)) return true;
+  return instavel.test(msg);
+}
+
+function ehLimite(msg: string): boolean {
+  return /rate-overlimit|too many|429|limite/i.test(msg);
+}
+
+/**
+ * Adiciona UM participante ao grupo.
+ *
+ * Regras aprendidas com o teste controlado (2026-10-31):
+ * - status 200 = entrou; 409 = já estava; 403 = privacidade do alvo (terminal,
+ *   NÃO adianta repetir); 404 = número sem WhatsApp (terminal); 408 = timeout
+ *   (retry); 400 "Connection Closed" = instância morta (retry).
+ * - `updateParticipants` vazio/sem status NÃO é sucesso: sem confirmação, o
+ *   chamador não pode dizer que o contato entrou nem mandar boas-vindas.
+ */
+export async function adicionarUmParticipante(
+  groupJid: string,
+  numero: string,
+  opts: { esperas?: number; tentativas?: number } = {},
+): Promise<ResultadoAdicao> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return { ok: false, jaNoGrupo: false, limitado: false, erro: "grupo inválido" };
+  const digitos = String(numero ?? "").replace(/\D/g, "");
+  if (digitos.length < 10) return { ok: false, jaNoGrupo: false, limitado: false, erro: "número inválido" };
+  const participante = `+${digitos}`;
+
+  const esperas = Number(opts.esperas ?? 45000);
+  const maxTentativas = Math.max(1, Number(opts.tentativas ?? 3));
+  // Ordem de candidatas para a operação de serviço: a principal vai primeiro,
+  // mas se ela estiver "zumbi" (connectionState open + Connection Closed nas
+  // chamadas reais) a próxima tentativa já sai por outro número — sem esperar
+  // o ciclo inteiro de 60s. Ver instanciasParaServico().
+  const candidatas = instanciasParaServico();
+  let idx = 0;
+  let tentativa = 0;
+  let ultimoErro = "";
+  let instancia: string | undefined;
+
+  /** Erro que indica instância inutilizável (não do participante). */
+  const trocarInstancia = (motivo: string, http = 0): boolean => {
+    const foraDoAr =
+      http === 404 ||
+      /Connection Closed|Connection closed|ECONNRESET|ECONNREFUSED|socket hang up|other side closed/i.test(motivo);
+    if (!foraDoAr || idx >= candidatas.length - 1) return false;
+    const antes = candidatas[idx];
+    marcarInstanciaRuim(antes); // não insiste nela nos próximos contatos do lote
+    idx += 1;
+    console.log(`[grupo] ${antes} falhou (${motivo.slice(0, 60)}) — tentando ${candidatas[idx]}`);
+    return true;
+  };
+
+  while (tentativa < maxTentativas) {
+    if (tentativa > 0) {
+      console.log(
+        `[grupo] nova tentativa em ${Math.round(esperas / 1000)}s (${tentativa + 1}/${maxTentativas}) — ${ultimoErro.slice(0, 80)}`,
+      );
+      await new Promise((r) => setTimeout(r, esperas));
+    }
+    instancia = candidatas[Math.min(idx, candidatas.length - 1)];
+    try {
+      const res = await fetch(
+        `${base()}/group/updateParticipant/${instancia}?groupJid=${encodeURIComponent(jid)}`,
+        {
+          method: "POST",
+          headers: { apikey: key(), "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", participants: [participante] }),
+          signal: AbortSignal.timeout(90000),
+        },
+      );
+      const txt = await res.text().catch(() => "");
+
+      if (res.ok) {
+        // 201: a API responde 201 mesmo com erro por participante
+        const lista = (JSON.parse(txt || "{}") as any)?.updateParticipants;
+        const item = Array.isArray(lista) ? lista[0] : null;
+        if (!item) {
+          return {
+            ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false,
+            erro: "resposta sem updateParticipants — adição não confirmada",
+          };
+        }
+        const status = Number(item?.status ?? 0);
+        if (status === 409) return { ok: true, jaNoGrupo: true, limitado: false, instancia, confirmado: true };
+        if (status === 200 || status === 201) {
+          return { ok: true, jaNoGrupo: false, limitado: false, instancia, confirmado: true };
+        }
+
+        const detalhe = String(item?.content?.error ?? item?.error ?? item?.content?.[0]?.attrs?.error ?? "recusado");
+        ultimoErro = `participante ${status || "?"}: ${detalhe}`;
+        if (status === 408) {
+          tentativa++;
+          continue; // timeout: retry
+        }
+        if (trocarInstancia(detalhe)) continue; // instância zumbi → outro número
+        // 403 (privacidade), 404 (sem WhatsApp), 400/422 etc: terminal.
+        return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
+      }
+
+      ultimoErro = `Evolution ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ""}`;
+      if (trocarInstancia(txt, res.status)) continue;
+      if (transitorioAdicao(txt, res.status)) {
+        tentativa++;
+        continue;
+      }
+      return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
+    } catch (e) {
+      ultimoErro = String((e as Error)?.message ?? e);
+      if (trocarInstancia(ultimoErro)) continue;
+      if (!transitorioAdicao(ultimoErro)) {
+        return { ok: false, jaNoGrupo: false, limitado: false, instancia, confirmado: false, erro: ultimoErro };
+      }
+      tentativa++;
+    }
+  }
+
+  return {
+    ok: false, jaNoGrupo: false, limitado: ehLimite(ultimoErro), instancia, confirmado: false,
+    erro: ultimoErro || "falha ao adicionar",
+  };
+}
+
+/**
+ * Adiciona participantes a um grupo do WhatsApp (aba Clientes → "adicionar ao grupo").
+ *
+ * Evolution API v2: POST /group/updateParticipant/{instance}?groupJid=...
+ * body: { action }
+ *   announcement     → só administradores enviam mensagens (participantes não comentam)
+ *   not_announcement → todos voltam a enviar mensagens
+ *   locked           → só administradores editam nome/avatar/descrição do grupo
+ *   unlocked         → todos editam as informações do grupo
+ *
+ * Exige que a conta pareada seja ADMIN do grupo.
+ */
+export type AcaoGrupo = "announcement" | "not_announcement" | "locked" | "unlocked";
+
+export interface PermissaoGrupo {
+  /** true = só admins enviam mensagens (participantes não comentam) */
+  announce: boolean;
+  /** true = só admins editam as informações do grupo */
+  restrict: boolean;
+  tamanho: number | null;
+  nome: string;
+}
+
+/** Estado atual das permissões do grupo. */
+export async function buscarPermissaoGrupo(groupJid: string): Promise<PermissaoGrupo | null> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return null;
+  try {
+    const alvo = await instAtual();
+    const res = await fetch(
+      `${base()}/group/findGroupInfos/${alvo}?groupJid=${encodeURIComponent(jid)}`,
+      { headers: { apikey: key() }, signal: AbortSignal.timeout(30000) },
+    );
+    if (!res.ok) return null;
+    const g = (await res.json()) as {
+      subject?: string;
+      size?: number;
+      announce?: boolean;
+      restrict?: boolean;
+    };
+    return {
+      announce: g.announce === true,
+      restrict: g.restrict === true,
+      tamanho: typeof g.size === "number" ? g.size : null,
+      nome: String(g.subject ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Aplica uma permissão de grupo (announcement/locked). */
+export async function definirPermissaoGrupo(
+  groupJid: string,
+  acao: AcaoGrupo,
+): Promise<{ ok: boolean; erro?: string }> {
+  const jid = String(groupJid ?? "").trim();
+  if (!jid.endsWith("@g.us")) return { ok: false, erro: "grupo inválido (esperado JID @g.us)" };
+  try {
+    const alvo = await instanciaParaServico();
+    const res = await fetch(
+      `${base()}/group/updateSetting/${alvo}?groupJid=${encodeURIComponent(jid)}`,
+      {
+        method: "POST",
+        headers: { apikey: key(), "Content-Type": "application/json" },
+        body: JSON.stringify({ action: acao }),
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+    if (!res.ok) {
+      const txt = (await res.text()).slice(0, 200);
+      return {
+        ok: false,
+        erro: `Evolution ${res.status}${txt ? `: ${txt}` : ""} (a conta precisa ser admin do grupo)`,
+      };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: String((e as Error)?.message ?? e) };
+  }
+}
+
+/** Garante o webhook messages.upsert apontando para o manager. */
+export async function configurarWebhook(url: string, webhookKey: string): Promise<void> {
+  const alvo = await instAtual();
+  const res = await fetch(`${base()}/webhook/set/${alvo}`, {
+    method: "POST",
+    headers: { apikey: key(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      webhook: {
+        enabled: true,
+        url,
+        webhookByEvents: false,
+        webhookBase64: true,
+        events: ["MESSAGES_UPSERT"],
+        headers: webhookKey ? { "X-Webhook-Key": webhookKey } : {},
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`Evolution webhook ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}

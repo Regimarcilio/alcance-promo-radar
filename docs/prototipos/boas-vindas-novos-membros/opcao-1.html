@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opção 1 — Mensagem de boas-vindas (imagem + legenda + TikTok)</title>
+<style>
+  :root{
+    --wa-bg:#0b141a; --wa-panel:#111b21; --wa-header:#1f2c34;
+    --wa-bubble:#005c4b; --wa-text:#e9edef; --wa-meta:#8696a0;
+    --brand:#ffd400; --card:#182229; --line:#233138;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#070d11; color:#dfe7ea;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  .page{display:flex; gap:40px; padding:40px; align-items:flex-start; justify-content:center; flex-wrap:wrap}
+  .stage{display:flex; flex-direction:column; align-items:center; gap:14px}
+  .stage-title{font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:#7e8c93}
+  .phone{
+    width:390px; height:900px; border-radius:44px; overflow:hidden;
+    background:var(--wa-bg); border:10px solid #05090c;
+    box-shadow:0 40px 80px rgba(0,0,0,.7), 0 0 0 1px #1b262c;
+    display:flex; flex-direction:column; position:relative;
+  }
+  .statusbar{
+    height:34px; background:var(--wa-header); color:#c7d0d5;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; font-size:12px; font-weight:600;
+  }
+  .chat-header{
+    background:var(--wa-header); display:flex; align-items:center; gap:12px;
+    padding:10px 14px 12px;
+  }
+  .back{color:#aebac1; font-size:20px; line-height:1}
+  .avatar{
+    width:40px; height:40px; border-radius:50%; overflow:hidden; flex:none;
+    background:#ffd400; border:1px solid #2a3942;
+  }
+  .avatar img{width:100%; height:100%; object-fit:cover}
+  .chat-title{min-width:0}
+  .chat-title b{display:block; color:#e9edef; font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .chat-title span{color:#8696a0; font-size:12px}
+  .actions{margin-left:auto; color:#aebac1; font-size:18px; letter-spacing:6px}
+  .chat-body{
+    flex:1; overflow-y:auto; padding:18px 14px 20px;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(255,255,255,.025) 0 2px, transparent 3px),
+      radial-gradient(circle at 70% 55%, rgba(255,255,255,.02) 0 2px, transparent 3px),
+      radial-gradient(circle at 40% 85%, rgba(255,255,255,.02) 0 2px, transparent 3px),
+      var(--wa-bg);
+    background-size:120px 120px,160px 160px,140px 140px,auto;
+  }
+  .date-chip{
+    width:max-content; margin:2px auto 16px; background:#182229; color:#8696a0;
+    font-size:11px; padding:5px 12px; border-radius:8px; letter-spacing:.04em;
+  }
+  .bubble{
+    max-width:308px; margin-left:auto; background:var(--wa-bubble);
+    border-radius:10px 3px 10px 10px; overflow:hidden;
+    box-shadow:0 1px 1px rgba(0,0,0,.25);
+  }
+  .bubble .photo{display:block; width:100%; height:auto}
+  .caption{padding:9px 12px 8px; font-size:13.4px; line-height:1.42; color:var(--wa-text); white-space:pre-wrap; word-wrap:break-word}
+  .caption b{font-weight:700}
+  .bubble .time{float:right; margin:0 0 0 8px; color:#9fcfc3; font-size:11px; position:relative; top:3px}
+  .tick{color:#53bdeb; margin-left:3px}
+  .annotation{
+    width:520px; background:var(--card); border:1px solid var(--line);
+    border-radius:16px; padding:26px 26px 22px;
+  }
+  .badge{
+    display:inline-block; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:#ffd400; border:1px solid rgba(255,212,0,.35); background:rgba(255,212,0,.08);
+    padding:5px 10px; border-radius:999px; margin-bottom:14px;
+  }
+  h1{font-size:22px; margin:0 0 6px; color:#f2f6f7}
+  .sub{color:#8ea0a8; font-size:13.5px; margin:0 0 22px; line-height:1.5}
+  h2{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#7e8c93; margin:22px 0 10px}
+  pre.copy{
+    margin:0; background:#0c151a; border:1px solid var(--line); border-radius:10px;
+    padding:16px; color:#e3eaec; font-size:13px; line-height:1.55; white-space:pre-wrap;
+    font-family:"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  .btn{
+    margin-top:10px; background:#1f2c34; color:#d9e2e6; border:1px solid #2a3942;
+    padding:8px 14px; border-radius:8px; font-size:12.5px; cursor:pointer;
+  }
+  .btn:hover{background:#26343d}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  td{padding:7px 0; border-bottom:1px solid #1d2a31; vertical-align:top; color:#c8d3d8}
+  td:first-child{color:#8ea0a8; width:42%}
+  ul{margin:0; padding-left:18px; color:#c8d3d8; font-size:13.5px; line-height:1.6}
+  .warn{border-left:3px solid #ffd400; padding:10px 14px; background:rgba(255,212,0,.06); border-radius:0 8px 8px 0; font-size:13px; color:#d9d2b5; line-height:1.5}
+  @media (max-width:1000px){ .page{padding:20px} .annotation{width:100%; max-width:520px} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="stage">
+    <div class="stage-title">Prévia no WhatsApp</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ᯤ ▰</span></div>
+      <div class="chat-header">
+        <div class="back">‹</div>
+        <div class="avatar"><img src="../../../image/Mano%20dos%20Achadinhos_%20Ofertas%20Tech%20e%20Lifestyle.png" alt="Mano dos Achadinhos" /></div>
+        <div class="chat-title">
+          <b>Mano dos Achadinhos</b>
+          <span>conta comercial</span>
+        </div>
+        <div class="actions">⋮</div>
+      </div>
+      <div class="chat-body">
+        <div class="date-chip">HOJE</div>
+        <div class="bubble">
+          <img class="photo" src="../../../image/Mano%20dos%20Achadinhos_%20Ofertas%20Tech%20e%20Lifestyle.png" alt="Mano dos Achadinhos — Ofertas Tech e Lifestyle" />
+          <div class="caption">🎉 <b>Bem-vindo ao Mano dos Achadinhos!</b>
+
+As melhores ofertas de <b>tech, beleza, games e casa</b>, todos os dias, com desconto real e link direto.
+
+🛒 Ofertas selecionadas
+🚚 Entrega segura
+✅ Compra confiável
+
+Me segue no TikTok:
+👉 https://www.tiktok.com/@mano.dos.achadinh
+
+Tem achadinho novo todos os dias. 🔥<span class="time">9:12 <span class="tick">✓✓</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <span class="badge">Aguardando aprovação</span>
+    <h1>Opção 1 — mensagem única</h1>
+    <p class="sub">Imagem da marca + legenda com o link do TikTok, enviada em <b>DM</b> assim que a entrada no grupo é confirmada. É a versão mais leve e com menor risco de denúncia por spam.</p>
+
+    <h2>Texto exato da legenda</h2>
+    <pre class="copy" id="cap">🎉 *Bem-vindo ao Mano dos Achadinhos!*
+
+As melhores ofertas de *tech, beleza, games e casa*, todos os dias, com desconto real e link direto.
+
+🛒 Ofertas selecionadas
+🚚 Entrega segura
+✅ Compra confiável
+
+Me segue no TikTok:
+👉 https://www.tiktok.com/@mano.dos.achadinh
+
+Tem achadinho novo todos os dias. 🔥</pre>
+    <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('cap').textContent);this.textContent='Copiado ✓'">Copiar legenda</button>
+
+    <h2>Parâmetros do envio</h2>
+    <table>
+      <tr><td>Formato</td><td>1 imagem (1254×1254) + legenda na mesma mensagem</td></tr>
+      <tr><td>Arquivo</td><td><code>image/Mano dos Achadinhos_ Ofertas Tech e Lifestyle.png</code></td></tr>
+      <tr><td>Destino</td><td>DM do contato recém-adicionado (não no grupo)</td></tr>
+      <tr><td>Gatilho</td><td>Entrada confirmada no grupo (status 200 do add)</td></tr>
+      <tr><td>Janela</td><td>Adição 6h–22h; boas-vindas imediata</td></tr>
+      <tr><td>Vazão</td><td>1 boas-vindas por contato confirmado</td></tr>
+      <tr><td>Link</td><td>https://www.tiktok.com/@mano.dos.achadinh</td></tr>
+    </table>
+
+    <h2>Por que esta versão</h2>
+    <ul>
+      <li>Uma única mensagem: menos ruído e menos chance de bloqueio.</li>
+      <li>A imagem já comunica o posicionamento (tech + lifestyle) sem texto extra.</li>
+      <li>O TikTok entra como segunda fonte de retenção: quem não espera a próxima oferta tem conteúdo imediato.</li>
+      <li>CTA único e claro — sem concorrer com os 5 anúncios.</li>
+    </ul>
+
+    <h2>Ponto de atenção</h2>
+    <div class="warn">O contato foi <b>adicionado sem opt-in</b>. Mensagem de boas-vindas reduz a saída, mas não elimina os ~10% de churn. O texto evita "promoção", "compre agora" e "clique" para não cair em filtro de spam.</div>
+  </div>
+
+</div>
+</body>
+</html>

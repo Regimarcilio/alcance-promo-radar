@@ -1,0 +1,31 @@
+# Caddyfile para Alcance com TLS automático (Let's Encrypt)
+# Use em produção com domínio real
+#
+# Uso:
+#   1. Configure seu domínio apontando para o servidor
+#   2. Ajuste MANAGER_HOST para o hostname correto
+#   3. docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+
+# Domínio do seu site - ajuste aqui
+MANAGER_HOST your-domain.com.br
+
+# Reverse proxy para o manager
+{MANAGER_HOST} {
+    reverse_proxy manager:8091
+    encode gzip
+    header {
+        # Segurança HTTP headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+    log {
+        output stdout
+        format {
+            console
+            level INFO
+        }
+    }
+}

@@ -1,0 +1,41 @@
+- generic [ref=e1]:
+  - link "Pular para o formulário de login" [ref=e2] [cursor=pointer]:
+    - /url: "#loginForm"
+  - region "Tela de login" [ref=e4]:
+    - complementary "Apresentação do Alcance" [ref=e5]:
+      - generic [ref=e6]: Alcance · acesso restrito
+      - generic [ref=e8]:
+        - paragraph [ref=e16]: Alcance · caça ofertas
+        - heading "Sua sala de controle de ofertas." [level=1] [ref=e17]
+        - paragraph [ref=e18]: Encontre as melhores promoções do Mercado Livre, acompanhe cada envio e saiba exatamente o que está chegando no WhatsApp.
+        - list [ref=e19]:
+          - listitem [ref=e20]: Radar de ofertas
+          - listitem [ref=e22]: Envios monitorados
+          - listitem [ref=e24]: Acesso restrito
+      - generic [ref=e26]:
+        - generic [ref=e27]: Avaliar em outra paleta
+        - group "Avaliar em outra paleta" [ref=e28]:
+          - button "Verde" [pressed] [ref=e29] [cursor=pointer]
+          - button "Laranja" [ref=e31] [cursor=pointer]
+          - button "Areia" [ref=e33] [cursor=pointer]
+          - button "Grafite" [ref=e35] [cursor=pointer]
+          - button "Marrom" [ref=e37] [cursor=pointer]
+          - button "Cacau" [ref=e39] [cursor=pointer]
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]: Acesso restrito
+        - heading "Entrar no Alcance" [level=2] [ref=e47]
+        - paragraph [ref=e48]: Use sua conta para abrir o monitor de ofertas e envios.
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]: Usuário
+            - textbox "Usuário" [active] [ref=e52]:
+              - /placeholder: seu usuário
+          - generic [ref=e53]:
+            - generic [ref=e54]: Senha
+            - generic [ref=e55]:
+              - textbox "Senha" [ref=e56]:
+                - /placeholder: Sua senha
+              - button "Mostrar senha" [ref=e57] [cursor=pointer]
+          - button "Entrar no painel" [ref=e61] [cursor=pointer]
+        - paragraph [ref=e65]: Sessão protegida · acesso restrito

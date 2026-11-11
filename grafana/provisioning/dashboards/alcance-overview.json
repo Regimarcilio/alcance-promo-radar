@@ -1,0 +1,276 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Alcance Promo Radar - Overview",
+    "tags": ["alcance", "whatsapp", "telegram"],
+    "timezone": "browser",
+    "schemaVersion": 58,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Sistema Online",
+        "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_up",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Mensagens Recebidas",
+        "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_monitor_recebidas_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Mensagens Encaminhadas",
+        "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_monitor_encaminhadas_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Itens na Fila",
+        "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_fila_tamanho",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Instâncias Ativas",
+        "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_instancias_ativas_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Campanhas Total",
+        "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_disparos_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 7,
+        "type": "stat",
+        "title": "Janela Comercial",
+        "gridPos": { "x": 0, "y": 4, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_janela_aberta",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 8,
+        "type": "graph",
+        "title": "Mensagens ao Longo do Tempo",
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "alcance_monitor_recebidas_total",
+            "legendFormat": "Recebidas",
+            "type": "line"
+          },
+          {
+            "expr": "alcance_monitor_encaminhadas_total",
+            "legendFormat": "Encaminhadas",
+            "type": "line"
+          },
+          {
+            "expr": "alcance_monitor_duplicadas_total",
+            "legendFormat": "Duplicadas",
+            "type": "line"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "type": "graph",
+        "title": "Estados das Instâncias",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "alcance_instancia_ativa",
+            "legendFormat": "{{nome}} ({{instancia}})",
+            "type": "bar-gauge",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "table",
+        "title": "Campanhas por Status",
+        "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "alcance_disparos_total",
+            "legendFormat": "Total",
+            "instant": true
+          },
+          {
+            "expr": "alcance_disparos_concluidos_total",
+            "legendFormat": "Concluídas",
+            "instant": true
+          },
+          {
+            "expr": "alcance_disparos_pendentes_total",
+            "legendFormat": "Pendentes",
+            "instant": true
+          },
+          {
+            "expr": "alcance_disparos_erros_total",
+            "legendFormat": "Erros",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "type": "stat",
+        "title": "Campanhas Pendentes",
+        "gridPos": { "x": 16, "y": 4, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_disparos_pendentes_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 12,
+        "type": "stat",
+        "title": "Campanhas com Erro",
+        "gridPos": { "x": 20, "y": 4, "w": 4, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_disparos_erros_total",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 13,
+        "type": "stat",
+        "title": "Fila em Processamento",
+        "gridPos": { "x": 0, "y": 20, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "alcance_fila_em_andamento",
+            "format": "time_series",
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value"
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    }
+  },
+  "folderId": 0,
+  "overwrite": true
+}

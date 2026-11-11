@@ -11,9 +11,10 @@ import { formatar } from "../wa/formatter.js";
 import { jaEnviado, registrarEnvio, diaLocal } from "../store/dedup.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import catsJson from "../categorias.json" with { type: "json" };
+import { extrairHora } from "../util/janela.js";
 
 const CATS = catsJson as { id: string; name: string }[];
-const dataDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
+const dataDir = process.env.ALCANCE_DATA_DIR || join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
 const filaFile = join(dataDir, "fila.json");
 const KILL = join(dataDir, "AUTO_OFF");
 
@@ -24,11 +25,19 @@ export interface AutoOpts extends Filtros {
   grupo?: string; // override de grupo; vazio = mapa da categoria > GRUPO_TESTE
 }
 
-const hora = () => Number(process.env.HORA_OVERRIDE ?? new Date().getHours());
+/** Extrai a hora do ambiente, suportando HORA_OVERRIDE em formato "HH:MM" ou numérico */
+function hora(): number {
+  const override = process.env.HORA_OVERRIDE;
+  if (override) {
+    // Suporta "HH:MM" ou apenas "HH"
+    return Number(override.split(":")[0]);
+  }
+  return new Date().getHours();
+}
 
 export function dentroDaJanela(): boolean {
-  const ini = Number(process.env.JANELA_INICIO ?? 8);
-  const fim = Number(process.env.JANELA_FIM ?? 23);
+  const ini = extrairHora(process.env.JANELA_INICIO, 8);
+  const fim = extrairHora(process.env.JANELA_FIM, 23);
   const h = hora();
   return h >= ini && h < fim;
 }
@@ -68,7 +77,7 @@ export async function runAuto(o: AutoOpts): Promise<string[]> {
   const log: string[] = [];
   const catName = CATS.find((c) => c.id === o.category)?.name ?? o.category;
   if (existsSync(KILL)) return [`KILL-SWITCH ativo (data/AUTO_OFF existe) — nada enviado. Remova o arquivo para retomar.`];
-  if (!dentroDaJanela()) return [`Fora da janela ${process.env.JANELA_INICIO ?? 8}h–${process.env.JANELA_FIM ?? 22}h — nada enviado.`];
+  if (!dentroDaJanela()) return [`Fora da janela ${process.env.JANELA_INICIO ?? 8}h–${process.env.JANELA_FIM ?? 23}h — nada enviado.`];
   // Sem limite diário (removido a pedido).
 
   const { url, candidatos, mock } = await hunt(o);
@@ -94,7 +103,7 @@ export async function runAuto(o: AutoOpts): Promise<string[]> {
     });
     if (modoAuto) {
       const r = await enviarParaGrupo({
-        grupo, imagem: op.imagem, legenda: msg, dryRun: !o.live,
+        grupo, imagem: op.imagem, legenda: msg, dryRun: !o.live, fluxo: "piloto",
       });
       log.push(`ENVIADO AUTO score=${op.score} ${op.mlbId} → ${grupo} id=${r.messageId} dryRun=${r.dryRun}`);
       if (o.live) registrarEnvio(op.mlbId, op.precoAtual, op.cupom);
@@ -120,7 +129,7 @@ export async function filaApprove(mlbId: string, live: boolean): Promise<string>
   const item = fila[i];
   const r = await enviarParaGrupo({
     grupo: item.grupo ?? process.env.GRUPO_TESTE ?? "grupo-teste",
-    imagem: item.imagem ?? "", legenda: item.mensagem, dryRun: !live,
+    imagem: item.imagem ?? "", legenda: item.mensagem, dryRun: !live, fluxo: "piloto",
   });
   if (live) {
     fila.splice(i, 1);

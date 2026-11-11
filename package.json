@@ -1,6 +1,6 @@
 {
   "name": "automensagemwhats",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Caçador autônomo de ofertas ML por categoria + envio WhatsApp",
   "type": "module",
   "scripts": {
@@ -9,8 +9,12 @@
     "start": "node dist/cli.js",
     "manager": "node dist/manager/server.js",
     "manager:dev": "tsx src/manager/server.ts",
+    "auth:user": "node scripts/auth-user.mjs",
+    "smoke:manager": "bash scripts/smoke-manager.sh",
     "typecheck": "tsc --noEmit",
-    "test": "node --test dist/**/*.test.js"
+    "pretest": "npm run build",
+    "test": "node --test dist/**/*.test.js",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage dist/**/*.test.js"
   },
   "engines": {
     "node": ">=20"
@@ -18,6 +22,7 @@
   "dependencies": {
     "dotenv": "^18.0.7",
     "pino": "^9.4.0",
+    "sharp": "^0.35.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
