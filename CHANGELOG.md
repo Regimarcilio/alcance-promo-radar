@@ -6,9 +6,19 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 [SemVer](https://semver.org/lang/pt-BR/). As versões anteriores a 0.8.0 são reconstruídas a partir
 do histórico do git (`git log`), sem tags formais.
 
-## [Unreleased]
+## [0.9.0] — 2026-11-10
+
+Release de **controle fino do envio por número** e **Rastreio sem teto de contagem**.
 
 ### Adicionado
+- **Permissões por número (Piloto/Monitor/Disparo) + Pausar/Continuar** (#36, PR #39): cada número só
+  participa dos fluxos autorizados e pode ser pausado por inteiro sem sair do cadastro. O filtro fica
+  no ponto único `proximaInstancia(fluxo, excluir)`; sem número permitido, o envio falha com erro claro.
+- **Override manual de remetente por fluxo** (#37, PR #40): fixe um número específico para um fluxo;
+  se ele ficar inválido (pausado/sem permissão/desconectado), o sistema volta ao automático e avisa.
+- **Rastreio com total real e histórico maior** (#38, PR #41): `RASTREIO_LIMITE` (default 50000, piso
+  1000) e contador histórico persistente em `data/rastreio-total.json`; o KPI mostra o total real e a
+  quantidade armazenada.
 - **CI/CD com GitHub Actions**: workflow `.github/workflows/ci.yml` com typecheck, build, testes e smoke do manager.
 - **Badge de CI**: badge de status adicionado ao README.md.
 - **TLS com Caddy**: `Caddyfile` para reverse proxy com Let's Encrypt + `docker-compose.production.yml` para deploy seguro com HTTPS.
@@ -30,6 +40,8 @@ do histórico do git (`git log`), sem tags formais.
   Isso elimina as CVEs HIGH das dependências internas do npm que o Trivy bloqueava no CI.
 
 ### Correções
+- **CI `smoke-test` falhava sempre**: o job não compilava antes do smoke e `dist/manager/server.js`
+  não existia; adicionado `npm run build` no job (PR #39).
 - **404 em `/group/fetchAllGroups`**: grupos, estado da conta, logout/QR, 2FA e sync de
   contatos passaram a resolver a instância **principal** em `instancias.json`; antes usavam
   `EVO_INSTANCE` fixo (`radar-piloto`), que deixa de existir quando o número é renomeado.
@@ -62,8 +74,9 @@ do histórico do git (`git log`), sem tags formais.
   multi-stage non-root e Compose com healthcheck/limites/loopback.
 
 ### Testes
-- `pretest` compila antes da suíte (fim do falso verde sem `dist/`); **181 testes** em 28 arquivos,
-  incluindo SSRF/path traversal, reserva atômica, CSV injection e recuperação de fila.
+- `pretest` compila antes da suíte (fim do falso verde sem `dist/`); **207 testes** em 30 arquivos,
+  incluindo SSRF/path traversal, reserva atômica, CSV injection, recuperação de fila, filtro por
+  permissão/pausa, override por fluxo e contador histórico do Rastreio.
 
 ### Documentação
 - Janela de envio corrigida no comentário do agendador (`src/jobs/auto.ts` dizia "22h";
