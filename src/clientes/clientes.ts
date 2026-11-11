@@ -62,6 +62,11 @@ export interface ItemCampanha {
   disparoId?: string | null;
   /** mídia tipada (imagem/vídeo) do upload */
   midia?: MidiaDisparo | null;
+  /**
+   * Número que envia esta campanha (issue #45).
+   * null/ausente = Automático (rodízio do fluxo "disparo").
+   */
+  instancia?: string | null;
   criadoEm: string;
 }
 
@@ -427,6 +432,8 @@ export interface CampanhaArgs {
   link?: string | null;
   /** mídia tipada (upload de imagem/vídeo) */
   midia?: MidiaDisparo | null;
+  /** número que envia a campanha (null/ausente = Automático/rodízio) */
+  instancia?: string | null;
 }
 
 /** Coloca 1 mensagem por contato na fila (não envia na hora). */
@@ -448,6 +455,8 @@ export function enfileirarCampanha(args: CampanhaArgs): number {
       imagem: midia?.arquivo || String(args.imagem ?? "").trim(),
       disparoId: args.disparoId ?? null,
       midia,
+      // número fixado na campanha (copiado do disparo) — null = automático
+      instancia: String(args.instancia ?? "").trim() || null,
       criadoEm: new Date().toISOString(),
     });
   }
@@ -467,7 +476,13 @@ export function removerItensDaFila(disparoId: string): number {
 /** Atualiza texto/link/mídia dos itens ainda na fila (edição de pendente). */
 export function atualizarItensDaFila(
   disparoId: string,
-  patch: { texto: string; link?: string | null; midia?: MidiaDisparo | null },
+  patch: {
+    texto: string;
+    link?: string | null;
+    midia?: MidiaDisparo | null;
+    /** troca o número remetente dos itens ainda na fila (issue #45) */
+    instancia?: string | null;
+  },
 ): number {
   const s = carregarFila();
   const texto = textoComLink(patch.texto, patch.link);
@@ -478,6 +493,9 @@ export function atualizarItensDaFila(
     if (patch.midia !== undefined) {
       item.midia = patch.midia;
       item.imagem = patch.midia?.arquivo ?? "";
+    }
+    if (patch.instancia !== undefined) {
+      item.instancia = String(patch.instancia ?? "").trim() || null;
     }
     n++;
   }
@@ -541,6 +559,8 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
       legenda: item.texto,
       dryRun: dry,
       fluxo: "disparo",
+      // número escolhido na campanha (null = rodízio do fluxo "disparo")
+      instancia: item.instancia ?? null,
       mediatype: item.midia?.tipo === "video" ? "video" : undefined,
       mimetype: item.midia?.mime,
     });

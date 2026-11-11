@@ -48,6 +48,11 @@ export interface Disparo {
   enviados: number;
   falhas: number;
   status: StatusDisparo;
+  /**
+   * Instância (número) que envia esta campanha (issue #45).
+   * null/ausente = Automático (rodízio do fluxo "disparo").
+   */
+  instancia?: string | null;
   /** último erro relevante (UI mostra no detalhe) */
   erro?: string | null;
 }
@@ -94,6 +99,8 @@ export interface NovoDisparo {
   listaId?: string | null;
   listaNome?: string | null;
   jids: string[];
+  /** número que envia a campanha (null/ausente = Automático/rodízio) */
+  instancia?: string | null;
 }
 
 export function criarDisparo(n: NovoDisparo): Disparo {
@@ -117,6 +124,8 @@ export function criarDisparo(n: NovoDisparo): Disparo {
     enviados: 0,
     falhas: 0,
     status: "PENDENTE",
+    // número escolhido pelo operador (null = Automático/rodízio)
+    instancia: String(n.instancia ?? "").trim() || null,
     erro: null,
   };
   const arr = carregar();
@@ -129,6 +138,8 @@ export interface PatchDisparo {
   texto?: string;
   link?: string | null;
   midia?: MidiaDisparo | null;
+  /** troca o número que envia a campanha (null = volta para Automático) */
+  instancia?: string | null;
 }
 
 /**
@@ -149,6 +160,8 @@ export function editarDisparo(id: string, patch: PatchDisparo): Disparo {
   d.texto = texto;
   if (patch.link !== undefined) d.link = String(patch.link ?? "").trim() || null;
   d.midia = midia;
+  // troca do número remetente (issue #45) — só enquanto nada foi enviado
+  if (patch.instancia !== undefined) d.instancia = String(patch.instancia ?? "").trim() || null;
   d.atualizadoEm = new Date().toISOString();
   salvar(arr);
   return d;
