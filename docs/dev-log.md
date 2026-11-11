@@ -2266,3 +2266,32 @@ imediata de toda demanda aberta.
 - **Testes:** 207/207 (`npm test`), build verde, smoke OK; JS inline validado com `vm.Script`.
 - **SAST:** sem segredo novo no diff; mesmo high pré-existente do zod.
 - **Pendências:** paginação da lista (fora do escopo).
+
+## 2026-11-11 — Release v0.9.0 — @issuemaster — `task: — (documentação e release)`
+- **Objetivo:** PR para `main` com README profissional e release publicada do projeto.
+- **Branch:** DOC · **PR:** #42 (README/CHANGELOG/versão → develop, merged) e #43 (promoção
+  `develop` → `main`, merged) · **Release:** `v0.9.0` (tag em `main`).
+- **Decisões:**
+  - `master` era ancestral de `develop` (92 commits atrás) e **foi renomeado para `main`** — o CI
+    (`.github/workflows/ci.yml`) já referenciava `main`, que não existia. Branch padrão do repo
+    alterada de `develop` para `main`.
+  - Versão **0.9.0** (minor): o CHANGELOG já tinha `[0.8.0]` (2026-10-22) e há features novas
+    (#36/#37/#38). `package.json` e `package-lock.json` sincronizados.
+  - README reescrito como documento de entrada: badges (CI, release, Node, TS, licença), sumário,
+    fluxo do monitor em texto, tabela de funcionalidades por área, diagrama Mermaid da arquitetura,
+    stack, requisitos, instalação local e Docker, tabela de variáveis de ambiente, seção de
+    multi-número (permissões por fluxo, pausa, override, principal), uso do painel por aba,
+    qualidade (207 testes), estrutura, segurança, observabilidade, documentação, pendências e licença.
+  - CHANGELOG: bloco `[Unreleased]` convertido em `[0.9.0] — 2026-11-10`, com as entregas das
+    issues #36/#37/#38, o fix do job `smoke-test` e a atualização de 181 para 207 testes.
+  - `SECURITY.md` já existia; **LICENSE não existe** — a seção de licença do README declara projeto
+    proprietário (todos os direitos reservados), sem abrir mão de direitos por omissão.
+- **Arquivos:** README.md, CHANGELOG.md, package.json, package-lock.json, docs/dev-log.md
+- **Testes:** `npm run build` verde; 207/207 (`npm test`) validados no `develop` antes do PR; CI
+  verde (typecheck + build + testes + smoke do manager) nos PRs #42 e #43.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Pendências:** (1) rebuild/recreate do container do manager para aplicar o `dist` novo — o
+  container atual tem o `dist` embutido na imagem e `docker restart` não aplica código novo;
+  (2) pareamento por QR das instâncias (`device_removed` do WhatsApp) para retomar a fila;
+  (3) `LICENSE` e `SECURITY.md` (#35) ainda não versionados; (4) default do repo agora `main` —
+  confirmar com o operador se prefere `develop` como branch de integração padrão.
