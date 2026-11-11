@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mockFetch, resJson } from "../monitor/test-utils.js";
@@ -24,11 +24,83 @@ async function carregarClientes() {
   return { mod, dir };
 }
 
+/**
+ * Carrega o módulo de clientes com data dir temporário (fila de campanhas).
+ * O `dataDir` é resolvido no import do módulo — por isso o cache-buster.
+ */
+async function carregarFila() {
+  const dir = mkdtempSync(join(tmpdir(), "alcance-fila-"));
+  writeFileSync(join(dir, "clientes.json"), JSON.stringify({ contatos: [], listas: [], ultimoSync: null }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  const mod = await import(`./clientes.js?v=${Math.random()}`);
+  return { mod, dir };
+}
+
+/** Lê os itens da fila gravados em data/clientes-fila.json. */
+function lerItensFila(dir: string): any[] {
+  const raw = JSON.parse(readFileSync(join(dir, "clientes-fila.json"), "utf8"));
+  return Array.isArray(raw?.itens) ? raw.itens : [];
+}
+
 const GRUPOS = [
   { id: "g1@g.us", subject: "Grupo Um" },
   { id: "g2@g.us", subject: "Grupo Dois" },
   { id: "g3@g.us", subject: "Grupo Três" },
 ];
+
+test("fila: o item carrega o número escolhido na campanha (issue #45)", async () => {
+  const { mod, dir } = await carregarFila();
+  try {
+    mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000001@s.whatsapp.net"],
+      disparoId: "disp-1",
+      instancia: "radar-47997136647-uzz",
+    });
+    const itens = lerItensFila(dir);
+    assert.equal(itens.length, 1);
+    assert.equal(itens[0].instancia, "radar-47997136647-uzz");
+    assert.equal(itens[0].disparoId, "disp-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: sem número escolhido o item fica em Automático (fallback p/ o rodízio)", async () => {
+  const { mod, dir } = await carregarFila();
+  try {
+    mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000002@s.whatsapp.net"],
+      disparoId: "disp-2",
+    });
+    const itens = lerItensFila(dir);
+    assert.equal(itens.length, 1);
+    assert.equal(itens[0].instancia, null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: atualizarItensDaFila troca o número dos itens pendentes", async () => {
+  const { mod, dir } = await carregarFila();
+  try {
+    mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000003@s.whatsapp.net"],
+      disparoId: "disp-3",
+      instancia: "inst-antigo",
+    });
+    const n = mod.atualizarItensDaFila("disp-3", {
+      texto: "oferta nova",
+      instancia: "inst-novo",
+    });
+    assert.equal(n, 1);
+    assert.equal(lerItensFila(dir)[0].instancia, "inst-novo");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("sync: importa participantes de todos os grupos", async () => {
   const { mod, dir } = await carregarClientes();

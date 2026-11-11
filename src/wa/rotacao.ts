@@ -364,6 +364,40 @@ export async function proximaInstancia(fluxo?: FluxoEnvio, excluir: string[] = [
 }
 
 /**
+ * Valida uma instância FIXADA por campanha (issue #45).
+ *
+ * Usada quando o operador escolhe o número que envia uma campanha da aba
+ * Clientes: a fixada só vale se estiver realmente apta a enviar agora
+ * (existe no cadastro, ativa, não pausada, com permissão do fluxo, conectada
+ * e sem falha recente). Se qualquer uma dessas condições falhar, o chamador
+ * cai no sorteio automático — o envio NUNCA trava por causa do número escolhido.
+ */
+export interface AvaliacaoInstancia {
+  ok: boolean;
+  /** motivo da invalidez (null quando válida) */
+  motivo: string | null;
+}
+
+export async function avaliarInstanciaFixada(
+  instancia: string,
+  fluxo: FluxoEnvio,
+  excluir: string[] = [],
+): Promise<AvaliacaoInstancia> {
+  const nome = String(instancia ?? "").trim();
+  if (!nome) return { ok: false, motivo: "nenhum número escolhido" };
+  const item = carregar().itens.find((i) => i.instancia === nome);
+  if (!item) return { ok: false, motivo: "não está no cadastro" };
+  if (!item.ativo) return { ok: false, motivo: "número desativado" };
+  if (item.pausado) return { ok: false, motivo: "número pausado" };
+  if (item.permissoes[fluxo] !== true) return { ok: false, motivo: `sem permissão ${fluxo}` };
+  if (excluir.includes(nome)) return { ok: false, motivo: "já falhou nesta entrega" };
+  if (instanciaRuim(nome)) return { ok: false, motivo: "falhou por conexão recentemente" };
+  const estado = await estadoInstancia(nome);
+  if (estado !== "open") return { ok: false, motivo: `estado ${estado}` };
+  return { ok: true, motivo: null };
+}
+
+/**
  * Candidatas para OPERAÇÕES DE SERVIÇO (adicionar contatos, permissões de
  * grupo), em ordem de preferência: principal → demais ativas (peso maior
  * primeiro) → principal como último recurso.

@@ -2295,3 +2295,52 @@ imediata de toda demanda aberta.
   (2) pareamento por QR das instâncias (`device_removed` do WhatsApp) para retomar a fila;
   (3) `LICENSE` e `SECURITY.md` (#35) ainda não versionados; (4) default do repo agora `main` —
   confirmar com o operador se prefere `develop` como branch de integração padrão.
+
+## 2026-11-11 — Issue #45 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** escolher, POR CAMPANHA, o número (instância) que envia as mensagens da aba
+  Clientes — sem mexer no override global do fluxo `disparo` (aba Números).
+- **Branch:** ISSUE · **PR:** #46 (aberto para `develop`)
+- **Decisões:**
+  - `Disparo.instancia?: string | null` — nome da instância que envia a campanha;
+    `null`/ausente = **Automático (rodízio)**. Disparos antigos (sem o campo) continuam
+    automáticos: migração sem tocar em `data/disparos.json`.
+  - `NovoDisparo.instancia`, `PatchDisparo.instancia`, `ItemCampanha.instancia` e
+    `CampanhaArgs.instancia` aceitam o campo; `enfileirarCampanha` copia a instância do disparo
+    para cada item da fila e `atualizarItensDaFila` troca a instância dos itens ainda pendentes
+    quando o disparo é editado (mesma regra já usada para texto/link/mídia).
+  - `rotacao.avaliarInstanciaFixada(instancia, fluxo, excluir)` valida a fixada no momento do
+    envio: existe no cadastro, `ativo`, `pausado === false`, `permissoes[fluxo] === true`,
+    não está em `excluir`, não é `instanciaRuim` e está `open`.
+  - `dispatch.comRetry` ganhou o parâmetro `fixada`: a **primeira** tentativa usa a instância
+    fixada quando ela é válida; se for inválida, registra
+    `[dispatch] instância fixada X inválida no fluxo disparo — usando automático (motivo)` e cai
+    no sorteio normal — **a campanha nunca trava** por número escolhido. As tentativas seguintes
+    já usam o sorteio existente (com a instância que falhou excluída).
+  - Sem fluxo informado (caminho de grupo direto em `POST /api/disparos`), a validação da fixada
+    usa a permissão de **Disparo**; o sorteio automático desse caminho continua sem filtro de
+    fluxo (comportamento anterior preservado).
+  - Boas-vindas por DM, "adicionar ao grupo", Piloto e Monitor **não** foram afetados: seguem o
+    override global do fluxo `disparo`/rodízio, porque a fixada só entra por parâmetro explícito.
+  - UI (aba Clientes): select **"Número que envia"** no formulário de criação e no modal de
+    edição (`#dinstancia` / `#dedinstancia`), populado por `GET /api/instancias`: lista **todos**
+    os números com estado visível (🟢 open / 🟡 connecting / 🔴 close, marcadores de pausado e
+    de sem permissão Disparo) e **desabilita** os que não podem enviar, mostrando o motivo.
+    Default = `Automático (rodízio)`. O grid de disparos ganhou a coluna "número".
+  - `POST /api/disparos` aceita `instancia` e a aplica **também no caminho direto para grupo**
+    (`jids.length === 1` e JID `@g.us`), que antes mandava sem passar pela fila.
+  - `PATCH /api/disparos/:id` aceita `instancia` (troca o número enquanto o disparo é PENDENTE).
+- **Arquivos:** src/clientes/disparos.ts, src/clientes/clientes.ts, src/wa/rotacao.ts,
+  src/wa/dispatch.ts, src/manager/server.ts, src/clientes/disparos.test.ts,
+  src/clientes/clientes.test.ts, src/wa/dispatch.test.ts
+- **Testes:** 217/217 (`npm test`) — 10 testes novos (4 em `disparos.test.ts`, 3 em
+  `clientes.test.ts`, 3 em `dispatch.test.ts`); `npm run build` e `npm run typecheck` verdes.
+  JS inline do painel validado com `node --check` (2/2 blocos) e o seletor exercitado em
+  harness (3 números: 1 liberado, 1 pausado e 1 sem permissão Disparo — todos desabilitados
+  com o motivo). Sem envio real (instâncias deslogadas, fila pausada) — só teste unitário.
+- **SAST:** sem segredo novo no diff (só `EVO_KEY = "k"` de fixture, mesmo padrão dos testes
+  existentes); sem CORS/cookie/CSP alterados; `npm audit` mantém 1 high **pré-existente**
+  (zod <4.6.6 — correção exige upgrade major para a linha 4.x, fora do escopo desta issue).
+- **Pendências:** (1) rebuild/recreate do container do manager para aplicar o `dist` novo (o
+  container roda `dist` embutido na imagem); (2) pareamento por QR das instâncias
+  (`device_removed`) para retomar a fila; (3) teste em campo do envio com número fixado
+  depende de instâncias conectadas.

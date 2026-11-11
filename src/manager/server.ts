@@ -1359,6 +1359,9 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         listaId: listaId || null,
         listaNome,
         jids,
+        // número que envia a campanha (issue #45) — vazio/null = Automático
+        instancia:
+          b.instancia === undefined || b.instancia === null ? null : String(b.instancia ?? ""),
       });
 
       // Detecta se jids contém apenas um grupo (@g.us) - envia direto
@@ -1371,6 +1374,8 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
           imagem,
           legenda: texto,
           dryRun: false,
+          // grupo direto também respeita o número fixado da campanha
+          instancia: d.instancia ?? null,
         });
         registrarResultadoDisparo(d.id, true);
         json(200, { ok: true, disparo: d, enviado: true, grupo: grupoJid });
@@ -1379,6 +1384,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         try {
           enfileirarCampanha({
             texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+            instancia: d.instancia ?? null,
           });
         } catch (e) {
           excluirDisparo(d.id); // rollback: não deixa disparo sem fila
@@ -1398,12 +1404,26 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     if (req.method === "PATCH" && !acao) {
       try {
         const b = JSON.parse(await lerCorpo(req));
-        const patch: { texto?: string; link?: string | null; midia?: MidiaDisparo | null } = {};
+        const patch: {
+          texto?: string;
+          link?: string | null;
+          midia?: MidiaDisparo | null;
+          instancia?: string | null;
+        } = {};
         if (b.texto !== undefined) patch.texto = String(b.texto);
         if (b.link !== undefined) patch.link = String(b.link ?? "");
         if (b.midia !== undefined) patch.midia = midiaDoBody(b.midia);
+        // troca do número que envia (issue #45) — vazio = volta para Automático
+        if (b.instancia !== undefined) {
+          patch.instancia = b.instancia === null ? null : String(b.instancia ?? "");
+        }
         const d = editarDisparo(id, patch);
-        const atualizados = atualizarItensDaFila(id, { texto: d.texto, link: d.link, midia: d.midia });
+        const atualizados = atualizarItensDaFila(id, {
+          texto: d.texto,
+          link: d.link,
+          midia: d.midia,
+          instancia: d.instancia,
+        });
         json(200, { ok: true, disparo: d, filaAtualizada: atualizados });
       } catch (e: any) {
         json(400, { erro: String(e?.message ?? e) });
@@ -2359,6 +2379,9 @@ Tem achadinho novo todos os dias. 🔥
 <select id="dlista" style="width:100%"><option value="">— escolha a lista —</option></select>
 <textarea id="dtexto" rows="3" style="width:100%;margin-top:6px" placeholder="Mensagem que cada contato vai receber…"></textarea>
 <input id="dlink" placeholder="Link (opcional)" style="width:100%;margin-top:6px">
+<label style="display:block;margin-top:8px;font-size:12px;">Número que envia</label>
+<select id="dinstancia" style="width:100%"><option value="">Automático (rodízio)</option></select>
+<span class="mini" id="dinstanciastatus">automático: o rodízio escolhe entre os números liberados para Disparo</span>
 <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
 <input type="file" id="dmedia" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" style="display:none" onchange="escolherMidiaDisparo(event)">
 <button class="mbtn" style="width:auto;margin:0" onclick="$('dmedia')?.click()">📎 Imagem/vídeo</button>
@@ -2381,6 +2404,8 @@ Tem achadinho novo todos os dias. 🔥
 <b>✏️ Editar disparo</b>
 <textarea id="dedtexto" rows="4" style="width:100%;margin-top:8px" placeholder="Mensagem"></textarea>
 <input id="dedlink" placeholder="Link (opcional)" style="width:100%;margin-top:8px">
+<label style="display:block;margin-top:8px;font-size:12px;">Número que envia</label>
+<select id="dedinstancia" style="width:100%"><option value="">Automático (rodízio)</option></select>
 <div style="display:flex;gap:8px;margin-top:10px">
 <button class="mbtn ok" style="width:auto;margin:0" onclick="salvarEdicaoDisparo()">Salvar</button>
 <button class="mbtn" style="width:auto;margin:0" onclick="$('modalDisparo').style.display='none'">Cancelar</button>
@@ -2431,6 +2456,7 @@ function navegar(){
   document.title='Alcance — '+m.t;
   window.scrollTo(0,0);
   if(v==='rastreio')carregarRastreio();
+  if(v==='clientes')carregarSeletorNumero();
   if(v==='piloto'&&$('paprograma')&&$('paprograma').value==='amazon')trocarProgramaPiloto();
 }
 window.addEventListener('hashchange',navegar);
@@ -2460,6 +2486,7 @@ fetch('/api/categorias').then(r=>r.json()).then(cs=>{
   carregarTitulos();
   atualizarPiloto();
   carregarClientes();
+  carregarSeletorNumero();
   setInterval(function(){try{carregarMonitorStatus();}catch(e){}},15000);
   setInterval(function(){try{carregarClientes();}catch(e){}},15000);
 });
@@ -2949,6 +2976,55 @@ function renderListas(){
 }
 // ===== Disparos para lista salva (link + imagem/vídeo) =====
 var DMEDIA=null, DMEDIAURL=null, DEDIT=null;
+// ===== Seletor de número que envia a campanha (issue #45) =====
+var NUMEROS=[];
+// Motivo pelo qual o número NÃO pode enviar agora (null = pode enviar).
+function numeroBloqueado(i){
+  var perm=i.permissoes||{piloto:true,monitor:true,disparo:true};
+  if(i.ativo===false)return 'número desativado';
+  if(i.pausado)return 'número pausado';
+  if(perm.disparo===false)return 'sem permissão Disparo';
+  if(i.estado&&i.estado!=='open')return 'conexão '+i.estado;
+  return null;
+}
+// Rótulo com o estado visível (🟢 open / 🟡 connecting / 🔴 close).
+function rotuloNumero(i){
+  var est=i.estado||'?';
+  var ic=est==='open'?'🟢':(est==='connecting'?'🟡':'🔴');
+  var txt=esc(i.nome)+' · '+esc(i.instancia)+' · '+ic+' '+esc(est);
+  var marcas=[];
+  if(i.ativo===false)marcas.push('desativado');
+  if(i.pausado)marcas.push('pausado');
+  if((i.permissoes||{}).disparo===false)marcas.push('sem permissão Disparo');
+  if(marcas.length)txt+=' · '+esc(marcas.join(', '));
+  return txt;
+}
+function preencherSeletorNumero(sel,atual){
+  if(!sel)return;
+  var opts='<option value="">Automático (rodízio)</option>';
+  (NUMEROS||[]).forEach(function(i){
+    var motivo=numeroBloqueado(i);
+    var rot=rotuloNumero(i)+(motivo?' — não pode enviar ('+esc(motivo)+')':'');
+    opts+='<option value="'+esc(i.instancia)+'"'+(motivo?' disabled':'')+' title="'+esc(motivo||'pode enviar')+'">'+rot+'</option>';
+  });
+  sel.innerHTML=opts;
+  sel.value=atual||'';
+  sel.title=atual?('número fixado: '+atual):'automático (rodízio)';
+  if(sel.id==='dinstancia'){
+    var st=$('dinstanciastatus');
+    if(st)st.textContent=atual
+      ? ('envia pelo número fixado: '+atual+' — se ele cair, volta ao automático')
+      : 'automático: o rodízio escolhe entre os números liberados para Disparo';
+  }
+}
+async function carregarSeletorNumero(){
+  try{
+    var d=await (await fetch('/api/instancias')).json();
+    NUMEROS=(d&&d.itens)||[];
+  }catch(e){ NUMEROS=[]; }
+  preencherSeletorNumero($('dinstancia'), $('dinstancia')?$('dinstancia').value:'');
+  preencherSeletorNumero($('dedinstancia'), $('dedinstancia')?$('dedinstancia').value:'');
+}
 function renderListasDestino(){
   var sel=$('dlista'); if(!sel)return;
   var atual=sel.value, ls=CLIENTES.listas||[];
@@ -2970,18 +3046,21 @@ function renderDisparos(){
     else if(act==='del')excluirDisparo(id);
   };
   if(!arr.length){box.innerHTML='<div class="mini" style="padding:8px">nenhum disparo ainda — o primeiro envio aparece aqui.</div>';return;}
-  box.innerHTML='<div style="min-width:760px">'
+  box.innerHTML='<div style="min-width:900px">'
     +'<div style="display:flex;gap:8px;padding:4px 2px;border-bottom:1px solid var(--border-strong);font-size:11px;color:#5b6b73">'
     +'<span style="width:118px">quando</span><span style="width:140px">lista</span><span style="flex:1">mensagem</span>'
+    +'<span style="width:150px">número</span>'
     +'<span style="width:76px">mídia</span><span style="width:92px">status</span><span style="width:96px">envios</span><span style="width:104px"></span></div>'
     +arr.map(function(d){
       var cor=DCHIP[d.status]||'#5b6b73';
       var m=d.midia?(d.midia.tipo==='video'?'🎬 vídeo':'🖼 imagem'):'—';
       var pode=d.status==='PENDENTE'&&!d.enviados&&!d.falhas;
+      var num=d.instancia?esc(d.instancia):'Automático';
       return '<div style="display:flex;gap:8px;padding:5px 2px;border-bottom:1px solid var(--border);align-items:center">'
         +'<span class="mini" style="width:118px;white-space:nowrap">'+esc(new Date(d.em).toLocaleString('pt-BR'))+'</span>'
         +'<span style="width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(d.listaNome||'')+'">'+esc(d.listaNome||'—')+' <span class="mini">'+d.total+'</span></span>'
         +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(d.texto||'')+'">'+esc((d.texto||'').slice(0,60)||'(sem texto)')+(d.link?' <span class="mini">🔗</span>':'')+'</span>'
+        +'<span class="mini" style="width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(d.instancia||'Automático (rodízio)')+'">'+num+'</span>'
         +'<span class="mini" style="width:76px">'+m+'</span>'
         +'<span style="width:92px;color:'+cor+';font-weight:700;font-size:11px">'+esc(d.status)+'</span>'
         +'<span class="mini" style="width:96px">'+d.enviados+'/'+d.total+(d.falhas?' · '+d.falhas+'✗':'')+'</span>'
@@ -3026,7 +3105,8 @@ async function enviarParaLista(){
       if(up.erro)throw new Error(up.erro);
       midia={arquivo:up.arquivo,mime:up.mime,tipo:up.tipo,nome:up.nome};
     }
-    var r=await (await fetch('/api/disparos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listaId:listaId,texto:texto,link:link,midia:midia})})).json();
+    var inst=$('dinstancia')?$('dinstancia').value:'';
+    var r=await (await fetch('/api/disparos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listaId:listaId,texto:texto,link:link,midia:midia,instancia:inst||null})})).json();
     if(r.erro)throw new Error(r.erro);
     $('dtexto').value=''; $('dlink').value=''; limparMidiaDisparo();
     av.textContent='na fila — acompanhe no grid abaixo';
@@ -3037,11 +3117,13 @@ function editarDisparo(id){
   var d=(CLIENTES.disparos||[]).filter(function(x){return x.id===id;})[0]; if(!d)return;
   if(d.status!=='PENDENTE'||d.enviados||d.falhas){alert('Só dá para editar disparo ainda não enviado. Use ⧉ para reenviar.');return;}
   DEDIT=id; $('dedtexto').value=d.texto||''; $('dedlink').value=d.link||'';
+  preencherSeletorNumero($('dedinstancia'), d.instancia||'');
   $('modalDisparo').style.display='flex';
 }
 async function salvarEdicaoDisparo(){
   var id=DEDIT; if(!id)return;
-  var r=await (await fetch('/api/disparos/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:$('dedtexto').value,link:$('dedlink').value})})).json();
+  var inst=$('dedinstancia')?$('dedinstancia').value:'';
+  var r=await (await fetch('/api/disparos/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:$('dedtexto').value,link:$('dedlink').value,instancia:inst||null})})).json();
   if(r.erro){alert(r.erro);return;}
   $('modalDisparo').style.display='none'; DEDIT=null; carregarClientes();
 }

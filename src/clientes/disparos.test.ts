@@ -35,6 +35,37 @@ test("aceita mídia sem texto", () => {
   assert.equal(d.midia?.tipo, "image");
 });
 
+test("persistência: guarda o número que envia a campanha (issue #45)", () => {
+  const d = mod.criarDisparo({
+    texto: "com numero",
+    jids: [JIDS[0]],
+    instancia: "radar-47997136647-uzz",
+  });
+  assert.equal(d.instancia, "radar-47997136647-uzz");
+  assert.equal(mod.obterDisparo(d.id)?.instancia, "radar-47997136647-uzz");
+  assert.equal(mod.listarDisparos().find((x) => x.id === d.id)?.instancia, "radar-47997136647-uzz");
+});
+
+test("persistência: sem número escolhido fica em Automático (null)", () => {
+  const d = mod.criarDisparo({ texto: "sem numero", jids: [JIDS[0]] });
+  assert.equal(d.instancia, null);
+  assert.equal(mod.criarDisparo({ texto: "vazio", jids: [JIDS[0]], instancia: "  " }).instancia, null);
+});
+
+test("edição: troca o número que envia enquanto o disparo é PENDENTE", () => {
+  const d = mod.criarDisparo({ texto: "edita", jids: [JIDS[0]], instancia: "inst-a" });
+  const editado = mod.editarDisparo(d.id, { instancia: "inst-b" });
+  assert.equal(editado.instancia, "inst-b");
+  // vazio volta para Automático
+  assert.equal(mod.editarDisparo(d.id, { instancia: "" }).instancia, null);
+});
+
+test("duplicar mantém o número escolhido", () => {
+  const d = mod.criarDisparo({ texto: "dup", jids: [JIDS[0]], instancia: "inst-c" });
+  const copia = mod.duplicarDisparo(d.id);
+  assert.equal(copia.instancia, "inst-c");
+});
+
 test("textoComLink anexa o link no fim", () => {
   assert.equal(mod.textoComLink("oi", "https://x.y"), "oi\n\nhttps://x.y");
   assert.equal(mod.textoComLink("oi", ""), "oi");
