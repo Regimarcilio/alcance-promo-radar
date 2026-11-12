@@ -84,6 +84,41 @@ A camada expõe métricas Prometheus por tipo (`alcance_msg_publicadas_total`,
 estruturado. O `correlationId` é herdado do contexto quando não vem explícito e **atravessa** o
 fluxo (webhook → oferta → fila → envio → evento). Nenhum log carrega PII.
 
+#### RF-062 — Painel da Mensageria: filas, DLQ e ações do operador (Must · Implementado)
+
+O operador tem uma **view nova** no painel (`Mensageria`, item do menu lateral ao lado de
+Contas, Cupons, Piloto, Monitor, Números, Rastreio e Clientes) onde enxerga o estado das
+filas e repara, na hora, o que falhou de vez:
+
+- **KPIs**: em fila · processadas (ok) · falhas · **na DLQ** · taxa de erro · idade da
+  mensagem mais antiga · assinaturas de tópicos;
+- **tabela de filas por tipo**: pendentes, processadas, falhas, DLQ, mais antiga e taxa de
+  erro (`GET /api/mensageria/stats`);
+- **tabela da DLQ**: tipo, chave/correlação, **motivo colorido** (`erro não transitório` em
+  vermelho — retry não resolve; `tentativas esgotadas` em âmbar — retry pode resolver),
+  tentativas, última tentativa, origem, último erro e as ações **Reprocessar**,
+  **Reprocessar tudo** e **Descartar** (esta última e a primeira, com confirmação explícita);
+- **trilha de correlação** em **gaveta lateral** (não modal: a trilha é consulta e não
+  bloqueia a tabela), montada por `correlationId`;
+- **tópicos/assinantes** e **eventos recentes** lado a lado;
+- estados obrigatórios: vazio · carregando · **erro de API** (com "Tentar de novo") · item
+  em reprocessamento (spinner na linha);
+- atualização automática no mesmo ritmo das outras telas (**15 s**) e os **6 temas** do
+  painel (a view usa o mesmo vocabulário visual: `panel`, `kpi`, `mbtn`, `mini`).
+
+**Ações do operador sobre a DLQ** (rotas novas, *default-deny* como as demais):
+
+| Endpoint | Uso |
+| --- | --- |
+| `POST /api/mensageria/dlq/descartar` `{ id }` | **destrutivo**: remove o item da DLQ (não volta para a fila) e registra a ação na auditoria |
+| `POST /api/mensageria/dlq/reprocessar-lote` `{ tipo?, ids? }` | reprocessa vários itens (por tipo e/ou por ids) — **só reenfileira** |
+| `GET /api/mensageria/eventos?correlationId=` | trilha de correlação (eventos + ações do operador) |
+
+Ao reprocessar (item ou lote), o envelope volta para a fila com `tentativas: 0`,
+`ultimoErro` **preservado** (auditoria) e `reprocessos++`. O lote **não envia**: os itens
+voltam para a fila e seguem o ritmo normal (1 a cada `CLIENTES_INTERVALO_S`, dentro da
+janela comercial) — **não vira rajada**.
+
 ## 4. Regras de negócio
 
 - **RN-028 — ACK.** Nenhum item de fila é removido antes do sucesso do efeito; reserva abandonada
@@ -99,6 +134,11 @@ fluxo (webhook → oferta → fila → envio → evento). Nenhum log carrega PII
 - **RN-032 — Correlação.** O `correlationId` é gerado quando não há contexto, herdado quando existe
   (`comCorrelacao`) e propagado para os eventos publicados; o log da mensagem processada carrega
   `tipo`, `chave`, `correlationId`, `ok`, `tentativas` e `duracaoMs` como campos estruturados.
+- **RN-033 — Ação do operador na DLQ.** Reprocessar devolve o item para a fila com
+  `tentativas: 0`, `ultimoErro` preservado e `reprocessos++`; descartar remove o item da
+  DLQ sem volta. Toda ação fica na auditoria (`data/auditoria-mensageria.json`) com `tipo`,
+  `chave`, `motivo` e `correlationId`. Reprocessamento em lote **só reenfileira** — o envio
+  continua no ritmo da fila (1 a cada `CLIENTES_INTERVALO_S`), nunca em rajada.
 
 ## 5. Interfaces novas (API, sem UI)
 
@@ -119,6 +159,7 @@ fluxo (webhook → oferta → fila → envio → evento). Nenhum log carrega PII
 | RF-059 | `src/messaging/idempotencia.ts`, `src/clientes/fila.ts`, `src/clientes/clientes.ts`, `src/store/dedup.ts` | `messaging/idempotencia.test.ts`, `clientes/clientes.test.ts` |
 | RF-060 | `src/messaging/eventos.ts`, `src/messaging/consumidores.ts` + produtores (`monitor/webhook.ts`, `clientes/clientes.ts`, `wa/rotacao.ts`, `manager/server.ts`) | `messaging/eventos.test.ts` |
 | RF-061 | `src/monitor/metrics.ts`, `src/messaging/contadores.ts`, `src/messaging/filas.ts` | `monitor/metrics.test.ts`, `clientes/clientes.test.ts` |
+| RF-062 | `src/manager/server.ts` (view Mensageria + rotas), `src/messaging/dlq-operacoes.ts`, `src/messaging/consumidores.ts` (auditoria de ações), `src/messaging/broker.ts` (reprocesso), `src/monitor/fila.ts` | `manager/mensageria.test.ts`, `manager/pagina.test.ts` |
 
 ## 7. Evidência
 
@@ -136,5 +177,9 @@ fluxo (webhook → oferta → fila → envio → evento). Nenhum log carrega PII
    (`data/monitor-fila.json`) e recebeu a **mesma semântica** (ACK, retry de 3 tentativas,
    `reenfileirar` idempotente) e a **mesma DLQ** (`dlq-monitor.encaminhar.json`).
 3. **Sem broker externo nesta etapa** (decisão do operador), mas a port permite trocar o adapter.
-4. **A UI da Mensageria não existe ainda** (#53/#54): os endpoints já entregam o que a tela vai
-   precisar (filas, DLQ, reprocessar, eventos e stats).
+4. **A UI da Mensageria existe desde a #54** (view no painel, aprovada pelo operador em
+   2026-11-12 a partir do protótipo `docs/prototipos/mensageria/opcao-1.html`).
+5. **O `Descartar` é definitivo**: a mensagem sai da DLQ e não há como desfazer (a UI exige
+   confirmação explícita e a ação fica na auditoria).
+6. **A busca da DLQ é local** (sobre o snapshot carregado): com a DLQ grande, o filtro pode
+   migrar para o servidor sem mudar o contrato da API.

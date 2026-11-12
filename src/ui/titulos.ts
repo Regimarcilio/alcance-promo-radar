@@ -16,6 +16,7 @@ export const TITULOS_PADRAO: Record<string, string> = {
   monitor: "📡 Monitor",
   numeros: "📱 Números",
   clientes: "👥 Clientes",
+  mensageria: "📨 Mensageria",
 };
 
 let cache: Record<string, string> | null = null;

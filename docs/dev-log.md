@@ -2656,3 +2656,80 @@ pela aprovação do operador.
   DLQ e **reprocessamento em lote** (a API só expõe reprocessar item a item); (3) template de
   issues (#33) que bloqueia a #32; (4) `LICENSE` ainda ausente no repo público; (5) pareamento por QR
   das instâncias `zxs`/`uzz` para retomar a fila.
+
+## 2026-11-12 — feat(ui): view Mensageria no painel com DLQ e ação Reprocessar — @master — `task: issue #54`
+
+- **Objetivo:** implementar no painel real a tela **Mensageria** (filas + DLQ + Reprocessar),
+  a partir do protótipo **aprovado** pelo operador (`docs/prototipos/mensageria/opcao-1.html`,
+  #53) — a tela entra em produção **funcional**, não como esqueleto.
+- **Branch:** `ISSUE-mensageria-view-dlq` (de `develop`) · **PR:** #71 (→ `develop`, **mergeado** em
+  `df212c5`) · **Issue #54 fechada** (o auto-close do GitHub só dispara na branch padrão do
+  repositório — `develop` não é a padrão — então o fechamento foi feito pelo `gh issue close`
+  com a evidência).
+- **Decisões:**
+  - **Endpoint de descarte** (pendência do #53): `POST /api/mensageria/dlq/descartar` `{ id }` —
+    **destrutivo** (o item sai da DLQ e **não** volta para a fila) e **auditado** em
+    `data/auditoria-mensageria.json` com `tipo`, `chave`, `motivo` e `correlationId`.
+  - **Reprocessamento em lote** (pendência do #53): `POST /api/mensageria/dlq/reprocessar-lote`
+    `{ tipo?, ids? }` — age sobre o que está **visível** na tela (filtro por tipo + busca).
+  - **O lote só reenfileira, não envia**: os itens voltam para a fila e seguem o ritmo normal
+    (1 a cada `CLIENTES_INTERVALO_S`, dentro da janela comercial) — **não vira rajada**.
+  - **Reprocessar preserva o histórico**: o envelope volta com `tentativas: 0`, `ultimoErro`
+    **preservado** (auditoria) e `reprocessos++` (contador novo no envelope).
+  - **Auditoria da Mensageria passa a ter dois tipos de registro**: `registro: "evento"`
+    (o que o sistema publishes) e `registro: "acao"` (o que o **operador** fez na DLQ).
+    `GET /api/mensageria/eventos` devolve os eventos em `eventos` e as ações em `acoes`
+    (só quando o filtro `?correlationId=` é usado) — a trilha de correlação mostra as duas.
+  - **Trilha em gaveta lateral** (não modal): a trilha é consulta e não pode bloquear a tabela;
+    o rodapé da gaveta mantém o *Reprocessar* ao alcance (consultar → reparar).
+  - **A busca da DLQ é local** (sobre o snapshot), como no protótipo; o filtro por tipo também
+    vai ao servidor no reprocessamento em lote.
+  - **Sem redesenhar as abas existentes** (Contas, Cupons, Piloto, Monitor, Números, Rastreio,
+    Clientes): a Mensageria é uma **view nova** no menu lateral, com badge da DLQ e
+    `renomearCard` (`mensageria` entrou em `TITULOS_PADRAO`).
+- **Arquivos**
+  - `src/manager/server.ts` — rotas novas (`descartar`, `reprocessar-lote`, filtro
+    `correlationId`), CSS da view (mesmo vocabulário do protótipo), HTML da view Mensageria e
+    o JS inline (bloco `<script>` próprio, validado pelo `pagina.test.ts`).
+  - `src/messaging/dlq-operacoes.ts` — **novo**: `descartarItemDlq`, `reprocessarItemDlq`,
+    `reprocessarLoteDlq` (a camada de ação do operador sobre a DLQ).
+  - `src/messaging/consumidores.ts` — auditoria: `registro` (`evento`/`acao`),
+    `registrarAuditoriaAcao`, `lerAuditoriaEventos`, `lerAuditoriaAcoes`.
+  - `src/messaging/broker.ts` — `reprocessar()` preserva `ultimoErro`, incrementa `reprocessos`
+    e limpa backoff/reserva (o item volta elegível no próximo ciclo).
+  - `src/messaging/envelope.ts` — campo `reprocessos` (opcional) no envelope e no schema zod.
+  - `src/messaging/filas.ts` — `reprocessarMensagem` passa a delegar para `dlq-operacoes.ts`.
+  - `src/monitor/fila.ts` — a fila do Monitor também preserva `ultimoErro` e conta `reprocessos`.
+  - `src/ui/titulos.ts` — `mensageria: "📨 Mensageria"` nos títulos padrão dos cards.
+  - `src/manager/mensageria.test.ts` — **novo**: 7 testes da API (default-deny, snapshot,
+    reprocessar item, descartar, lote com e sem filtro, filtro por `correlationId`).
+  - `docs/prototipos/mensageria/README.md` — protótipo marcado como **aprovado** (2026-11-12) e
+    as pendências do #53 resolvidas.
+  - `docs/prototipos/mensageria/implementacao-view-mensageria.png` e
+    `implementacao-trilha-correlacao.png` — evidência da tela em execução.
+  - `docs/SRS-v0.4-delta-mensageria.md` — **RF-062** (painel da Mensageria) e **RN-033**
+    (ação do operador na DLQ) + matriz de rastreabilidade.
+  - `docs/00-INDICE.md` — entrada do protótipo (aprovado) e do delta do SRS.
+- **Evidências**
+  - **Testes:** 282/282 (`node --test dist/**/*.test.js`), `npm run typecheck` e `npm run build`
+    verdes; `src/manager/mensageria.test.ts` sobe o **manager de verdade** (processo separado,
+    `ALCANCE_DATA_DIR` temporário, `ALCANCE_SMOKE=1` — sem worker e sem Evolution API) e
+    fala com ele por HTTP: 401 sem sessão/**MANAGER_KEY errada**, snapshot com a chave,
+    reprocessar (item sai da DLQ, volta com `tentativas: 0`/`ultimoErro`/`reprocessos: 1`),
+    descartar (não volta para a fila + auditoria), lote com e sem filtro por tipo, e o filtro
+    por `correlationId`.
+  - **Tela validada em execução** (Chromium/Playwright contra o manager local na porta 18244,
+    estado temporário semeado): a view Mensageria carrega sem erro de JS (único erro de console
+    é o 404 pré-existente de `/data/bw-custom.png`), KPIs/tabelas/gaveta/modal renderizam, o
+    **Reprocessar** tira o item da DLQ e aumenta `em fila` (3 → 4), o **Descartar** abre a
+    confirmação destrutiva e só remove depois do OK, o **Reprocessar tudo** mostra a contagem
+    exata ("Reprocessar 3 mensagens") e reenfileira 3 itens, a **trilha de correlação** abre na
+    gaveta lateral (publicado → tentativa esgotada → ação do operador), o filtro por tipo e a
+    busca funcionam, o estado vazio ("Nada na DLQ") e o **erro de API** (banner + "Tentar de
+    novo") aparecem, e a troca de tema (laranja) repinta a view.
+  - **Auditoria conferida no arquivo**: a ação de descarte gravou
+    `{acao:"descartar", tipo:"cliente.enviar", chave:"disparo_…:5519…", motivo:"erro não transitório",
+    correlationId:"7b2e9d10-…"}`; o lote gravou 3 ações `reprocessar-lote`.
+  - **Nada de envio real**: manager em `ALCANCE_SMOKE=1` (sem workers) e Evolution API intocada.
+- **Próximo:** promoção a `main` no release; os endpoints de descarte/lote fecham as
+  pendências que o #53 deixou em aberto.

@@ -41,10 +41,13 @@ import {
   duplicarDisparo, type MidiaDisparo, textoComLink, registrarResultadoDisparo,
 } from "../clientes/disparos.js";
 import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
-import { itensDlq, reprocessarMensagem, resumoFilas } from "../messaging/filas.js";
+import { itensDlq, resumoFilas } from "../messaging/filas.js";
+import {
+  descartarItemDlq, reprocessarItemDlq, reprocessarLoteDlq,
+} from "../messaging/dlq-operacoes.js";
 import { comCorrelacao } from "../messaging/envelope.js";
 import { publicarEvento, estadoAssinantes, processarPendentes } from "../messaging/eventos.js";
-import { lerAuditoria } from "../messaging/consumidores.js";
+import { lerAuditoriaAcoes, lerAuditoriaEventos } from "../messaging/consumidores.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { resolverMidia } from "./midia.js";
 import { logger } from "../observability/logger.js";
@@ -1304,12 +1307,23 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   // ---------- Mensageria (filas, DLQ e reprocessamento) ----------
   if (req.method === "GET" && url.pathname === "/api/mensageria/eventos") {
     const tipo = url.searchParams.get("tipo");
+    const correlationId = (url.searchParams.get("correlationId") ?? "").trim();
     const limite = Math.min(500, Math.max(1, Number(url.searchParams.get("limite") ?? 50)));
-    const eventos = lerAuditoria()
-      .filter((e: any) => !tipo || e.tipo === tipo)
+    // Filtro por `correlationId`: é a trilha de correlação da tela Mensageria
+    // (publicado → tentativa → falha → DLQ → ação do operador).
+    const eventos = lerAuditoriaEventos()
+      .filter((e: any) => (!tipo || e.tipo === tipo) && (!correlationId || e.correlationId === correlationId))
       .slice(-limite)
       .reverse();
-    json(200, { eventos, assinantes: estadoAssinantes() });
+    // Ações do operador sobre a DLQ (reprocessar/descartar): entram só
+    // quando a trilha de uma correlação é pedida.
+    const acoes = correlationId
+      ? lerAuditoriaAcoes()
+          .filter((e: any) => e.correlationId === correlationId)
+          .slice(-limite)
+          .reverse()
+      : [];
+    json(200, { eventos, acoes, assinantes: estadoAssinantes() });
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/mensageria/stats") {
@@ -1333,8 +1347,39 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         json(400, { erro: "informe o id do item" });
         return;
       }
-      const ok = await reprocessarMensagem(id);
-      json(ok ? 200 : 404, ok ? { ok: true } : { erro: "item não encontrado na DLQ" });
+      const r = await reprocessarItemDlq(id);
+      json(r.ok ? 200 : 404, r.ok ? { ok: true, total: r.total } : { erro: r.erro ?? "item não encontrado na DLQ" });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
+    return;
+  }
+  // DESCARTAR — ação DESTRUTIVA: o item sai da DLQ e não volta para a fila.
+  // Exige confirmação na UI e fica registrada na auditoria da Mensageria.
+  if (req.method === "POST" && url.pathname === "/api/mensageria/dlq/descartar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const id = String(b.id ?? "").trim();
+      if (!id) {
+        json(400, { erro: "informe o id do item" });
+        return;
+      }
+      const r = descartarItemDlq(id);
+      json(r.ok ? 200 : 404, r.ok ? { ok: true, total: r.total } : { erro: r.erro ?? "item não encontrado na DLQ" });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
+    return;
+  }
+  // REPROCESSAR EM LOTE — reenfileira vários itens (por tipo ou por ids).
+  // Só reenfileira: o envio continua no ritmo normal da fila (não vira rajada).
+  if (req.method === "POST" && url.pathname === "/api/mensageria/dlq/reprocessar-lote") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const tipo = b.tipo === undefined || b.tipo === null ? "" : String(b.tipo).trim();
+      const ids = Array.isArray(b.ids) ? b.ids.map((i: any) => String(i).trim()).filter(Boolean) : [];
+      const r = await reprocessarLoteDlq({ tipo, ids });
+      json(200, { ok: true, total: r.total, porTipo: r.porTipo ?? {}, itens: r.itens ?? [] });
     } catch (e: any) {
       json(400, { erro: String(e?.message ?? e) });
     }
@@ -2077,7 +2122,112 @@ body{padding:0;max-width:none;margin:0}
  .kpis{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:7px}
  .kpi{padding:8px 9px 7px}
  .kpi b{font-size:17px}
-}</style></head>
+}
+/* ============================================================
+   VIEW MENSAGERIA — tabelas, DLQ, trilha de correlação, modal
+   e toasts (mesmo vocabulário visual do protótipo aprovado em
+   docs/prototipos/mensageria/opcao-1.html)
+   ============================================================ */
+.tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-box);background:var(--surface)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{background:var(--card-2);color:var(--muted);font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);white-space:nowrap}
+.tbl td{padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:var(--card)}
+.tbl tbody tr.sel{background:var(--primary-soft)}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.tbl .mono{font-family:var(--mono);font-size:11px;color:var(--code-tx);background:var(--code-bg);border:1px solid var(--border);padding:1px 6px;border-radius:6px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.tbl .nowrap{white-space:nowrap}
+.copybtn{background:none;border:none;padding:1px 4px;font-size:11px;color:var(--muted);cursor:pointer;border-radius:6px;line-height:1}
+.copybtn:hover{background:var(--card-2);color:var(--primary)}
+.trunc{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
+/* DLQ — colunas justas para caber sem rolagem lateral em 1440px */
+.tbl-dlq{table-layout:fixed;min-width:0}
+.tbl-dlq th,.tbl-dlq td{padding:8px 9px}
+.tbl-dlq th:nth-child(1),.tbl-dlq td:nth-child(1){width:132px}
+.tbl-dlq th:nth-child(2),.tbl-dlq td:nth-child(2){width:156px}
+.tbl-dlq th:nth-child(3),.tbl-dlq td:nth-child(3){width:108px}
+.tbl-dlq th:nth-child(4),.tbl-dlq td:nth-child(4){width:42px}
+.tbl-dlq th:nth-child(5),.tbl-dlq td:nth-child(5){width:92px}
+.tbl-dlq th:nth-child(6),.tbl-dlq td:nth-child(6){width:100px}
+.tbl-dlq th:nth-child(7),.tbl-dlq td:nth-child(7){width:140px}
+.tbl-dlq th:nth-child(8),.tbl-dlq td:nth-child(8){width:252px}
+.tbl-dlq td:nth-child(8){white-space:normal}
+.tbl-dlq td:nth-child(8) .mbtn{margin:2px 3px 2px 0;padding:4px 7px;font-size:11px}
+.dlq-chave{display:flex;align-items:center;gap:5px;min-width:0}
+.dlq-chave .mono.trunc{flex:1 1 auto;min-width:0}
+.dlq-chave .copybtn{flex:0 0 auto}
+.tbl-dlq .trunc{max-width:100%}
+.tbl-dlq .mono.trunc{width:100%}
+
+.skel{background:linear-gradient(90deg,var(--card-2) 25%,var(--surface-2) 50%,var(--card-2) 75%);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:6px;height:12px}
+.skel.lg{height:22px}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border-strong);border-top-color:var(--primary);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:5px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.mbtn.danger{color:var(--danger-tx);border-color:var(--danger-bd);background:var(--danger-soft)}
+.mbtn.danger:hover{background:#fbdada}
+.mbtn.sm{padding:4px 9px;font-size:11.5px;border-radius:8px}
+.mbtn.ghosty{background:var(--surface)}
+.alerta{border-radius:var(--radius-box);padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.55;border:1px solid;background:var(--surface);border-color:var(--border);color:var(--text)}
+.alerta.pare{background:var(--danger-soft);border-color:var(--danger-bd);color:var(--danger-tx)}
+.alerta.warn{background:var(--warn-soft);border-color:var(--warn-bd);color:var(--warn-tx)}
+.alerta.ok{background:var(--ok-soft);border-color:var(--ok-bd);color:var(--ok-tx)}
+.alerta b{font-weight:750}
+.empty{padding:36px 16px;text-align:center;color:var(--muted)}
+.empty .ico{font-size:26px;display:block;margin-bottom:6px}
+.empty b{display:block;color:var(--text);font-size:13.5px;margin-bottom:3px}
+.tabs{display:flex;gap:5px;flex-wrap:wrap;margin:-2px 0 10px}
+.tab{background:var(--surface);border:1px solid var(--border-strong);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:650;color:var(--muted);cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.tab:hover{background:var(--surface-2);color:var(--text)}
+.tab.on{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));border-color:transparent;color:var(--primary-contrast)}
+.tab .cnt{opacity:.7;font-weight:700}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.tools select,.tools input{width:auto;min-width:150px;padding:6px 9px;font-size:12px}
+.tools input{min-width:230px}
+.evt{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.evt:last-child{border-bottom:none}
+.evt time{font-family:var(--mono);font-size:10.5px;color:var(--faint);flex:0 0 auto}
+.evt .t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evt .c{flex:0 0 auto}
+.mods{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.44)}
+.mods.on{display:flex}
+.mod{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:0 24px 60px rgba(15,23,42,.30);width:100%;max-width:470px;overflow:hidden}
+.mod::before{content:"";display:block;height:3px;background:linear-gradient(90deg,var(--grad-a),var(--grad-b))}
+.mod.danger::before{background:linear-gradient(90deg,#dc2626,#be123c)}
+.mod-h{padding:16px 18px 2px}
+.mod-h b{font-size:15px;font-weight:800}
+.mod-b{padding:6px 18px 4px;font-size:13px;color:var(--muted);line-height:1.55}
+.mod-f{padding:12px 18px 16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100%);z-index:82;background:var(--card);border-left:1px solid var(--border);box-shadow:-18px 0 50px rgba(15,23,42,.20);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column}
+.drawer.on{transform:none}
+.drawer-h{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.drawer-b{padding:16px 18px;overflow:auto;flex:1}
+.drawer-f{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.trail{list-style:none;margin:0;padding:0}
+.trail li{position:relative;padding:0 0 16px 22px;border-left:2px solid var(--border);margin-left:6px}
+.trail li:last-child{border-left-color:transparent;padding-bottom:0}
+.trail li::before{content:"";position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--primary)}
+.trail li.bad::before{border-color:#dc2626}
+.trail li.warn::before{border-color:#f59e0b}
+.trail li.mute::before{border-color:var(--border-strong)}
+.trail b{font-size:12.5px}
+.trail .st{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.toasts{position:fixed;right:18px;bottom:18px;z-index:90;display:flex;flex-direction:column;gap:8px;max-width:min(380px,calc(100vw - 36px))}
+.toast{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:12px;box-shadow:var(--shadow-md);padding:10px 13px;font-size:12.5px;display:flex;gap:9px;align-items:flex-start;animation:tin .18s ease}
+.toast.err{border-left-color:#dc2626}
+.toast.warn{border-left-color:#f59e0b}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12px;margin:8px 0 0}
+.kv dt{color:var(--muted);font-weight:650;white-space:nowrap}
+.kv dd{margin:0;word-break:break-all}
+@media(max-width:700px){
+  .tools select,.tools input{min-width:0;width:100%}
+ .tbl{font-size:12px}
+}
+.grid2b{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:980px){.grid2b{grid-template-columns:1fr}}
+</style></head>
 <body>
 <script>try{var p=localStorage.getItem('paleta');var ok={verde:1,laranja:1,areia:1,grafite:1,marrom:1,cacau:1};if(p&&ok[p]){document.documentElement.setAttribute('data-paleta',p);}}catch(e){}</script>
 <div class="app">
@@ -2121,6 +2271,11 @@ body{padding:0;max-width:none;margin:0}
 <span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3"/><path d="M3.4 19.2c.7-3 2.8-4.9 5.6-4.9s4.9 1.9 5.6 4.9"/><circle cx="17.2" cy="9.3" r="2.3"/><path d="M15.9 14.5c2.2.4 3.8 2.1 4.4 4.7"/></svg></span>
 <span class="side-txt"><b>Clientes</b><small>disparo individual</small></span>
 <span class="side-badge" id="badge-clientes">—</span>
+</a>
+<a class="side-card" data-view="mensageria" href="#/mensageria">
+<span class="side-ico i-mensageria"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 12.8h4.1l1.7 2.7h5.2l1.7-2.7h4.1"/><path d="M6.1 4.9h11.8l2.5 7.9v4.4a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2v-4.4z"/><path d="M9.4 8.6h5.2"/></svg></span>
+<span class="side-txt"><b>Mensageria</b><small>filas &amp; DLQ</small></span>
+<span class="side-badge" id="badge-mensageria">—</span>
 </a>
 </nav>
 <div class="side-foot">
@@ -2480,8 +2635,58 @@ Tem achadinho novo todos os dias. 🔥
 <span class="mini" id="clifila"></span></div></div>
 </div>
 </section>
+<section class="view" id="view-mensageria" data-view="mensageria">
+<div id="msgErroBox"></div>
+<div class="kpis" id="msgKpis"></div>
+<div class="panel ac-monitor">
+<div class="panel-head"><span><b id="tit-mensageria">📨 Mensageria</b> — filas, falhas e DLQ da camada de Mensageria</span><span style="display:flex;gap:8px;align-items:center"><button class="mbtn" id="btnMsgRefresh" type="button">🔄 Atualizar</button><a class="lk-mini" href="#" onclick="renomearCard('mensageria');return false">✏️ renomear</a></span></div>
+<div class="hint">Snapshot de <code>GET /api/mensageria/stats</code>: <b>tipo</b>, <b>pendentes</b>, <b>processadas</b>, <b>falhas</b>, <b>dlq</b>, <b>maisAntigaEm</b>, <b>idadeFilaMs</b> e <b>taxaErro</b>.</div>
+<div id="msgFilasBox"></div>
+</div>
+<div class="panel">
+<div class="panel-head"><span><b>☠️ Falhas (DLQ)</b> — o que falhou de vez: reprocessar, reprocessar tudo ou descartar</span><span class="mini" id="msgDlqInfo"></span></div>
+<div class="tabs" id="msgDlqTabs"></div>
+<div class="tools">
+<select id="msgDlqFiltro" aria-label="Filtrar DLQ por tipo de fila"></select>
+<input id="msgDlqBusca" type="search" placeholder="Buscar por chave, origem, erro ou correlationId…" aria-label="Buscar na DLQ">
+<button class="mbtn danger" id="btnMsgReproAll">♻️ Reprocessar tudo</button>
+</div>
+<div id="msgDlqBox"></div>
+</div>
+<div class="grid2b">
+<div class="panel ac-clientes">
+<div class="panel-head"><span><b>🧭 Tópicos e assinantes</b> — fila pendente de cada assinante</span></div>
+<div class="hint">De <code>GET /api/mensageria/eventos</code> → <code>assinantes: [{ tipo, nome, pendentes }]</code>.</div>
+<div id="msgTopicosBox"></div>
+</div>
+<div class="panel">
+<div class="panel-head"><span><b>🧾 Eventos recentes</b> — auditoria por <code>correlationId</code></span></div>
+<div class="hint">De <code>GET /api/mensageria/eventos</code>. Clique em 🔗 para abrir a trilha de correlação.</div>
+<div id="msgEventosBox"></div>
+</div>
+</div>
+</section>
 </main>
 </div>
+<div class="mods" id="msgMod" role="dialog" aria-modal="true" aria-labelledby="msgModTitle">
+<div class="mod" id="msgModCard">
+<div class="mod-h"><b id="msgModTitle">Confirmar</b></div>
+<div class="mod-b" id="msgModBody"></div>
+<div class="mod-f">
+<button class="mbtn" id="msgModCancel" type="button">Cancelar</button>
+<button class="mbtn ok" id="msgModOk" type="button">Confirmar</button>
+</div>
+</div>
+</div>
+<aside class="drawer" id="msgDrawer" aria-label="Trilha de correlação">
+<div class="drawer-h">
+<div><div class="top-kicker">trilha de correlação</div><b id="msgDrTitle" style="font-size:14px;display:block;margin-top:2px">—</b></div>
+<button class="sair-btn" id="msgDrClose" type="button">Fechar</button>
+</div>
+<div class="drawer-b" id="msgDrBody"></div>
+<div class="drawer-f"><button class="mbtn ok" id="msgDrRepro" type="button">♻️ Reprocessar este item</button></div>
+</aside>
+<div class="toasts" id="msgToasts" aria-live="polite" aria-atomic="false"></div>
 <script>
 const $=id=>document.getElementById(id);
 // ===== Navegação por views (hash routing) =====
@@ -2492,7 +2697,8 @@ const VIEW_META={
   monitor:{k:'operação',t:'Monitor',s:'Cada grupo de origem encaminha para os seus destinos, com troca de link e anti-rajada.'},
   numeros:{k:'infraestrutura',t:'Números',s:'Celulares de envio rotativo — sorteio ponderado entre ativos e conectados.'},
   clientes:{k:'crescimento',t:'Clientes',s:'Contatos dos grupos + disparo individual com fila anti-bloqueio.'},
-  rastreio:{k:'operação',t:'Rastreio',s:'Tudo que o Alcance publicou (Piloto + Monitor) com o link de afiliado — para cruzar com o painel de comissão.'}
+  rastreio:{k:'operação',t:'Rastreio',s:'Tudo que o Alcance publicou (Piloto + Monitor) com o link de afiliado — para cruzar com o painel de comissão.'},
+  mensageria:{k:'operação',t:'Mensageria',s:'Filas, falhas e DLQ — o que falhou de vez se repara aqui, com um clique.'}
 };
 function viewAtual(){
   const partes=(location.hash||'').replace('#','').split('/');
@@ -2515,6 +2721,7 @@ function navegar(){
   window.scrollTo(0,0);
   if(v==='rastreio')carregarRastreio();
   if(v==='clientes')carregarSeletorNumero();
+  if(v==='mensageria'&&typeof carregarMensageria==='function')carregarMensageria();
   if(v==='piloto'&&$('paprograma')&&$('paprograma').value==='amazon')trocarProgramaPiloto();
 }
 window.addEventListener('hashchange',navegar);
@@ -3709,6 +3916,426 @@ async function testarMonitor(){
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function linkSeguro(u){try{const x=new URL(String(u||''));return (x.protocol==='http:'||x.protocol==='https:')?x.href:'';}catch(e){return '';}}
+</script>
+<script>
+/* ============================================================
+   VIEW MENSAGERIA — filas, DLQ, reprocessar/descartar e trilha
+   de correlação (issue #54). Implementação fiel ao protótipo
+   aprovado em docs/prototipos/mensageria/opcao-1.html.
+   ============================================================ */
+var MSG={itens:[],filas:[],eventos:[],acoes:[],assinantes:[],carregando:true,erro:null,filtro:'todas',busca:'',emVoo:false};
+
+function msgNum(n){return Number(n||0).toLocaleString('pt-BR');}
+function msgPlural(n,s,p){return Number(n)===1?s:p;}
+function msgPct(n){return (Number(n||0)*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2})+'%';}
+function msgHum(ms){
+  ms=Number(ms||0); if(ms<=0)return '—';
+  var s=Math.floor(ms/1000), d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60), ss=s%60;
+  if(d>0)return d+'d '+h+'h';
+  if(h>0)return h+' h '+m+' min';
+  if(m>0)return m+' min';
+  return ss+' s';
+}
+function msgRel(iso){if(!iso)return '—';var ms=Date.now()-Date.parse(iso);if(!isFinite(ms)||ms<0)ms=0;return 'há '+msgHum(ms);}
+function msgHhmm(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return '—';return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function msgDdmm(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return '—';return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+
+/* ---------- carga ---------- */
+async function carregarMensageria(){
+  if(MSG.emVoo)return;
+  MSG.emVoo=true;
+  var primeira=!MSG.itens.length&&!MSG.filas.length;
+  if(primeira)MSG.carregando=true;
+  msgRender();
+  try{
+    const rs=await Promise.all([
+      fetch('/api/mensageria/stats'),
+      fetch('/api/mensageria/dlq'),
+      fetch('/api/mensageria/eventos')
+    ]);
+    const ds=await rs[0].json();
+    const dd=await rs[1].json();
+    const de=await rs[2].json();
+    MSG.filas=ds.filas||[];
+    MSG.itens=dd.itens||[];
+    MSG.eventos=de.eventos||[];
+    MSG.acoes=de.acoes||[];
+    MSG.assinantes=de.assinantes||[];
+    MSG.erro=null;
+  }catch(e){
+    MSG.erro='o serviço não respondeu ('+String((e&&e.message)?e.message:e)+')';
+  }
+  MSG.carregando=false;
+  MSG.emVoo=false;
+  msgRender();
+}
+
+/* ---------- render ---------- */
+function msgRender(){msgRenderErro();msgRenderKpis();msgRenderFilas();msgRenderDlq();msgRenderTopicos();msgRenderEventos();msgRenderBadge();}
+function msgRenderBadge(){
+  const b=$('badge-mensageria');
+  if(b)b.textContent=MSG.carregando?'…':String(MSG.itens.length);
+}
+function msgRenderErro(){
+  const box=$('msgErroBox');
+  if(!box)return;
+  if(!MSG.erro){box.innerHTML='';return;}
+  box.innerHTML='<div class="alerta pare"><b>Não foi possível carregar a mensageria.</b><br><span class="mini">'+esc(MSG.erro)+'</span><div style="margin-top:8px"><button class="mbtn" id="btnMsgRetry">🔄 Tentar de novo</button></div></div>';
+  const b=$('btnMsgRetry');
+  if(b)b.addEventListener('click',function(){MSG.erro=null;carregarMensageria();msgToast('Nova tentativa de carregamento…');});
+}
+function msgRenderKpis(){
+  const box=$('msgKpis');
+  if(!box)return;
+  if(MSG.carregando){
+    box.innerHTML='<div class="kpi"><b class="skel lg" style="display:block;width:56px"></b><span>carregando</span></div>'
+      +'<div class="kpi ok"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>'
+      +'<div class="kpi warn"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>'
+      +'<div class="kpi danger"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>'
+      +'<div class="kpi warn"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>'
+      +'<div class="kpi"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>'
+      +'<div class="kpi"><b class="skel lg" style="display:block;width:56px"></b><span>&nbsp;</span></div>';
+    return;
+  }
+  let pend=0,proc=0,falh=0,dlq=0,idade=0;
+  MSG.filas.forEach(function(f){
+    pend+=Number(f.pendentes||0); proc+=Number(f.processadas||0); falh+=Number(f.falhas||0); dlq+=Number(f.dlq||0);
+    if(Number(f.idadeFilaMs||0)>idade)idade=Number(f.idadeFilaMs||0);
+  });
+  const total=proc+falh, taxa=total>0?Number((falh/total).toFixed(4)):0;
+  box.innerHTML=
+   '<div class="kpi"><b>'+msgNum(pend)+'</b><span>em fila</span></div>'
+   +'<div class="kpi ok"><b>'+msgNum(proc)+'</b><span>processadas (ok)</span></div>'
+   +'<div class="kpi warn"><b>'+msgNum(falh)+'</b><span>falhas</span></div>'
+   +'<div class="kpi'+(dlq>0?' danger':'')+'"><b>'+msgNum(dlq)+'</b><span>na dlq</span></div>'
+   +'<div class="kpi'+(taxa>0.02?' warn':'')+'"><b>'+msgPct(taxa)+'</b><span>taxa de erro</span></div>'
+   +'<div class="kpi"><b>'+esc(msgHum(idade))+'</b><span>mais antiga</span></div>'
+   +'<div class="kpi"><b>'+msgNum(MSG.assinantes.length)+'</b><span>assinaturas de tópicos</span></div>';
+}
+function msgRenderFilas(){
+  const box=$('msgFilasBox');
+  if(!box)return;
+  if(MSG.carregando){
+    let r='<div class="tblwrap"><table class="tbl"><tbody>';
+    for(let i=0;i<3;i++)r+='<tr><td><span class="skel" style="display:block;width:150px"></span></td><td><span class="skel" style="display:block;width:44px"></span></td><td><span class="skel" style="display:block;width:54px"></span></td><td><span class="skel" style="display:block;width:40px"></span></td><td><span class="skel" style="display:block;width:40px"></span></td><td><span class="skel" style="display:block;width:80px"></span></td><td><span class="skel" style="display:block;width:56px"></span></td></tr>';
+    box.innerHTML=r+'</tbody></table></div>';
+    return;
+  }
+  if(MSG.erro){box.innerHTML='<div class="empty"><span class="ico">📡</span><b>Sem dados de filas</b><span class="mini">O serviço não respondeu — tente de novo.</span></div>';return;}
+  if(!MSG.filas.length){box.innerHTML='<div class="empty"><span class="ico">📚</span><b>Nenhuma fila registrada</b><span class="mini">O snapshot veio sem filas.</span></div>';return;}
+  let h='<div class="tblwrap"><table class="tbl"><thead><tr><th>Fila (tipo)</th><th class="num">Pendentes</th><th class="num">Processadas</th><th class="num">Falhas</th><th class="num">DLQ</th><th>Mais antiga</th><th class="num">Taxa de erro</th></tr></thead><tbody>';
+  MSG.filas.forEach(function(f){
+    const dlq=Number(f.dlq||0);
+    h+='<tr><td><span class="badge">'+esc(f.tipo)+'</span></td>'
+      +'<td class="num">'+msgNum(f.pendentes)+'</td>'
+      +'<td class="num">'+msgNum(f.processadas)+'</td>'
+      +'<td class="num">'+msgNum(f.falhas)+'</td>'
+      +'<td class="num"><span class="badge" style="background:'+(dlq>0?'var(--danger-soft)':'var(--ok-soft)')+';color:'+(dlq>0?'var(--danger-tx)':'var(--ok-tx)')+';border-color:'+(dlq>0?'var(--danger-bd)':'var(--ok-bd)')+'">'+msgNum(dlq)+'</span></td>'
+      +'<td class="nowrap">'+(f.maisAntigaEm?'<span class="mini">'+esc(msgHhmm(f.maisAntigaEm))+'</span><br><span class="mini">'+esc(msgRel(f.maisAntigaEm))+'</span>':'—')+'</td>'
+      +'<td class="num">'+msgPct(f.taxaErro)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  let pendTotal=0;MSG.filas.forEach(function(f){pendTotal+=Number(f.pendentes||0);});
+  if(pendTotal===0)h+='<div class="alerta ok" style="margin-top:10px"><b>Nenhuma mensagem pendente.</b><br><span class="mini">As filas estão zeradas — nada esperando para ser processado.</span></div>';
+  box.innerHTML=h;
+}
+function msgFiltrados(){
+  const q=(MSG.busca||'').toLowerCase().trim();
+  return MSG.itens.filter(function(it){
+    if(MSG.filtro!=='todas'&&it.tipo!==MSG.filtro)return false;
+    if(!q)return true;
+    const env=it.envelope||{};
+    const hay=[it.id,it.tipo,env.chave||'',it.origem||'',it.ultimoErro||'',env.correlationId||'',it.motivo||''].join(' ').toLowerCase();
+    return hay.indexOf(q)>=0;
+  });
+}
+function msgRenderDlq(){
+  const box=$('msgDlqBox'),tabs=$('msgDlqTabs'),filtro=$('msgDlqFiltro'),info=$('msgDlqInfo');
+  if(!box)return;
+  const tipos=['todas'],vistos={};
+  MSG.itens.forEach(function(i){if(!vistos[i.tipo]){vistos[i.tipo]=1;tipos.push(i.tipo);}});
+  const tot=MSG.itens.length;
+  let th='<button class="tab'+(MSG.filtro==='todas'?' on':'')+'" data-msg-f="todas">Todas <span class="cnt">('+tot+')</span></button>';
+  tipos.slice(1).forEach(function(t){
+    const n=MSG.itens.filter(function(i){return i.tipo===t;}).length;
+    th+='<button class="tab'+(MSG.filtro===t?' on':'')+'" data-msg-f="'+esc(t)+'">'+esc(t)+' <span class="cnt">('+n+')</span></button>';
+  });
+  if(tabs)tabs.innerHTML=th;
+  if(filtro){
+    let fh='<option value="todas">Todas as filas</option>';
+    tipos.slice(1).forEach(function(t){fh+='<option value="'+esc(t)+'"'+(MSG.filtro===t?' selected':'')+'>'+esc(t)+'</option>';});
+    filtro.innerHTML=fh;filtro.value=MSG.filtro;
+  }
+  if(MSG.carregando){if(info)info.textContent='carregando…';box.innerHTML='<div class="tblwrap"><table class="tbl"><tbody><tr><td><span class="skel" style="display:block;width:340px"></span></td><td><span class="skel" style="display:block;width:120px"></span></td><td><span class="skel" style="display:block;width:90px"></span></td><td><span class="skel" style="display:block;width:80px"></span></td></tr></tbody></table></div>';return;}
+  if(MSG.erro){if(info)info.textContent='';box.innerHTML='<div class="empty"><span class="ico">📡</span><b>Não foi possível carregar a DLQ</b><span class="mini">O serviço não respondeu — tente de novo.</span></div>';return;}
+  const lista=msgFiltrados();
+  if(info)info.textContent=tot===0?'nenhum item':(lista.length+' de '+tot+' itens');
+  if(!tot){box.innerHTML='<div class="empty"><span class="ico">🎉</span><b>Nada na DLQ</b><span class="mini">Todas as mensagens foram processadas com sucesso. Se algo falhar de vez, ela aparece aqui para você <b>reprocessar</b> ou <b>descartar</b>.</span></div>';return;}
+  if(!lista.length){box.innerHTML='<div class="empty"><span class="ico">🔎</span><b>Nenhum item neste filtro</b><span class="mini">Ajuste o tipo de fila ou limpe a busca.</span></div>';return;}
+  let t='<div class="tblwrap"><table class="tbl tbl-dlq"><thead><tr><th>Tipo</th><th>Chave / correlação</th><th>Motivo</th><th class="num">Tent.</th><th>Última tent.</th><th>Origem</th><th>Último erro</th><th>Ações</th></tr></thead><tbody>';
+  lista.forEach(function(it){
+    const env=it.envelope||{}, busy=it.state==='reprocessando';
+    const perigo=String(it.motivo||'')==='erro não transitório';
+    const corr=env.correlationId||'';
+    const chave=env.chave||'';
+    t+='<tr'+(busy?' class="sel"':'')+'>'
+      +'<td class="nowrap"><span class="badge">'+esc(it.tipo)+'</span></td>'
+      +'<td><span class="dlq-chave"><span class="mono trunc" title="'+esc(chave||'—')+'">'+(chave?esc(chave):'—')+'</span>'
+      +(chave?' <button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(chave)+'" title="Copiar chave">⧉</button>':'')+'</span>'
+      +(corr?'<div class="mini" style="font-family:var(--mono);font-size:10px;margin-top:2px">corr '+esc(corr.slice(0,8))+'…</div>':'')+'</td>'
+      +'<td><span class="badge" style="background:'+(perigo?'var(--danger-soft)':'var(--warn-soft)')+';color:'+(perigo?'var(--danger-tx)':'var(--warn-tx)')+';border-color:'+(perigo?'var(--danger-bd)':'var(--warn-bd)')+'">'+esc(it.motivo||'—')+'</span>'+(busy?' <span class="badge mock">reprocessando</span>':'')+'</td>'
+      +'<td class="num">'+msgNum(it.tentativas)+'</td>'
+      +'<td class="nowrap"><span class="mini">'+esc(msgHhmm(it.ultimaTentativaEm))+'</span><br><span class="mini">'+esc(msgRel(it.ultimaTentativaEm))+'</span></td>'
+      +'<td><span class="trunc" title="'+esc(it.origem||'—')+'">'+esc(it.origem||'—')+'</span></td>'
+      +'<td><span class="mono trunc" title="'+esc(it.ultimoErro||'')+'">'+esc(it.ultimoErro||'—')+'</span></td>'
+      +'<td class="nowrap">'
+      +(busy?'<button class="mbtn sm ok" disabled><span class="spin"></span>Reprocessando…</button>'
+            :'<button class="mbtn sm ok" data-msg-act="repro" data-msg-id="'+esc(it.id)+'">♻️ Reprocessar</button>')
+      +'<button class="mbtn sm danger" data-msg-act="desc" data-msg-id="'+esc(it.id)+'"'+(busy?' disabled':'')+'>🗑 Descartar</button>'
+      +(corr?'<button class="mbtn sm" data-msg-act="trail" data-msg-corr="'+esc(corr)+'" title="Ver trilha de correlação">🔗</button>':'')
+      +'</td></tr>';
+  });
+  t+='</tbody></table></div>';
+  box.innerHTML=t;
+}
+function msgRenderTopicos(){
+  const box=$('msgTopicosBox');
+  if(!box)return;
+  if(MSG.carregando){box.innerHTML='<div class="skel" style="display:block;height:120px"></div>';return;}
+  if(MSG.erro){box.innerHTML='<div class="empty"><span class="ico">🧭</span><b>Sem dados de tópicos</b><span class="mini">O serviço não respondeu.</span></div>';return;}
+  if(!MSG.assinantes.length){box.innerHTML='<div class="empty"><span class="ico">🧭</span><b>Nenhum assinante</b><span class="mini">Nenhum tópico registrado.</span></div>';return;}
+  const porTipo={},ordem=[];
+  MSG.assinantes.forEach(function(a){if(!porTipo[a.tipo]){porTipo[a.tipo]=[];ordem.push(a.tipo);}porTipo[a.tipo].push(a);});
+  let h='<div class="tblwrap"><table class="tbl"><thead><tr><th>Evento (tópico)</th><th>Assinantes</th><th class="num">Pendentes</th></tr></thead><tbody>';
+  ordem.forEach(function(t){
+    const a=porTipo[t];let p=0;const names=[];
+    a.forEach(function(x){p+=Number(x.pendentes||0);names.push(x.nome+' ('+x.pendentes+')');});
+    h+='<tr><td class="nowrap"><span class="badge">'+esc(t)+'</span></td><td><span class="mini">'+esc(names.join(' · '))+'</span></td>'
+      +'<td class="num">'+(p>0?'<span class="badge" style="background:var(--warn-soft);color:var(--warn-tx);border-color:var(--warn-bd)">'+msgNum(p)+'</span>':'0')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  box.innerHTML=h;
+}
+function msgRenderEventos(){
+  const box=$('msgEventosBox');
+  if(!box)return;
+  if(MSG.carregando){box.innerHTML='<div class="skel" style="display:block;height:120px"></div>';return;}
+  if(MSG.erro){box.innerHTML='<div class="empty"><span class="ico">🧾</span><b>Sem eventos</b><span class="mini">O serviço não respondeu.</span></div>';return;}
+  if(!MSG.eventos.length){box.innerHTML='<div class="empty"><span class="ico">🧾</span><b>Nenhum evento</b><span class="mini">A auditoria está vazia.</span></div>';return;}
+  let h='<div style="max-height:280px;overflow:auto">';
+  MSG.eventos.slice(0,14).forEach(function(e){
+    const corr=e.correlationId||'';
+    h+='<div class="evt"><time>'+esc(msgHhmm(e.em))+'</time><span class="badge">'+esc(e.tipo)+'</span>'
+      +'<span class="t mono" title="'+esc(e.chave||'')+'">'+esc(e.chave||'—')+'</span>'
+      +(corr?'<button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(corr)+'" title="Copiar correlationId">⧉</button>':'')
+      +(corr?'<button class="mbtn sm" data-msg-act="trail" data-msg-corr="'+esc(corr)+'" title="Ver trilha">🔗</button>':'')+'</div>';
+  });
+  h+='</div>';
+  box.innerHTML=h;
+}
+
+/* ---------- toast / copiar / modal ---------- */
+function msgToast(msg,kind){
+  const c=$('msgToasts');
+  if(!c)return;
+  const d=document.createElement('div');
+  d.className='toast'+(kind?' '+kind:'');
+  d.innerHTML='<span style="flex:0 0 auto">'+(kind==='err'?'✗':kind==='warn'?'⚠':'✓')+'</span><span>'+msg+'</span>';
+  c.appendChild(d);
+  setTimeout(function(){d.style.opacity='0';d.style.transition='opacity .2s';setTimeout(function(){if(d.parentNode)d.parentNode.removeChild(d);},220);},3600);
+}
+function msgCopiar(txt){
+  let ok=false;
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt);ok=true;}}catch(e){}
+  if(!ok){try{const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);ok=true;}catch(e){}}
+  msgToast(ok?'Copiado: <b>'+esc(txt)+'</b>':'Não foi possível copiar — selecione e copie manualmente.',ok?'':'warn');
+}
+let msgModalCb=null;
+function msgAbrirModal(o){
+  const t=$('msgModTitle'),b=$('msgModBody'),ok=$('msgModOk'),card=$('msgModCard'),mod=$('msgMod');
+  if(!mod)return;
+  if(t)t.textContent=o.titulo||'Confirmar';
+  if(b)b.innerHTML=o.corpo||'';
+  if(ok){ok.textContent=o.ok||'Confirmar';ok.className='mbtn '+(o.perigo?'danger':'ok');}
+  if(card)card.className='mod'+(o.perigo?' danger':'');
+  msgModalCb=o.aoConfirmar||null;
+  mod.classList.add('on');
+  if(ok)ok.focus();
+}
+function msgFecharModal(){const m=$('msgMod');if(m)m.classList.remove('on');msgModalCb=null;}
+
+/* ---------- trilha de correlação ---------- */
+function msgPasso(tipo){
+  switch(tipo){
+    case 'oferta.recebida': return {cls:'mute',st:'publicado'};
+    case 'disparo.criado': return {cls:'mute',st:'publicado'};
+    case 'disparo.concluido': return {cls:'',st:'processado (ack)'};
+    case 'disparo.mensagem.enviada': return {cls:'',st:'processado (ack)'};
+    case 'instancia.conectada': return {cls:'mute',st:'infra'};
+    case 'instancia.desconectada': return {cls:'mute',st:'infra'};
+    case 'mensagem.dlq': return {cls:'bad',st:'falha definitiva → dlq'};
+  }
+  return {cls:'mute',st:'evento'};
+}
+function msgPayloadResumo(it){
+  const p=(it.envelope&&it.envelope.payload)||{};
+  if(it.tipo==='cliente.enviar'){
+    return '<dl class="kv" style="margin:0"><dt>jid</dt><dd>'+esc(p.jid||'—')+'</dd><dt>nome</dt><dd>'+esc(p.nome||'—')+'</dd><dt>disparoId</dt><dd>'+esc(p.disparoId||'—')+'</dd><dt>instância</dt><dd>'+esc(p.instancia||'—')+'</dd><dt>texto</dt><dd>'+esc(p.texto||'—')+'</dd></dl>';
+  }
+  const q=p.item||{};
+  return '<dl class="kv" style="margin:0"><dt>origem</dt><dd>'+esc(q.origem||'—')+'</dd><dt>destino</dt><dd>'+esc(p.destino||'—')+'</dd><dt>produto</dt><dd>'+esc(q.idProduto||'—')+'</dd><dt>destinos</dt><dd>'+esc((q.destinos||[]).join(' · ')||'—')+'</dd><dt>mensagem</dt><dd>'+esc(q.mensagem||'—')+'</dd></dl>';
+}
+async function msgAbrirTrilha(corr){
+  if(!corr)return;
+  const drawer=$('msgDrawer'),body=$('msgDrBody'),titulo=$('msgDrTitle');
+  let evs=[],acs=[];
+  try{
+    const d=await (await fetch('/api/mensageria/eventos?correlationId='+encodeURIComponent(corr))).json();
+    evs=d.eventos||[];acs=d.acoes||[];
+  }catch(e){}
+  evs=evs.slice().sort(function(a,b){return Date.parse(a.em)-Date.parse(b.em);});
+  acs=acs.slice().sort(function(a,b){return Date.parse(a.em)-Date.parse(b.em);});
+  let item=null;
+  MSG.itens.forEach(function(it){if((it.envelope||{}).correlationId===corr)item=it;});
+  if(titulo)titulo.textContent=corr.slice(0,8)+'…';
+  let h='<dl class="kv"><dt>correlationId</dt><dd><span class="mono">'+esc(corr)+'</span> <button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(corr)+'" title="Copiar">⧉</button></dd>';
+  if(item){
+    const env=item.envelope||{};
+    h+='<dt>tipo</dt><dd>'+esc(item.tipo)+'</dd>'
+      +'<dt>chave</dt><dd>'+(env.chave?'<span class="mono">'+esc(env.chave)+'</span>':'<span class="mini">— (sem chave de idempotência)</span>')+'</dd>'
+      +'<dt>tentativas</dt><dd>'+msgNum(item.tentativas)+'</dd>'
+      +'<dt>reprocessos</dt><dd>'+msgNum(env.reprocessos||0)+'</dd>'
+      +'<dt>origem</dt><dd>'+esc(item.origem||'—')+'</dd>'
+      +'<dt>publicado</dt><dd>'+esc(msgDdmm(env.timestamp))+'</dd>'
+      +'<dt>última tentativa</dt><dd>'+esc(msgDdmm(item.ultimaTentativaEm))+'</dd>'
+      +'<dt>motivo</dt><dd>'+esc(item.motivo||'—')+'</dd>'
+      +'<dt>payload</dt><dd>'+msgPayloadResumo(item)+'</dd>';
+  }
+  h+='</dl>';
+  h+='<div class="hint" style="margin-top:14px"><b>Etapas do fluxo</b> — de <code>GET /api/mensageria/eventos?correlationId=…</code> e do item da DLQ.</div>';
+  const passos=evs.map(function(e){const m=msgPasso(e.tipo);return {cls:m.cls,st:m.st,titulo:e.tipo,quando:e.em,tent:e.tentativas,chave:e.chave};});
+  if(item){
+    const falha={cls:'warn',st:'tentativa esgotada',titulo:msgNum(item.tentativas)+' '+msgPlural(item.tentativas,'tentativa','tentativas')+' — '+(item.ultimoErro||'sem erro registrado'),quando:item.ultimaTentativaEm,tent:item.tentativas,chave:(item.envelope||{}).chave||''};
+    let idx=-1;
+    for(let i=0;i<passos.length;i++){if(passos[i].titulo==='mensagem.dlq'){idx=i;break;}}
+    if(idx>=0)passos.splice(idx,0,falha);else passos.push(falha);
+  }
+  acs.forEach(function(a){
+    passos.push({cls:a.acao==='descartar'?'bad':'',st:'ação do operador · '+a.acao,titulo:(a.acao||'ação')+' — '+(a.tipo||''),quando:a.em,tent:a.tentativas||0,chave:a.chave||''});
+  });
+  h+='<ul class="trail">';
+  passos.forEach(function(s){
+    h+='<li class="'+s.cls+'"><div class="st">'+esc(s.st)+'</div><b>'+esc(s.titulo)+'</b>'
+      +'<div class="mini">'+esc(msgDdmm(s.quando))+' · tentativas '+msgNum(s.tent)+'</div>'
+      +(s.chave?'<div class="mini mono" style="font-size:10px">'+esc(s.chave)+'</div>':'')+'</li>';
+  });
+  h+='</ul>';
+  if(!passos.length)h+='<div class="empty"><span class="ico">🔎</span><b>Sem eventos para esta correlação</b><span class="mini">Nenhum evento de auditoria com este correlationId.</span></div>';
+  if(body)body.innerHTML=h;
+  const btn=$('msgDrRepro');
+  if(btn){btn.disabled=!(item&&item.state!=='reprocessando');btn.setAttribute('data-msg-id',item?item.id:'');}
+  if(drawer)drawer.classList.add('on');
+}
+
+/* ---------- ações ---------- */
+function msgAcharItem(id){let r=null;MSG.itens.forEach(function(it){if(it.id===id)r=it;});return r;}
+async function msgReprocessar(id){
+  const it=msgAcharItem(id);
+  if(!it||it.state==='reprocessando')return;
+  it.state='reprocessando';
+  msgRender();
+  msgToast('Reprocessando <b>'+esc(it.tipo)+'</b>… a mensagem volta para a fila.','warn');
+  try{
+    const r=await (await fetch('/api/mensageria/dlq/reprocessar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})).json();
+    if(r&&r.erro)msgToast('Falha ao reprocessar: '+esc(r.erro),'err');
+    else msgToast('Reprocessado — a mensagem voltou para a fila <b>'+esc(it.tipo)+'</b>.');
+  }catch(e){
+    msgToast('Falha ao reprocessar: '+esc(String((e&&e.message)?e.message:e)),'err');
+  }
+  it.state=null;
+  await carregarMensageria();
+}
+function msgDescartar(id){
+  const it=msgAcharItem(id);
+  if(!it)return;
+  msgAbrirModal({
+    titulo:'Descartar mensagem da DLQ?',perigo:true,ok:'Descartar mesmo assim',
+    corpo:'Você vai <b>descartar</b> a mensagem <span class="mono">'+esc(it.id)+'</span> do tipo <b>'+esc(it.tipo)+'</b>.<br><br>Ela será <b>removida da DLQ</b> e <b>não volta para a fila</b>. Não há como desfazer esta ação.',
+    aoConfirmar:async function(){
+      try{
+        const r=await (await fetch('/api/mensageria/dlq/descartar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})).json();
+        if(r&&r.erro)msgToast('Falha ao descartar: '+esc(r.erro),'err');
+        else msgToast('Descartada — a mensagem saiu da DLQ e não será reprocessada.','warn');
+      }catch(e){
+        msgToast('Falha ao descartar: '+esc(String((e&&e.message)?e.message:e)),'err');
+      }
+      await carregarMensageria();
+    }
+  });
+}
+function msgReprocessarTudo(){
+  const lista=msgFiltrados();
+  if(!lista.length){msgToast('Nada para reprocessar neste filtro.','warn');return;}
+  const tipo=MSG.filtro;
+  msgAbrirModal({
+    titulo:'Reprocessar todas as mensagens da DLQ?',
+    ok:'Reprocessar '+lista.length+' '+msgPlural(lista.length,'mensagem','mensagens'),
+    corpo:'Você vai reprocessar <b>'+lista.length+'</b> '+msgPlural(lista.length,'mensagem','mensagens')+' '+(tipo==='todas'?'<b>de todas as filas</b>':'do tipo <b>'+esc(tipo)+'</b>')+'.<br><br>'+msgPlural(lista.length,'Ela volta','Elas voltam')+' para a fila de origem e seguem o ritmo normal (1 a cada <b>CLIENTES_INTERVALO_S</b>, dentro da janela comercial) — <b>não</b> vira rajada. Itens que já falharam de forma <b>não transitória</b> tendem a falhar de novo.',
+    aoConfirmar:async function(){
+      const body={ids:lista.map(function(i){return i.id;})};
+      if(tipo&&tipo!=='todas')body.tipo=tipo;
+      try{
+        const r=await (await fetch('/api/mensageria/dlq/reprocessar-lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+        if(r&&r.erro)msgToast('Falha no lote: '+esc(r.erro),'err');
+        else msgToast('♻️ '+msgNum(r.total)+' '+msgPlural(r.total,'mensagem reprocessada','mensagens reprocessadas')+' — voltaram para a fila.');
+      }catch(e){
+        msgToast('Falha no lote: '+esc(String((e&&e.message)?e.message:e)),'err');
+      }
+      await carregarMensageria();
+    }
+  });
+}
+
+/* ---------- wiring ---------- */
+document.addEventListener('click',function(ev){
+  const t=ev.target&&ev.target.closest?ev.target.closest('[data-msg-act]'):null;
+  if(!t)return;
+  const act=t.getAttribute('data-msg-act');
+  if(act==='copy')msgCopiar(t.getAttribute('data-msg-val'));
+  else if(act==='repro')msgReprocessar(t.getAttribute('data-msg-id'));
+  else if(act==='desc')msgDescartar(t.getAttribute('data-msg-id'));
+  else if(act==='trail')msgAbrirTrilha(t.getAttribute('data-msg-corr'));
+});
+document.addEventListener('click',function(ev){
+  const b=ev.target&&ev.target.closest?ev.target.closest('.tab[data-msg-f]'):null;
+  if(!b)return;
+  MSG.filtro=b.getAttribute('data-msg-f');
+  msgRender();
+});
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'){
+    const d=$('msgDrawer');if(d)d.classList.remove('on');
+    msgFecharModal();
+  }
+});
+document.addEventListener('DOMContentLoaded',function(){
+  const filtro=$('msgDlqFiltro'),busca=$('msgDlqBusca'),btnAll=$('btnMsgReproAll');
+  const btnRefresh=$('btnMsgRefresh');
+  if(btnRefresh)btnRefresh.addEventListener('click',function(){MSG.erro=null;carregarMensageria();msgToast('Snapshot atualizado.');});
+  if(filtro)filtro.addEventListener('change',function(){MSG.filtro=this.value;msgRender();});
+  if(busca)busca.addEventListener('input',function(){MSG.busca=this.value;msgRender();});
+  if(btnAll)btnAll.addEventListener('click',msgReprocessarTudo);
+  const mc=$('msgModCancel'),mo=$('msgModOk'),mod=$('msgMod'),dc=$('msgDrClose'),dr=$('msgDrRepro');
+  if(mc)mc.addEventListener('click',msgFecharModal);
+  if(mo)mo.addEventListener('click',function(){const cb=msgModalCb;msgFecharModal();if(cb)cb();});
+  if(mod)mod.addEventListener('click',function(ev){if(ev.target===this)msgFecharModal();});
+  if(dc)dc.addEventListener('click',function(){const d=$('msgDrawer');if(d)d.classList.remove('on');});
+  if(dr)dr.addEventListener('click',function(){const id=this.getAttribute('data-msg-id');if(id)msgReprocessar(id);});
+  setInterval(function(){try{carregarMensageria();}catch(e){}},15000);
+});
+
+/* ---------- boot ---------- */
+if (typeof navegar === 'function') navegar();
 </script></body></html>`;
 
 server.listen(PORT, HOST, () => {

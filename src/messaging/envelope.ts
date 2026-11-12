@@ -46,6 +46,11 @@ export interface Envelope<T = unknown> {
   emAndamento?: boolean;
   /** ISO da reserva (recuperação de crash após 5 min) */
   reservadoEm?: string;
+  /**
+   * Nº de vezes que a mensagem saiu da DLQ por ação do operador
+   * (reprocessamento). Zera nunca: é o contador de "reparos" da mensagem.
+   */
+  reprocessos?: number;
 }
 
 export interface OpcoesEnvelope {
@@ -88,6 +93,7 @@ export function schemaEnvelope() {
     proximaTentativaEm: z.string().optional(),
     emAndamento: z.boolean().optional(),
     reservadoEm: z.string().optional(),
+    reprocessos: z.number().int().min(0).optional(),
   });
 }
 

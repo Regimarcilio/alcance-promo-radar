@@ -235,12 +235,26 @@ export class FileBroker implements Broker {
     return lerDlq(tipo);
   }
 
-  /** Reprocessa um item da DLQ: ele volta para a fila (tentativas zeradas). */
+  /**
+   * Reprocessa um item da DLQ: ele volta para a fila de origem.
+   *
+   * O item **não perde o histórico**: `tentativas` zera (o consumidor conta
+   * do zero), mas o `ultimoErro` é **preservado** (auditoria: por que a
+   * mensagem morreu) e o `reprocessos` é **incrementado** (quantas vezes o
+   * operador reparou essa mensagem). Backoff e reserva são limpos para que o
+   * item volte a ser elegível no próximo ciclo da fila.
+   */
   async reprocessar(id: string): Promise<void> {
     const item = removerDlq(id);
     if (!item) return;
-    const env: Envelope = { ...item.envelope, tentativas: 0, ultimoErro: undefined };
-    delete env.ultimoErro;
+    const env: Envelope = {
+      ...item.envelope,
+      tentativas: 0,
+      reprocessos: Number(item.envelope.reprocessos ?? 0) + 1,
+    };
+    delete env.proximaTentativaEm;
+    delete env.emAndamento;
+    delete env.reservadoEm;
     const itens = this.lerFila(env.tipo).filter((e) => e.id !== env.id);
     this.salvarFila(env.tipo, [...itens, env]);
   }

@@ -1,10 +1,20 @@
 # Protótipo — Mensageria: filas + DLQ + Reprocessar
 
-**Status**: **aguardando aprovação** (protótipo navegável, sem código de produção).
+**Status**: **aprovado** pelo operador em **2026-11-12** · **implementado** no PR da **issue #54**.
 
-> Este é o **protótipo** da view Mensageria do painel (issue #53). A **implementação** da
-> interface é a issue #54, bloqueada pela aprovação do operador. Nenhum arquivo de
-> produção (`src/`) foi tocado neste issue.
+> Este é o **protótipo** da view Mensageria do painel (issue #53). O operador **aprovou**
+> a opção 1 com a instrução *"implementar para uso"*, o que liberou a **issue #54**
+> (implementação da interface no painel real).
+>
+> A implementação saiu no **PR da #54** (`src/manager/server.ts`): a view Mensageria do
+> painel real segue **este protótipo** — mesmos KPIs, mesma tabela de filas, mesma tabela
+> de DLQ (motivo colorido, Reprocessar / Reprocessar tudo / Descartar), mesma trilha de
+> correlação em gaveta lateral, mesmos estados (vazio, carregando, erro de API, item em
+> reprocessamento) e o mesmo vocabulário visual (`.panel`, `.kpi`, `.mbtn`, `.mini`).
+>
+> Evidência da implementação em execução:
+> [`implementacao-view-mensageria.png`](implementacao-view-mensageria.png) e
+> [`implementacao-trilha-correlacao.png`](implementacao-trilha-correlacao.png).
 
 ## Objetivo
 
@@ -26,7 +36,9 @@ escopo, por decisão do operador.
 
 | Arquivo | Mostra |
 |---|---|
-| `opcao-1.html` | protótipo **navegável e autocontido** (abre direto no navegador, sem build e sem servidor): KPIs, listas de filas por tipo, tabela da DLQ com Reprocessar / Reprocessar tudo / Descartar, trilha de correlação, tópicos/assinantes, eventos recentes e os 8 estados obrigatórios |
+| `opcao-1.html` | protótipo **navegável e autocontido** (abre direto no navegador, sem build e sem servidor): KPIs, listas de filas por tipo, tabela da DLQ com Reprocessar / Reprocessar tudo / Descartar, trilha de correlação, tópicos/assinantes, eventos recentes e os 8 estados obrigatórios — **referência visual da implementação (#54)** |
+| `implementacao-view-mensageria.png` | a view **Mensageria implementada** no painel real (estado de rotina, com DLQ) |
+| `implementacao-trilha-correlacao.png` | a **gaveta de trilha de correlação** da implementação real |
 
 O HTML é **100% autocontido**: CSS e JS embutidos, **zero** recursos externos (sem CDN,
 sem fonte remota, sem imagem). Funciona em `file://` — não precisa de servidor nem de
@@ -139,22 +151,31 @@ Seletor **“Cenário do protótipo”** (8 cenários):
 - **Reprodutibilidade**: o mesmo seletor de tema do painel (6 paletas) e o mesmo
   vocabulário de botões (`.mbtn`, `.mbtn.ok`) — o protótipo **parece parte do produto**.
 
-## Pendências / riscos
+## Pendências / riscos — resolvidas na #54
 
-1. **Aprovação do operador** é o próximo passo — a issue #54 (implementação da interface)
-   só é liberada com ela.
-2. **Endpoint de descarte**: hoje a API expõe apenas `POST /api/mensageria/dlq/reprocessar`.
-   O **Descartar** (remoção definitiva da DLQ) **não tem endpoint** — o protótipo mostra a
-   ação e a confirmação, mas a implementação vai exigir um endpoint novo
-   (`DELETE /api/mensageria/dlq/:id`) ou uma flag no reprocessar. **Decisão pendente do
-   operador.**
-3. **Reprocessar tudo em lote**: também não há endpoint. A implementação pode chamar o
-   reprocessar item a item (com reuso de `correlationId` e de `chave`, para não quebrar a
-   idempotência) ou ganhar um endpoint de lote. **Decisão pendente.**
-4. **Busca e filtro**: hoje são locais (sobre o snapshot em memória). Na implementação,
-   com a API real, a busca pode ficar no servidor se a DLQ crescer.
-5. **`monitor.add-grupo`** aparece zerado por não ter produtor ativo — se a implementação
-   já for salva, a linha some sozinha.
-6. **Sem tela de confirmação da trilha nos eventos**: a trilha está ligada ao item da DLQ e
-   ao evento da auditoria; se o operador quiser abrir a trilha a partir de qualquer evento
-   (inclusive os que **não** terminaram em falha), é um ajuste pequeno na issue #54.
+1. **Aprovação do operador** — ✅ feita em 2026-11-12 ("implementar para uso"); liberou a #54.
+2. **Endpoint de descarte** — ✅ `POST /api/mensageria/dlq/descartar` `{ id }`: remove o item
+   da DLQ (destrutivo), **não** devolve para a fila e registra a ação na auditoria
+   (`data/auditoria-mensageria.json`) com tipo, chave, motivo e `correlationId`.
+3. **Reprocessamento em lote** — ✅ `POST /api/mensageria/dlq/reprocessar-lote` `{ tipo?, ids? }`:
+   reprocessa o que está **visível** na tela (filtro por tipo + busca). O lote **só
+   reenfileira** — os itens voltam com `tentativas: 0`, `ultimoErro` preservado e
+   `reprocessos++`, e seguem o ritmo normal da fila (1 a cada `CLIENTES_INTERVALO_S`):
+   **não vira rajada**.
+4. **Busca e filtro** — ✅ mantidos no cliente (sobre o snapshot), como no protótipo; a
+   triagem por tipo também é enviada ao servidor no reprocessamento em lote.
+5. **`monitor.add-grupo`** — continua aparecendo zerado (tipo declarado, sem produtor
+   ativo): é o comportamento esperado.
+6. **Trilha a partir de qualquer evento** — ✅ o botão 🔗 existe nos itens da DLQ **e** nos
+   eventos recentes; a trilha usa `GET /api/mensageria/eventos?correlationId=…` (filtro
+   novo, criado na #54) e mostra as **ações do operador** (reprocessar/descartar) no fim.
+
+## O que a implementação acrescentou (além do protótipo)
+
+- `POST /api/mensageria/dlq/descartar` e `POST /api/mensageria/dlq/reprocessar-lote`
+  (rotas novas, *default-deny* como as demais).
+- `GET /api/mensageria/eventos?correlationId=…` — filtro de correlação (a trilha depende
+  dele) e o bloco `acoes` (ações do operador) separado dos eventos.
+- Auditoria das ações do operador (`registro: "acao"`), com `tipo`, `chave`, `motivo` e
+  `correlationId` — é o rastro das ações destrutivas.
+- `reprocessos` no envelope: quantas vezes a mensagem foi reparada pelo operador.
