@@ -2426,3 +2426,37 @@ imediata de toda demanda aberta.
   pendentes). Nenhum outro teste foi tocado.
 - **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
 - **Próximo:** #50 (idempotência por chave de negócio) e #51 (tópicos Pub/Sub).
+
+## 2026-11-11 — Issue #50 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** idempotência por chave de negócio nos consumidores (aula: *"não tratar
+  mensagens duplicadas"*) — sem quebrar a API de dedup do Monitor.
+- **Branch:** ISSUE · **PR:** #58 (aberto para `develop`)
+- **Decisões:**
+  - **Chave por tipo** (`chaveDe`): `cliente.enviar` → `${disparoId}:${jid}` (sem disparo
+    → id do item, para não colidir entre campanhas avulsas); `monitor.encaminhar` → hash
+    `mlbId|preco|cupom`; `monitor.add-grupo` → `${jid}:${telefone}`; evento → `${tipo}:${id}`.
+  - **Consumidor idempotente** no worker de Clientes: chave já processada → **ACK imediato
+    sem reenviar** (log `[mensageria] duplicata ignorada: <chave>`) + contador
+    `alcance_msg_duplicadas_total{tipo}`. A chave é gravada **junto do ACK** (nunca antes)
+    → at-least-once com chave (se o processo morrer entre o efeito e o registro, a
+    reentrega reenvia).
+  - **Registro genérico** (`src/messaging/idempotencia.ts`): retenção de 30 dias, limite de
+    50 000 chaves, escrita atômica em `data/messaging/processados.json`.
+  - **`src/store/dedup.ts` refatorado** para reusar a estrutura (registro genérico com
+    `campoChave: "hash"`): **API pública e formato do arquivo intactos** (`hashEnvio`,
+    `jaEnviado`, `registrarEnvio`, `{hash, data, dia}`) e **histórico de 7 dias preservado**
+    (sem recriar o arquivo `data/envios.json`).
+  - **Contadores** (`src/messaging/contadores.ts`): base para as métricas da #52.
+  - **Erro transitório não é falha de negócio**: o contador de falha do disparo só sobe
+    quando a mensagem morre na DLQ (mantido da #49).
+- **Arquivos:** src/messaging/idempotencia.ts, src/messaging/idempotencia.test.ts,
+  src/messaging/contadores.ts, src/store/dedup.ts, src/clientes/fila.ts,
+  src/clientes/clientes.ts, src/clientes/clientes.test.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 9 novos (chave derivada do disparo/contato, campanhas diferentes não colidem,
+  registro marca a chave, retenção limpa antigas, limite de tamanho, chave de evento,
+  reentrega sem reenvio + contador, chave só depois do ACK, campanhas distintas enviadas)
+  — **258/258** (`npm test`); `npm run typecheck` e `npm run build` verdes.
+- **Testes existentes:** nenhum alterado — a refatoração do `dedup.ts` manteve a API e o
+  formato do arquivo.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #51 (tópicos Pub/Sub com fila por assinante) e #52 (métricas + correlationId).

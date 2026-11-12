@@ -116,3 +116,24 @@ A decisão acima foi aplicado no fluxo de Campanhas (aba Clientes) e na fila do 
   **mesma DLQ** (`dlq-monitor.encaminhar.json`).
 - **Recuperação de crash**: reserva com mais de 5 min é liberada de volta para
   a fila (Clientes) e o item em andamento volta no boot (Monitor).
+
+---
+
+## Addendum (2026-11-11) — issue #50: idempotência por chave de negócio
+
+- **Chave por tipo de mensagem** (`src/messaging/idempotencia.ts` → `chaveDe`):
+  `cliente.enviar` → `${disparoId}:${jid}`; `monitor.encaminhar` → hash
+  `mlbId|preco|cupom` (o mesmo do Monitor); `monitor.add-grupo` → `${jid}:${telefone}`;
+  evento de tópico → `${tipo}:${id}`.
+- **Consumidor idempotente**: antes do efeito o consumidor consulta o registro; se a
+  chave já foi processada → **ACK imediato, sem reenviar** (log
+  `[mensageria] duplicata ignorada: <chave>`) e o contador
+  `alcance_msg_duplicadas_total{tipo}` sobe. A chave é gravada **junto do ACK**
+  (nunca antes) → at-least-once com chave (recomendação da aula).
+- **Registro genérico**: retenção de 30 dias e limite de 50 000 chaves
+  (`data/messaging/processados.json`), com escrita atômica. O dedup do Monitor
+  (`src/store/dedup.ts`) passou a **reusar a mesma estrutura** — retenção de 7 dias,
+  formato de arquivo (`{hash, data, dia}`) e API pública (`hashEnvio`, `jaEnviado`,
+  `registrarEnvio`) **inalterados** (histórico preservado).
+- **Métrica**: `alcance_msg_duplicadas_total{tipo}` (contador em memória, exportado
+  no Prometheus pela issue #52).
