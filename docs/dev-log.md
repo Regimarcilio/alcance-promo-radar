@@ -2377,3 +2377,52 @@ imediata de toda demanda aberta.
 - **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
 - **Próximo:** #49 (ACK real, retry com backoff+jitter e DLQ na fila de Clientes/Disparo e na
   fila do Monitor) — pluga a política no gancho `politicaNack`.
+
+## 2026-11-11 — Issue #49 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** ACK real + retry com backoff/jitter + DLQ na fila de Clientes/Disparo
+  (e a mesma semântica na fila do Monitor). **É a correção da perda de 206 mensagens**
+  (10/11/2026: a fila fazia `shift()` antes de enviar).
+- **Branch:** ISSUE · **PR:** #56 (aberto para `develop`)
+- **Decisões:**
+  - **A fila de Campanhas virou fila de Mensageria**: cada item é um envelope
+    `cliente.enviar` em `data/messaging/cliente.enviar.json`. O estado da fila
+    (contadores/pausa/último envio) foi para `data/clientes-estado.json` e **herda o
+    histórico legado** (254 enviados / 206 erros preservados).
+  - **Migração idempotente e sem perda**: `data/clientes-fila.json` → envelopes; marcador
+    de ids já migrados; o legado só é esvaziado **depois** da gravação bem-sucedida e o
+    **arquivo não é apagado** (recuperação manual). Premissa: o worker legado só deixa de
+    ler o store no fim desta issue.
+  - **ACK real**: o item **fica na fila** durante o envio (reserva `emAndamento` +
+    `reservadoEm`); só sai no ACK. NACK devolve com `tentativas + 1`, `ultimoErro` e
+    `proximaTentativaEm`; erro permanente/vagas esgotadas → **DLQ** com o motivo.
+  - **Política de retry** (`src/messaging/politica.ts`): `base * 2^(n-1)` (base 30s, teto
+    30 min) com **jitter ±20%**; re-tenta só erro **transitório** (`ehErroTransitorio`).
+  - **DLQ por tipo** (`data/messaging/dlq-<tipo>.json`): envelope completo, motivo,
+    `tentativas`, `ultimaTentativaEm`, `origem`; retenção de 1000 itens; **não volta
+    sozinha** — só por ação do operador (`POST /api/mensageria/dlq/reprocessar`).
+  - **Fila do Monitor**: mesma semântica, **preservando** o retry de 3 tentativas e o
+    `reenfileirar` idempotente (não duplica o item em andamento); a DLQ do Monitor é
+    `dlq-monitor.encaminhar.json` e o reprocessamento devolve o item para a fila do
+    Monitor (não para o broker).
+  - **Erro transitório NÃO conta como falha do disparo**: o contador de falha do disparo
+    só é incremented quando a mensagem **morre** na DLQ (com retry, o contato ainda vai
+    receber) — evita o grid mostrar campanha quebrada enquanto a fila trabalha.
+  - **Caminhos de estado resolvidos em tempo de chamada** (`monitor/grupos`, `monitor/fila`,
+    `monitor/state`, `store/publicacoes`): o `ALCANCE_DATA_DIR` pode ser trocado em
+    teste/smoke sem recarregar o módulo (mesma intenção de `config/paths.ts`).
+- **Arquivos:** src/clientes/fila.ts, src/clientes/clientes.ts, src/clientes/clientes.test.ts,
+  src/messaging/politica.ts, src/messaging/dlq.ts, src/messaging/caminhos.ts,
+  src/messaging/filas.ts, src/messaging/broker.ts, src/messaging/envelope.ts,
+  src/monitor/fila.ts, src/monitor/fila.test.ts, src/monitor/grupos.ts, src/monitor/state.ts,
+  src/store/publicacoes.ts, src/manager/server.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 12 novos (ACK, retry/backoff/jitter, DLQ por erro permanente, tentativas
+  esgotadas, recuperação de crash, reprocessar, migração, herança do estado legado,
+  ACK do Monitor, reenfileirar sem duplicar, DLQ do Monitor) — **248/248** (`npm test`);
+  `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes adaptados (com justificativa):** os 3 testes de `clientes.test.ts` que
+  liam `data/clientes-fila.json` passaram a ler a fila nova (`data/messaging/cliente.enviar.json`,
+  envelope → payload) e `enfileirarCampanha`/`atualizarItensDaFila` viraram `async`. O
+  **comportamento asserido** é idêntico (item carrega `instancia`/`disparoId`, contagem de pendentes, edição de
+  pendentes). Nenhum outro teste foi tocado.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #50 (idempotência por chave de negócio) e #51 (tópicos Pub/Sub).

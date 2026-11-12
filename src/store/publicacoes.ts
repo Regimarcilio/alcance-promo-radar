@@ -15,7 +15,10 @@ import { join } from "node:path";
 import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico, lerJson } from "./json.js";
 
-const file = join(dataDirAtual(), "publicacoes.json");
+// caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
+function file(): string {
+  return join(dataDirAtual(), "publicacoes.json");
+}
 /** Contador histórico persistente: nunca diminui quando o arquivo é podado. */
 const arquivoTotal = join(dataDirAtual(), "rastreio-total.json");
 
@@ -53,8 +56,8 @@ export interface Publicacao {
 
 function carregar(): Publicacao[] {
   try {
-    if (!existsSync(file)) return [];
-    const j = JSON.parse(readFileSync(file, "utf8"));
+    if (!existsSync(file())) return [];
+    const j = JSON.parse(readFileSync(file(), "utf8"));
     return Array.isArray(j) ? j : Array.isArray(j?.publicacoes) ? j.publicacoes : [];
   } catch {
     return [];
@@ -62,7 +65,7 @@ function carregar(): Publicacao[] {
 }
 
 function salvar(arr: Publicacao[]): void {
-  gravarJsonAtomico(file, arr.slice(-limitePublicacoes()));
+  gravarJsonAtomico(file(), arr.slice(-limitePublicacoes()));
 }
 
 let totalCache: number | null = null;

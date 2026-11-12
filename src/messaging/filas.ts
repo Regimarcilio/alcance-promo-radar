@@ -1,0 +1,60 @@
+/**
+ * FILAS — visão agregada das filas da camada de Mensageria (usada pela API).
+ *
+ * Junta o que vem do broker (fila de Clientes) e o que vem da fila do
+ * Monitor (store próprio, mas com a mesma semântica de ACK/DLQ) num único
+ * retrato: pendentes, processadas, falhas, DLQ e a idade da mais antiga.
+ *
+ * Nota de camada: este módulo é a **ponte** entre a mensageria e o Monitor
+ * (único ponto que conhece os dois lados) — o resto da mensageria não depende
+ * do Monitor.
+ */
+import { getBroker } from "./broker.js";
+import { lerDlq, tiposComDlq } from "./dlq.js";
+import type { ItemDLQ } from "./dlq.js";
+import { TIPO_CLIENTE } from "../clientes/fila.js";
+import { TIPO_MONITOR, dlqMonitor, reprocessarDlq, statsMonitor } from "../monitor/fila.js";
+
+export interface ResumoFila {
+  tipo: string;
+  pendentes: number;
+  processadas: number;
+  falhas: number;
+  dlq: number;
+  maisAntigaEm: string | null;
+}
+
+/** Retrato de todas as filas conhecidas. */
+export function resumoFilas(): ResumoFila[] {
+  const broker = getBroker();
+  const tipos = [TIPO_CLIENTE, TIPO_MONITOR];
+  return tipos.map((tipo) => {
+    if (tipo === TIPO_MONITOR) return { tipo, ...statsMonitor() };
+    return { tipo, ...broker.stats(tipo) };
+  });
+}
+
+/** Itens da DLQ (de um tipo ou de todos). */
+export function itensDlq(tipo?: string | null): ItemDLQ[] {
+  if (tipo) return lerDlq(tipo);
+  const todos = tiposComDlq().flatMap((t) => lerDlq(t));
+  if (!todos.some((i) => i.tipo === TIPO_MONITOR)) return todos;
+  return todos;
+}
+
+/** Itens da DLQ do Monitor (fila própria, fora do broker). */
+export function dlqDoMonitor(): ItemDLQ[] {
+  return dlqMonitor();
+}
+
+/**
+ * Reprocessa um item da DLQ: ele volta para a fila de origem.
+ * Só acontece por ação explícita do operador.
+ */
+export async function reprocessarMensagem(id: string): Promise<boolean> {
+  const item = itensDlq().find((i) => i.id === id);
+  if (!item) return false;
+  if (item.tipo === TIPO_MONITOR) return reprocessarDlq(id);
+  await getBroker().reprocessar(id);
+  return true;
+}

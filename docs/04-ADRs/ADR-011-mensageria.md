@@ -84,3 +84,35 @@ transporte: é isso que impede a próxima perda de 206 mensagens.
 - ADR relacionados: [ADR-001](ADR-001-envio-whatsapp.md) (envio), [ADR-007](ADR-007-clientes-campanhas.md) (campanhas/fila)
 - Épico: #47 (Camada de Mensageria interna) — issues #48 (núcleo), #49 (ACK/DLQ), #50 (idempotência), #51 (tópicos), #52 (observabilidade)
 - SRS: RF/RN de Mensageria registrados no delta `docs/SRS-v0.4.md`
+
+---
+
+## Addendum (2026-11-11) — issue #49: ACK, retry e DLQ na prática
+
+A decisão acima foi aplicado no fluxo de Campanhas (aba Clientes) e na fila do Monitor:
+
+- **Fila de Campanhas = fila de Mensageria.** Os itens migraram de
+  `data/clientes-fila.json` (store legado, itens "soltos") para
+  `data/messaging/cliente.enviar.json` (um **envelope** por contato). O estado
+  da fila (contadores, pausa, último envio) passou para `data/clientes-estado.json`
+  — o legado é **herdado** na primeira leitura (histórico de 254 enviados /
+  206 erros preservado) e a migração é **idempotente** (marcador de ids
+  migrados + esvazia o legado só depois da gravação bem-sucedida; o arquivo
+  legado **não é apagado**).
+- **ACK real.** O item **fica na fila** enquanto é enviado (reserva com
+  `emAndamento`/`reservadoEm`); só sai no ACK (sucesso). NACK devolve o item
+  com `tentativas + 1`, `ultimoErro` e `proximaTentativaEm`; erro permanente
+  ou tentativas esgotadas vão para a **DLQ** (`data/messaging/dlq-<tipo>.json`,
+  retenção de 1000 itens) com o motivo — nunca para o lixo.
+- **Política de retry** (`src/messaging/politica.ts`): backoff `base * 2^(n-1)`
+  (base 30s, teto 30 min) com **jitter de ±20%**; só erro **transitório**
+  (`ehErroTransitorio`) é re-tentado; erro permanente vai direto para a DLQ.
+- **Extensões do port** (opcionais, para não quebrar adapters mínimos):
+  `pendentes(tipo)`, `atualizar(id, env)`, `remover(id)`, `limpar(tipo)` — o
+  consumidor precisa delas para reservar/editar/cancelar itens. A fila do
+  Monitor **não** usa o broker (store próprio `data/monitor-fila.json`) para
+  não reescrever o comportamento já testado, mas passa a usar a **mesma
+  semântica** (ACK, retry de 3 tentativas, `reenfileirar` idempotente) e a
+  **mesma DLQ** (`dlq-monitor.encaminhar.json`).
+- **Recuperação de crash**: reserva com mais de 5 min é liberada de volta para
+  a fila (Clientes) e o item em andamento volta no boot (Monitor).

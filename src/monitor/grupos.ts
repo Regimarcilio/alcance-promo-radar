@@ -39,7 +39,10 @@ export interface MonitorStore {
   criadoEm: string;
 }
 
-const file = join(dataDirAtual(), "monitor.json");
+// caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
+function file(): string {
+  return join(dataDirAtual(), "monitor.json");
+}
 
 function blank(): MonitorStore {
   return { regras: [], autoEnviar: false, foto: "origem", criadoEm: new Date().toISOString() };
@@ -99,8 +102,8 @@ function seedEnv(s: MonitorStore): MonitorStore {
 
 export function carregarMonitor(): MonitorStore {
   try {
-    if (!existsSync(file)) return seedEnv(blank());
-    const raw: any = JSON.parse(readFileSync(file, "utf8"));
+    if (!existsSync(file())) return seedEnv(blank());
+    const raw: any = JSON.parse(readFileSync(file(), "utf8"));
     // formato novo
     if (Array.isArray(raw?.regras)) {
       const s: MonitorStore = {
@@ -137,7 +140,7 @@ export function carregarMonitor(): MonitorStore {
 }
 
 function salvar(s: MonitorStore): void {
-  gravarJsonAtomico(file, s);
+  gravarJsonAtomico(file(), s);
 }
 
 /**

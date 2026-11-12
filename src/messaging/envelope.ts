@@ -38,6 +38,14 @@ export interface Envelope<T = unknown> {
   tentativas: number;
   /** conteúdo da mensagem */
   payload: T;
+  /** último erro de processamento (preenchido no NACK) */
+  ultimoErro?: string;
+  /** ISO da próxima tentativa (backoff exponencial) */
+  proximaTentativaEm?: string;
+  /** true enquanto a mensagem está reservada por um consumidor */
+  emAndamento?: boolean;
+  /** ISO da reserva (recuperação de crash após 5 min) */
+  reservadoEm?: string;
 }
 
 export interface OpcoesEnvelope {
@@ -76,6 +84,10 @@ export function schemaEnvelope() {
     chave: z.string().min(1).optional(),
     tentativas: z.number().int().min(0, "tentativas não pode ser negativa"),
     payload: z.unknown(),
+    ultimoErro: z.string().optional(),
+    proximaTentativaEm: z.string().optional(),
+    emAndamento: z.boolean().optional(),
+    reservadoEm: z.string().optional(),
   });
 }
 
