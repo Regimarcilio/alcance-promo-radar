@@ -46,8 +46,9 @@ import {
 } from "./fila.js";
 import { getBroker } from "../messaging/broker.js";
 import { chaveDe, jaProcessado } from "../messaging/idempotencia.js";
-import { incrementar } from "../messaging/contadores.js";
+import { incrementar, observarLatencia } from "../messaging/contadores.js";
 import { publicarEvento } from "../messaging/eventos.js";
+import { logger } from "../observability/logger.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -543,6 +544,7 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
   }
 
   const dry = process.env.MONITOR_DRY === "1";
+  const inicio = Date.now();
   try {
     const r = await enviarParaGrupo({
       grupo: item.jid,
@@ -570,6 +572,21 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
       /* evento é acessório: nunca quebra o envio */
     }
     await talvezConcluirDisparo(env, item);
+    // OBSERVABILIDADE (issue #52): latência + log com o correlationId
+    const duracaoMs = Date.now() - inicio;
+    observarLatencia("alcance_msg_latencia_envio_ms", { tipo: TIPO_CLIENTE }, duracaoMs);
+    incrementar("alcance_msg_processadas_total", { tipo: TIPO_CLIENTE, resultado: "ok" });
+    logger.info(
+      {
+        tipo: TIPO_CLIENTE,
+        chave,
+        correlationId: env.correlationId,
+        ok: true,
+        tentativas: env.tentativas,
+        duracaoMs,
+      },
+      "[mensageria] mensagem processada",
+    );
     console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId} intervalo=${Math.round(intervaloComVariacao/1000)}s`);
   } catch (e: any) {
     const msg = String(e?.message ?? e);
@@ -579,6 +596,25 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     // transitório com retry não é perda
     const morreu = getBroker().dlq(TIPO_CLIENTE).some((i) => i.id === env.id);
     if (morreu && item.disparoId) registrarResultadoDisparo(item.disparoId, false, msg);
+    const duracaoMs = Date.now() - inicio;
+    observarLatencia("alcance_msg_latencia_envio_ms", { tipo: TIPO_CLIENTE }, duracaoMs);
+    incrementar("alcance_msg_processadas_total", {
+      tipo: TIPO_CLIENTE,
+      resultado: morreu ? "dlq" : "erro",
+    });
+    if (!morreu) incrementar("alcance_msg_retries_total", { tipo: TIPO_CLIENTE });
+    logger.error(
+      {
+        tipo: TIPO_CLIENTE,
+        chave,
+        correlationId: env.correlationId,
+        ok: false,
+        tentativas: env.tentativas,
+        duracaoMs,
+        erro: msg.slice(0, 200),
+      },
+      "[mensageria] mensagem processada",
+    );
     if (morreu) {
       // EVENTO: a mensagem foi para a DLQ (o operador vê e reprocessa)
       try {

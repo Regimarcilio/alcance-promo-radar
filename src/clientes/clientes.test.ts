@@ -520,3 +520,60 @@ test("mensageria: a campanha e as mensagens enviadas compartilham o correlationI
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("mensageria: o log da mensagem processada carrega o correlationId", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  const loggerMod = await import("../observability/logger.js");
+  const linhas: any[] = [];
+  const infoOriginal = loggerMod.logger.info;
+  const errorOriginal = loggerMod.logger.error;
+  (loggerMod.logger as any).info = (obj: any, msg?: string) => { linhas.push({ obj, msg }); };
+  (loggerMod.logger as any).error = (obj: any, msg?: string) => { linhas.push({ obj, msg }); };
+  try {
+    const envelopeMod = await import("../messaging/envelope.js");
+    await envelopeMod.comCorrelacao("abc-123", () =>
+      mod.enfileirarCampanha({
+        texto: "oferta",
+        jids: ["5511900000040@s.whatsapp.net"],
+        disparoId: "promo-log",
+      }),
+    );
+    await mod.liberarProximoCliente();
+    const linha = linhas.find((l) => String(l.msg).includes("mensagem processada"));
+    assert.ok(linha, "o log da mensagem processada foi emitido");
+    assert.equal(linha.obj.correlationId, "abc-123", "o log carrega o correlationId");
+    assert.equal(linha.obj.tipo, "cliente.enviar", "o log carrega o tipo da mensagem");
+    assert.equal(linha.obj.ok, true);
+    assert.ok(typeof linha.obj.duracaoMs === "number", "o log carrega a duração");
+    assert.ok("tentativas" in linha.obj, "o log carrega o número de tentativas");
+  } finally {
+    (loggerMod.logger as any).info = infoOriginal;
+    (loggerMod.logger as any).error = errorOriginal;
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("mensageria: /api/mensageria/stats devolve o snapshot por tipo", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  try {
+    await mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000041@s.whatsapp.net"],
+      disparoId: "promo-stats",
+    });
+    const filas = await import("../messaging/filas.js");
+    const snapshot = filas.resumoFilas();
+    const clientes = snapshot.find((f) => f.tipo === "cliente.enviar");
+    assert.ok(clientes, "a fila de clientes aparece no snapshot");
+    assert.equal(clientes!.pendentes, 1);
+    assert.ok("taxaErro" in clientes!, "o snapshot traz a taxa de erro");
+    assert.ok("idadeFilaMs" in clientes!, "o snapshot traz a idade da fila");
+    assert.ok(snapshot.some((f) => f.tipo === "monitor.encaminhar"), "a fila do monitor aparece");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

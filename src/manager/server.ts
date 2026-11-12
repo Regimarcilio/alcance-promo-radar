@@ -1311,6 +1311,10 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     json(200, { eventos, assinantes: estadoAssinantes() });
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/mensageria/stats") {
+    json(200, { filas: resumoFilas(), geradoEm: new Date().toISOString() });
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/mensageria/filas") {
     json(200, { filas: resumoFilas() });
     return;
