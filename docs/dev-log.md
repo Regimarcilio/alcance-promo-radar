@@ -2624,3 +2624,35 @@ pela aprovação do operador.
 **Próximo**: aprovação do operador sobre `docs/prototipos/mensageria/` → libera a **#54**
 (implementação da interface). Pendências decididas com o operador: **endpoint de descarte**
 (hoje só existe `POST /api/mensageria/dlq/reprocessar`) e **reprocessamento em lote**.
+
+## 2026-11-12 — Release v0.10.0 — @issuemaster — `task: — (release e fechamento de issues)`
+- **Objetivo:** publicar a release **v0.10.0** (camada de Mensageria + número por campanha) e
+  fechar as issues efetivamente concluídas.
+- **Branch:** DOC · **PR:** #66 (versão/CHANGELOG/README → develop, merged) e #67
+  (promoção `develop` → `main`, merged) · **Release:** `v0.10.0` (tag em `main`).
+- **Decisões:**
+  - **0.10.0** (minor): desde a `v0.9.0` houve features (#45 número por campanha e o programa de
+    Mensageria #48–#53), logo bump minor. `package.json`/`package-lock.json` sincronizados.
+  - **CHANGELOG 0.10.0** aberto com o bloco da release (adicionado/corrigido/testes/documentação).
+  - **README** ganhou a seção **Mensageria** (envelope, ACK, DLQ, retry, idempotência, tópicos,
+    broker substituível + as 5 APIs), a linha de `src/messaging/` na estrutura, o link do
+    ADR-011, do delta do SRS e do protótipo, e o contador de testes atualizado (207 → **273**).
+  - **Limpeza de versionamento**: `.playwright-mcp/` (artefatos de sessão do Playwright, ~10k
+    linhas) removido do repositório e adicionado ao `.gitignore`.
+  - **Fix do protótipo**: favicon embutido inline (data URI) — elimina o `favicon.ico 404` no
+    console; verificado com Playwright: **0 erros, 0 avisos**.
+- **Issues fechadas (9, com evidência em comentário):** #1 (SRS v0.4), #2 (ADRs 005–008), #3
+  (backlog v0.4), #4 (README+CHANGELOG), #5 (TLS/Caddy), #6 (container non-root), #31 (README
+  setup público), #34 (CI/CD), #35 (SECURITY.md).
+- **Issues mantidas abertas (7):** #7 (extrair UI do `server.ts`), #29 (CRUD da lista pendente),
+  #30 (credenciais Shopee — depende de terceiro), #32 (publicação pública — falta o template de
+  issues), #33 (template de issues), #47 (épico da Mensageria — depende da #54), #54 (UI
+  Mensageria — aguarda aprovação do protótipo).
+- **Arquivos:** README.md, CHANGELOG.md, package.json, package-lock.json, .gitignore,
+  docs/dev-log.md, docs/prototipos/mensageria/opcao-1.html
+- **Testes:** 273/273 (`npm test`), build verde, typecheck verde, CI verde nos PRs do programa.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Pendências:** (1) aprovação do protótipo para liberar a #54; (2) endpoint de **descartar** da
+  DLQ e **reprocessamento em lote** (a API só expõe reprocessar item a item); (3) template de
+  issues (#33) que bloqueia a #32; (4) `LICENSE` ainda ausente no repo público; (5) pareamento por QR
+  das instâncias `zxs`/`uzz` para retomar a fila.
