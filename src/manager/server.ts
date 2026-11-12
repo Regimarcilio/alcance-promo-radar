@@ -1657,7 +1657,25 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     const [estado, conta, instancia] = await Promise.all([
       estadoConexao(), contaPareada(), instanciaParaServico(),
     ]);
-    json(200, { estado, ...conta, instancia });
+    // Remetente do Monitor: automático (rodízio entre os números liberados
+    // para o fluxo "monitor" na aba Números) ou fixo (override do fluxo).
+    // O painel mostra isso para o operador saber quem envia — antes só
+    // aparecia a instância de serviço, que NÃO é a remetente.
+    const itens = listarInstancias();
+    const elegiveis = itens.filter(
+      (i) => i.ativo && !i.pausado && i.permissoes?.monitor !== false
+    );
+    const fixada = overrideDoFluxo("monitor");
+    json(200, {
+      estado,
+      ...conta,
+      instancia,
+      remetente: {
+        modo: fixada ? "fixo" : "automatico",
+        fixada,
+        elegiveis: elegiveis.map((i) => ({ instancia: i.instancia, nome: i.nome, peso: i.peso })),
+      },
+    });
     return;
   }
   // Lista os grupos da conta pareada (origem/destino escolhidos daqui)
@@ -2390,7 +2408,7 @@ body{padding:0;max-width:none;margin:0}
 
 <div class="mrow">
 <div><b id="mcontalabel">Conta WhatsApp: …</b><br><span class="mini" id="mcontaestado"></span></div>
-<div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
+<div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="irParaNumeros()" title="gerenciar os números que enviam (aba Números)">📱 Números</button><button class="mbtn" onclick="trocarCelular()" title="desloga a conta atual para parear outro celular">Deslogar e parear outro</button></div></div>
 
 <div class="mrow">
 <div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
@@ -3785,9 +3803,19 @@ async function carregarContaMonitor(){
     const d=await (await fetch('/api/monitor/conta')).json();
     const ok=d.estado==='open';
     $('mcontalabel').textContent='Conta WhatsApp: '+(d.nome||d.jid||'—')+(d.jid?' ('+d.jid.replace(/@.*/,'')+')':'');
-    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+esc(d.estado||'?'))+' • instância '+esc(d.instancia);
+    const r=d.remetente||{modo:'automatico',elegiveis:[]};
+    let envio;
+    if(r.modo==='fixo'){
+      envio='Envio: <b>fixo</b> em <b>'+esc(r.fixada||'?')+'</b> (aba Números → Remetente por fluxo)';
+    }else if((r.elegiveis||[]).length){
+      envio='Envio: <b>automático</b> — rodízio entre '+r.elegiveis.length+' número(s) liberado(s) para Monitor: '+r.elegiveis.map(function(i){return esc(i.nome);}).join(', ');
+    }else{
+      envio='<span style="color:var(--danger-tx)">Envio: <b>nenhum número liberado para Monitor</b> — ative a permissão na aba Números</span>';
+    }
+    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+esc(d.estado||'?'))+' • '+envio+'<br><span class="mini">operações de serviço (adicionar contatos): '+esc(d.instancia)+'</span>';
   }catch(e){}
 }
+function irParaNumeros(){ location.hash='#/numeros'; }
 async function carregarGruposSelects(forcar){
   $('mgruposinfo').textContent='buscando grupos… (a Evolution leva 10-30s; se o WhatsApp limitar, mostramos a última lista salva)';
   try{

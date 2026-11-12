@@ -2807,3 +2807,41 @@ pela aprovação do operador.
     após a detecção" é cumprido ao pé da letra).
 - **Próximo:** revisão multidimensional (corretude, legibilidade, arquitetura, segurança,
   performance) e merge em `develop`; depois, promoção a `main` no release.
+
+## 2026-11-12 — Monitor: remetente automático visível na aba Monitor (fix)
+
+- **Demanda (operador):** "Monitor não estou conseguindo mudar o celular para envio, deixar como
+  automático a escolha do que está disponível na configuração do Número."
+- **Diagnóstico:** o envio do Monitor **já era automático** — `src/monitor/fila.ts` e
+  `src/monitor/webhook.ts` chamam `enviarParaGrupo({ fluxo: "monitor" })` sem `instancia`, então o
+  remetente sai de `proximaInstancia("monitor")` (rodízio ponderado entre os números **ativos, não
+  pausados e com permissão `monitor`** na aba Números). O problema era de **visibilidade e de
+  controle**:
+  1. a aba Monitor mostrava "instância X" usando `instanciaParaServico()` — a instância de
+     **serviço** (operações de grupo), que **não é** a remetente;
+  2. o único controle de remetente do Monitor ficava escondido na aba Números
+     ("Remetente por fluxo → Monitor");
+  3. o botão "📱 Trocar celular" na aba Monitor **desloga a conta** (`/api/monitor/desconectar`) —
+     ação destrutiva, não um seletor de remetente.
+- **Correção (sem mudar a política de envio):**
+  - `src/manager/server.ts` — `GET /api/monitor/conta` passa a devolver `remetente`:
+    `{ modo: "automatico" | "fixo", fixada, elegiveis: [{ instancia, nome, peso }] }`
+    (elegíveis = ativos, não pausados, com permissão `monitor`).
+  - Aba Monitor: a linha "Conta WhatsApp" agora mostra **quem envia** — "Envio: automático —
+    rodízio entre N número(s) liberado(s) para Monitor: <nomes>", ou "Envio: fixo em <nome>", ou
+    aviso em vermelho quando **nenhum** número está liberado para o Monitor. A instância de serviço
+    continua visível, rotulada como "operações de serviço (adicionar contatos)".
+  - Botões: "📱 Números" (navega para a aba Números, onde ficam permissões/pausa/override) e o
+    botão destrutivo relabelado para "Deslogar e parear outro" (com `title` explicando).
+- **Evidências:**
+  - `npm run build` ✅ · `npm test` **300/300** ✅ · `src/manager/pagina.test.ts` 3/3 ✅ (JS inline válido).
+  - Manager subido com `ALCANCE_DATA_DIR` temporário e Evolution **inalcançável** (`EVO_URL=http://127.0.0.1:1`):
+    `/api/monitor/conta` devolveu `remetente.modo="automatico"` com **só o Celular 1** elegível
+    (Celular 2 sem permissão `monitor`, Celular 3 pausado) — filtro correto.
+  - Override fixado via `POST /api/instancias/override` → `modo="fixo"`, `fixada` preenchida;
+    override limpo → volta a `automatico`.
+  - Nenhuma alteração na política de envio, no rodízio nem nas permissões; nenhum envio real;
+    Evolution API intocada; sem deploy/rebuild.
+- **Pendência conhecida:** a aba Monitor não tem (e não ganhou) seletor manual de remetente — o
+  controle continua sendo a aba Números ("Remetente por fluxo → Monitor"), por decisão do operador
+  ("deixar como automático").
