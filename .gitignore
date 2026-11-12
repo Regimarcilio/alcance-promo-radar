@@ -13,3 +13,6 @@ cookie.txt
 migracao-*.tar.gz*
 links_categorias.txt
 logs/
+
+# artefatos de sessao do playwright
+.playwright-mcp/

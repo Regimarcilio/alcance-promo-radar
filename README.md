@@ -64,6 +64,7 @@ Além do monitor, o painel oferece **Piloto automático** (busca e publica ofert
 | **Contas & vínculos** | Etiquetas de afiliado, mapa categoria → conta/grupo e grupos padrão. |
 | **Cupons** | Cupons do Mercado Livre aplicados à mensagem. |
 | **Rastreio** | Histórico de publicações com o link exato publicado, contador total real e exportação CSV. |
+| **Mensageria** | Camada interna de broker: envelope versionado, **ACK real**, retry com backoff, **DLQ**, idempotência e tópicos de eventos. |
 | **Segurança** | Login com sessão, 2FA por WhatsApp no 1º acesso, rate-limit, auditoria e headers restritivos. |
 | **Observabilidade** | `/healthz`, `/readyz`, logs estruturados e métricas Prometheus em `/metrics`. |
 
@@ -201,6 +202,29 @@ O envio é distribuído entre os números cadastrados, reduzindo o risco de bloq
   (pausado, sem permissão ou desconectado), o sistema volta ao automático e registra aviso.
 - **Proteções**: janela comercial, variação de tempo, anti-repetição e descarte de instâncias
   "zumbis" que respondem `open` mas falham no envio.
+- **Por campanha**: no painel Clientes, cada campanha pode fixar o número que envia as suas
+  mensagens; se o número fixado cair, o envio volta ao rodízio com aviso.
+
+## Mensageria
+
+Camada interna de comunicação entre aplicações (produtor → broker → consumidor), com semântica de
+broker — ver o [ADR-011](docs/04-ADRs/ADR-011-mensageria.md).
+
+- **Envelope padronizado**: `id`, `tipo`, `versao`, `timestamp`, `correlationId`, `chave`, `payload`.
+- **ACK real**: a mensagem só sai da fila **depois** de processada — falha não perde mais envio.
+- **Retry com backoff exponencial e jitter** (só erros transitórios) e **Dead Letter Queue** para o
+  que falhou de vez, com o motivo registrado.
+- **Idempotência** por chave de negócio (`${disparoId}:${jid}`), para que reentrega não duplique
+  mensagem ao cliente.
+- **Tópicos (Pub/Sub)**: eventos como `oferta.recebida`, `disparo.criado`, `instancia.desconectada`,
+  com fila própria por assinante.
+- **Rastreio**: `correlationId` atravessa o fluxo (webhook → fila → envio → evento) e aparece nos
+  logs estruturados.
+- **Broker substituível**: hoje o adapter é de arquivo (`data/messaging/`); a interface permite
+  trocar por RabbitMQ/Kafka sem tocar em produtores e consumidores.
+
+APIs: `GET /api/mensageria/stats`, `GET /api/mensageria/filas`, `GET /api/mensageria/dlq`,
+`GET /api/mensageria/eventos` e `POST /api/mensageria/dlq/reprocessar`.
 
 ## Usando o painel
 
@@ -218,7 +242,7 @@ O painel reúne os fluxos em abas: **Piloto**, **Monitor**, **Clientes**, **Cont
 ```bash
 npm run typecheck        # tsc --noEmit
 npm run build            # compila para dist/
-npm test                 # 207 testes (node:test)
+npm test                 # 273 testes (node:test)
 npm run test:coverage    # cobertura experimental do node:test
 npm run smoke:manager    # sobe o manager com estado temporário e valida o gate
 ```
@@ -230,6 +254,7 @@ push/PR para `develop` e `main`.
 
 ```
 src/manager/    painel HTTP, autenticação, login e rotas da API
+src/messaging/  camada de mensageria: envelope, broker, DLQ, idempotência, tópicos
 src/monitor/    webhook, parser, transformação, fila, dedup e estado
 src/wa/         dispatch, providers Evolution e rotação de números
 src/clientes/   contatos, listas e campanhas de disparo
@@ -277,8 +302,10 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --bu
 
 - [`docs/00-INDICE.md`](docs/00-INDICE.md) — porta de entrada: o que é vigente, histórico ou planejado.
 - [`docs/SRS-v0.4.md`](docs/SRS-v0.4.md) — requisitos vigentes com rastreabilidade RF → código → teste.
+- [`docs/SRS-v0.4-delta-mensageria.md`](docs/SRS-v0.4-delta-mensageria.md) — delta da camada de Mensageria (RF-057 a RF-061).
 - [`docs/03-arquitetura-e-uml.md`](docs/03-arquitetura-e-uml.md) — arquitetura e diagramas.
-- [`docs/04-ADRs/`](docs/04-ADRs/) — decisões arquiteturais (ADR-001 a ADR-010).
+- [`docs/04-ADRs/`](docs/04-ADRs/) — decisões arquiteturais (ADR-001 a ADR-011).
+- [`docs/prototipos/mensageria/`](docs/prototipos/mensageria/) — protótipo navegável da tela Mensageria (filas, DLQ e Reprocessar).
 - [`docs/13-auth-spec.md`](docs/13-auth-spec.md) — autenticação e checklist de segurança.
 - [`docs/dev-log.md`](docs/dev-log.md) — diário de bordo com evidências por entrega.
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes (Keep a Changelog + SemVer).
