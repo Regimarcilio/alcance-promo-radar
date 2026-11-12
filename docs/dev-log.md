@@ -2533,3 +2533,22 @@ imediata de toda demanda aberta.
   existentes de `metrics.test.ts` passam sem mudança).
 - **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
 - **Próximo:** #53 (protótipo da tela Mensageria) e #54 (UI) — fora do escopo deste programa.
+
+## 2026-11-11 — Fechamento do épico #47 (Mensageria) — @master — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** fechar o programa de Mensageria (issues #48–#52) com SRS, índice e status do épico.
+- **Branch:** ISSUE · **PR:** #63 (documentação de fechamento)
+- **Entregas:** #48 → PR #55 · #49 → PR #57 · #50 → PR #58 + **PR #60** (completa — o squash do
+  #58 ficou incompleto e o PR #59 foi um merge vazio) · #51 → PR #61 · #52 → PR #62.
+- **Documentação:**
+  - `docs/SRS-v0.4-delta-mensageria.md` (novo): RF-057–RF-061 e RN-028–RN-032 da camada de
+    Mensageria, escopo IN/OUT, endpoints novos, matriz de rastreabilidade, evidência e **premissas**.
+  - `docs/SRS-v0.4.md`: ponteiro para o delta.
+  - `docs/00-INDICE.md`: linha do delta + linha do ADR-011.
+  - `docs/04-ADRs/README.md`: ADR-011 com RF/RN e status (épico #47: #48–#52 entregues).
+- **Fora do escopo (decisão do operador):** #53 (protótipo da tela) e #54 (UI) **não** foram
+  implementados — dependem de aprovação do operador.
+- **Testes:** 273/273 (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Pendências operacionais:** (1) rebuild/recreate do container do manager para aplicar o `dist`
+  novo (o container roda o `dist` embutido na imagem); (2) pareamento por QR das instâncias
+  (`device_removed`) para retomar a fila; (3) sem envio real validado (instâncias deslogadas e fila
+  pausada) — a prova de não-regressão é por teste unitário com Evolution mockada.
