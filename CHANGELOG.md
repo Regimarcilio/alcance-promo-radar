@@ -6,6 +6,31 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 [SemVer](https://semver.org/lang/pt-BR/). As versões anteriores a 0.8.0 são reconstruídas a partir
 do histórico do git (`git log`), sem tags formais.
 
+## [0.10.1] — 2026-11-12
+
+Release de correção da **view Mensageria** (que passou a rodar em produção) e da preparação do
+repositório para publicação pública.
+
+### Adicionado
+- **View "Mensageria"** no painel (#54, PR #71): 7 KPIs, tabelas de filas por tipo e de DLQ, ações
+  **Reprocessar** / **Reprocessar tudo** / **Descartar**, gaveta com a trilha de correlação
+  (`correlationId`), tópicos/assinantes e eventos recentes.
+- **Endpoints de operação da DLQ**: `POST /api/mensageria/dlq/descartar` (destrutivo, auditado) e
+  `POST /api/mensageria/dlq/reprocessar-lote` (só reenfileira — o ritmo continua 1 a cada
+  `CLIENTES_INTERVALO_S`, sem rajada), além do filtro `?correlationId=` nos eventos.
+- **Templates de issue** para contribuições (`#33`, PR #74): `bug_report.md` (ambiente, passos para
+  reproduzir, esperado × observado, evidências sem PII), `feature_request.md` (problema, escopo,
+  critério de aceite) e `config.yml` com o link privado de **vulnerabilidade de segurança**.
+- **LICENSE proprietário** — todos os direitos reservados, coerente com a seção Licença do README.
+
+### Correções
+- **`/healthz` reportava uma versão literal fixo** (`"0.8.0"`); agora lê do `package.json`
+  (`src/config/versao.ts`).
+
+### Testes
+- **282 testes** (node:test), incluindo os casos da API de mensageria com default-deny, reprocessar,
+  descartar e reprocessamento em lote.
+
 ## [Unreleased]
 
 ### Correções
