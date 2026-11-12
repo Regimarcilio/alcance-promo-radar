@@ -9,14 +9,19 @@
  * Semântica implementada aqui:
  * - `publish` empilha; `ack` remove (sucesso); `nack` devolve à fila com
  *   `tentativas + 1` (falha). A política de retry/DLQ entra pela gancho
- *   `onNack` (issue #49) — o default é apenas devolver à fila.
+ *   `politicaNack` (issue #49) — o default é apenas devolver à fila.
  * - A mensagem **só sai da fila no ACK** — falha não perde nada.
  */
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico, lerJson } from "../store/json.js";
+import { caminhoFila, caminhoStats, dirMensageria, nomeSeguro } from "./caminhos.js";
+import { gravarDlq, lerDlq, registrarDlq, removerDlq } from "./dlq.js";
+import { politicaPadrao } from "./politica.js";
 import type { Envelope } from "./envelope.js";
+
+export type { ItemDLQ } from "./dlq.js";
+import type { ItemDLQ } from "./dlq.js";
 
 export interface QueueStats {
   pendentes: number;
@@ -25,17 +30,6 @@ export interface QueueStats {
   dlq: number;
   /** ISO do envelope pendente mais antigo (null se a fila está vazia) */
   maisAntigaEm: string | null;
-}
-
-export interface ItemDLQ {
-  id: string;
-  tipo: string;
-  envelope: Envelope;
-  motivo: string;
-  ultimoErro: string;
-  tentativas: number;
-  ultimaTentativaEm: string;
-  origem: string | null;
 }
 
 export interface Broker {
@@ -49,9 +43,15 @@ export interface Broker {
   stats(tipo: string): QueueStats;
   /**
    * Envelopes pendentes de um tipo (extensão opcional do port — usada pela
-   * migração do legado e pela inspeção de diagnóstico).
+   * migração do legado, pelos consumidores e pela inspeção de diagnóstico).
    */
   pendentes?(tipo: string): Envelope[];
+  /** substitui o envelope pelo id (atualizar estado sem ACK) */
+  atualizar?(id: string, env: Envelope): Promise<void>;
+  /** remove o envelope da fila sem contar como processado (cancelamento) */
+  remover?(id: string): Promise<void>;
+  /** limpa a fila do tipo e devolve quantos itens foram removidos */
+  limpar?(tipo: string): Promise<number>;
 }
 
 /** Contexto entregue à política de `nack` (issue #49 pluga retry/DLQ aqui). */
@@ -82,26 +82,25 @@ interface Contadores {
   falhas: number;
 }
 
-/** Nome de arquivo seguro para um tipo de mensagem. */
-function nomeSeguro(tipo: string): string {
-  return String(tipo ?? "desconhecido").replace(/[^A-Za-z0-9._-]/g, "_") || "desconhecido";
-}
-
 export class FileBroker implements Broker {
   private readonly dir: string;
   private readonly politicaNack: PoliticaNack;
 
   constructor(op: OpcoesFileBroker = {}) {
-    this.dir = op.dir ?? join(dataDirAtual(), "messaging");
-    this.politicaNack = op.politicaNack ?? (async (ctx) => ctx.reenfileirar(ctx.envelope));
+    this.dir = op.dir ?? dirMensageria();
+    // Default: retry com backoff (erro transitório) ou DLQ (permanente/
+    // tentativas esgotadas) — a política padrão da camada de Mensageria.
+    this.politicaNack = op.politicaNack ?? politicaPadrao();
+  }
+
+  /** Diretório base das filas (usado para validar o broker global). */
+  get diretorio(): string {
+    return this.dir;
   }
 
   // ---------- caminhos ----------
   private arquivoFila(tipo: string): string {
     return join(this.dir, `${nomeSeguro(tipo)}.json`);
-  }
-  private arquivoDlq(tipo: string): string {
-    return join(this.dir, `dlq-${nomeSeguro(tipo)}.json`);
   }
   private arquivoStats(tipo: string): string {
     return join(this.dir, `stats-${nomeSeguro(tipo)}.json`);
@@ -116,15 +115,6 @@ export class FileBroker implements Broker {
 
   private salvarFila(tipo: string, itens: Envelope[]): void {
     gravarJsonAtomico(this.arquivoFila(tipo), itens);
-  }
-
-  private lerDlq(tipo: string): ItemDLQ[] {
-    const raw = lerJson<any>(this.arquivoDlq(tipo), []);
-    return Array.isArray(raw) ? (raw as ItemDLQ[]) : [];
-  }
-
-  private salvarDlq(tipo: string, itens: ItemDLQ[]): void {
-    gravarJsonAtomico(this.arquivoDlq(tipo), itens);
   }
 
   private lerStats(tipo: string): Contadores {
@@ -176,7 +166,7 @@ export class FileBroker implements Broker {
 
   /**
    * Processa as mensagens pendentes uma a uma: sucesso → `ack`, erro →
-   * `nack` (nunca descarte). Semântica de entrega completa fica na #49.
+   * `nack` (nunca descarte). A política de retry/DLQ entra no `nack`.
    */
   consume<T>(tipo: string, handler: (env: Envelope<T>) => Promise<void>): void {
     void (async () => {
@@ -211,6 +201,7 @@ export class FileBroker implements Broker {
     const actualizado: Envelope = {
       ...atual,
       tentativas: Number(atual.tentativas ?? 0) + 1,
+      ultimoErro: erro,
     };
     const c = this.lerStats(achado.tipo);
     c.falhas += 1;
@@ -231,9 +222,7 @@ export class FileBroker implements Broker {
         this.salvarFila(achado.tipo, [...atuais, env]);
       },
       paraDlq: async (item) => {
-        const dlq = this.lerDlq(achado.tipo);
-        dlq.push(item);
-        this.salvarDlq(achado.tipo, dlq);
+        registrarDlq(item);
       },
     });
   }
@@ -243,24 +232,17 @@ export class FileBroker implements Broker {
   }
 
   dlq(tipo: string): ItemDLQ[] {
-    return this.lerDlq(tipo);
+    return lerDlq(tipo);
   }
 
   /** Reprocessa um item da DLQ: ele volta para a fila (tentativas zeradas). */
   async reprocessar(id: string): Promise<void> {
-    for (const tipo of this.tiposExistentes()) {
-      const dlq = this.lerDlq(tipo);
-      const item = dlq.find((d) => d.id === id);
-      if (!item) continue;
-      this.salvarDlq(
-        tipo,
-        dlq.filter((d) => d.id !== id)
-      );
-      const env: Envelope = { ...item.envelope, tentativas: 0 };
-      const itens = this.lerFila(tipo).filter((e) => e.id !== env.id);
-      this.salvarFila(tipo, [...itens, env]);
-      return;
-    }
+    const item = removerDlq(id);
+    if (!item) return;
+    const env: Envelope = { ...item.envelope, tentativas: 0, ultimoErro: undefined };
+    delete env.ultimoErro;
+    const itens = this.lerFila(env.tipo).filter((e) => e.id !== env.id);
+    this.salvarFila(env.tipo, [...itens, env]);
   }
 
   stats(tipo: string): QueueStats {
@@ -274,7 +256,7 @@ export class FileBroker implements Broker {
       pendentes: pendentes.length,
       processadas: c.processadas,
       falhas: c.falhas,
-      dlq: this.lerDlq(tipo).length,
+      dlq: this.dlq(tipo).length,
       maisAntigaEm: maisAntiga,
     };
   }
@@ -284,10 +266,37 @@ export class FileBroker implements Broker {
     return this.lerFila(tipo);
   }
 
-  /** Escreve um envelope direto na fila (usado pela migração e pela DLQ). */
-  async enfileirar(env: Envelope): Promise<void> {
-    const itens = this.lerFila(env.tipo).filter((e) => e.id !== env.id);
-    this.salvarFila(env.tipo, [...itens, env]);
+  /** Substitui o envelope pelo id (estado novo, sem ACK). */
+  async atualizar(id: string, env: Envelope): Promise<void> {
+    const achado = this.localizar(id);
+    if (!achado) return;
+    const itens = this.lerFila(achado.tipo);
+    const i = itens.findIndex((e) => e.id === id);
+    if (i < 0) return;
+    itens[i] = env;
+    this.salvarFila(achado.tipo, itens);
+  }
+
+  /** Remove o envelope da fila sem contar como processado. */
+  async remover(id: string): Promise<void> {
+    const achado = this.localizar(id);
+    if (!achado) return;
+    this.salvarFila(
+      achado.tipo,
+      this.lerFila(achado.tipo).filter((e) => e.id !== id)
+    );
+  }
+
+  /** Limpa a fila do tipo (devolve quantos itens saíram). */
+  async limpar(tipo: string): Promise<number> {
+    const itens = this.lerFila(tipo);
+    this.salvarFila(tipo, []);
+    return itens.length;
+  }
+
+  /** Grava direto na DLQ (usado por filas que não usam o broker, como a do Monitor). */
+  async deadLetter(item: ItemDLQ): Promise<void> {
+    gravarDlq(item.tipo, [...lerDlq(item.tipo), item]);
   }
 }
 
@@ -300,8 +309,15 @@ export function setBroker(broker: Broker): void {
   brokerAtual = broker;
 }
 
-/** Broker global — cria um FileBroker padrão na primeira chamada. */
+/**
+ * Broker global — cria um FileBroker padrão na primeira chamada.
+ * Se o `ALCANCE_DATA_DIR` mudar (teste/smoke), o FileBroker é recriado para
+ * não escrever no diretório do teste anterior.
+ */
 export function getBroker(): Broker {
+  if (brokerAtual instanceof FileBroker && brokerAtual.diretorio !== dirMensageria()) {
+    brokerAtual = null;
+  }
   if (!brokerAtual) brokerAtual = new FileBroker();
   return brokerAtual;
 }
@@ -320,16 +336,19 @@ export interface OpcaoMigracao {
   arquivo: string;
   /** converte um item legado em envelope */
   mapear: (item: any) => Envelope;
+  /** ids já migrados antes (evita reimportar item já processado) */
+  jaMigrados?: Set<string>;
 }
 
 /**
  * Converte itens legados (sem envelope) em envelopes na fila do broker.
  *
- * - **Idempotente**: item cujo id de envelope já está na fila não é
- *   republicado (o `mapear` deve usar o id legado como id do envelope).
- * - **Não apaga o arquivo legado**: até a fila de Clientes migrar para o
- *   broker (issue #49) o store legado ainda é lido pelo worker — apagar
- *   aqui perderia a fila viva.
+ * - **Idempotente**: item cujo id de envelope já está na fila (ou no conjunto
+ *   `jaMigrados`) NÃO é republicado — o `mapear` deve usar o id legado como id
+ *   do envelope para garantir isso.
+ * - **Não apaga o arquivo legado**: até a fila de Clientes consumir do broker
+ *   o store legado ainda é lido; apagar aqui perderia a fila viva. Quem migra
+ *   esvazia o store legado **após** a gravação bem-sucedida.
  *
  * Devolve quantos itens foram migrados.
  */
@@ -340,6 +359,7 @@ export function migrarLegado(broker: Broker, op: OpcaoMigracao): number {
   const itens: any[] = Array.isArray(raw) ? raw : Array.isArray(raw.itens) ? raw.itens : [];
   if (!itens.length) return 0;
   const jaExistentes = new Set((broker.pendentes?.(op.tipo) ?? []).map((e) => e.id));
+  for (const id of op.jaMigrados ?? []) jaExistentes.add(id);
   let migrados = 0;
   for (const item of itens) {
     const env = op.mapear(item);

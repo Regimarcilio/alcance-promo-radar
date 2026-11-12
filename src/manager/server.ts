@@ -40,6 +40,7 @@ import {
   duplicarDisparo, type MidiaDisparo, textoComLink, registrarResultadoDisparo,
 } from "../clientes/disparos.js";
 import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
+import { itensDlq, reprocessarMensagem, resumoFilas } from "../messaging/filas.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { resolverMidia } from "./midia.js";
 import { logger } from "../observability/logger.js";
@@ -1271,7 +1272,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       const b = JSON.parse(await lerCorpo(req, 8 * 1024 * 1024));
       const imagem = String(b.imagem ?? "");
       if (imagem) validarImagem(imagem);
-      const pendentes = enfileirarCampanha({
+      const pendentes = await enfileirarCampanha({
         texto: String(b.texto ?? ""),
         imagem,
         jids: Array.isArray(b.jids) ? b.jids.map(String) : [],
@@ -1283,7 +1284,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/clientes/fila/limpar") {
-    json(200, { ok: true, removidos: limparFilaClientes(), fila: estadoFilaClientes() });
+    json(200, { ok: true, removidos: await limparFilaClientes(), fila: estadoFilaClientes() });
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/clientes/fila/pausar") {
@@ -1294,6 +1295,31 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
   if (req.method === "POST" && url.pathname === "/api/clientes/fila/retomar") {
     retomarFilaClientes();
     json(200, { ok: true, fila: estadoFilaClientes() });
+    return;
+  }
+  // ---------- Mensageria (filas, DLQ e reprocessamento) ----------
+  if (req.method === "GET" && url.pathname === "/api/mensageria/filas") {
+    json(200, { filas: resumoFilas() });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/mensageria/dlq") {
+    const tipo = url.searchParams.get("tipo");
+    json(200, { itens: itensDlq(tipo) });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/mensageria/dlq/reprocessar") {
+    try {
+      const b = JSON.parse(await lerCorpo(req));
+      const id = String(b.id ?? "").trim();
+      if (!id) {
+        json(400, { erro: "informe o id do item" });
+        return;
+      }
+      const ok = await reprocessarMensagem(id);
+      json(ok ? 200 : 404, ok ? { ok: true } : { erro: "item não encontrado na DLQ" });
+    } catch (e: any) {
+      json(400, { erro: String(e?.message ?? e) });
+    }
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/clientes/midia") {
@@ -1382,7 +1408,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       } else {
         // Fluxo normal: enfileira individualmente
         try {
-          enfileirarCampanha({
+          await enfileirarCampanha({
             texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
             instancia: d.instancia ?? null,
           });
@@ -1418,7 +1444,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
           patch.instancia = b.instancia === null ? null : String(b.instancia ?? "");
         }
         const d = editarDisparo(id, patch);
-        const atualizados = atualizarItensDaFila(id, {
+        const atualizados = await atualizarItensDaFila(id, {
           texto: d.texto,
           link: d.link,
           midia: d.midia,
@@ -1431,7 +1457,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       return;
     }
     if (req.method === "DELETE" && !acao) {
-      const removidos = removerItensDaFila(id);
+      const removidos = await removerItensDaFila(id);
       const ok = excluirDisparo(id);
       json(ok ? 200 : 404, ok ? { ok: true, removidos } : { erro: "disparo não encontrado" });
       return;
@@ -1439,7 +1465,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     if (req.method === "POST" && acao === "/duplicar") {
       try {
         const d = duplicarDisparo(id);
-        enfileirarCampanha({
+        await enfileirarCampanha({
           texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
         });
         json(200, { ok: true, disparo: d, fila: estadoFilaClientes() });

@@ -5,8 +5,11 @@
  * (`GET /group/participants/{instance}?groupJid=`), deduplicados por telefone,
  * + cadastro manual. O disparo usa o dispatch normal (rotação de números).
  *
- * Persistência: data/clientes.json (contatos/listas) e data/clientes-fila.json
- * (campanha em andamento — sobrevive a restart).
+ * Persistência: data/clientes.json (contatos/listas). A campanha em andamento
+ * vive na **fila de Mensageria** (`data/messaging/cliente.enviar.json`, um
+ * envelope por contato) e o estado da fila (contadores/pausa) em
+ * `data/clientes-estado.json` — sobrevive a restart e **não perde mensagem**
+ * (ACK só depois do envio, issue #49).
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
@@ -22,12 +25,30 @@ import {
   textoComLink,
   type MidiaDisparo,
 } from "./disparos.js";
+import {
+  TIPO_CLIENTE,
+  atualizarEstado,
+  atualizarPorDisparo,
+  confirmar as confirmarMensagem,
+  estado as estadoFila,
+  enfileirar as enfileirarMensagens,
+  falhar as falharMensagem,
+  liberarReservasAntigas,
+  limpar as limparFila,
+  migrarLegadoSeNecessario,
+  pendentes as envelopesPendentes,
+  removerPorDisparo,
+  reservarProximo,
+  totalPendentes,
+  type EnvelopeCliente,
+  type ItemCampanhaMensagem,
+} from "./fila.js";
+import { getBroker } from "../messaging/broker.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
 const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const file = join(dataDir, "clientes.json");
-const filaFile = join(dataDir, "clientes-fila.json");
 
 export interface Contato {
   jid: string;
@@ -51,36 +72,13 @@ interface Store {
   ultimoSync: string | null;
 }
 
-export interface ItemCampanha {
-  id: string;
-  jid: string;
-  nome: string;
-  texto: string;
-  /** caminho local da mídia (data/midia/...) ou URL */
-  imagem: string;
-  /** disparo de origem (grid com CRUD em disparos.ts) */
-  disparoId?: string | null;
-  /** mídia tipada (imagem/vídeo) do upload */
-  midia?: MidiaDisparo | null;
-  /**
-   * Número que envia esta campanha (issue #45).
-   * null/ausente = Automático (rodízio do fluxo "disparo").
-   */
-  instancia?: string | null;
-  criadoEm: string;
-}
-
-interface StoreFila {
-  itens: ItemCampanha[];
-  ultimoEnvio: string | null;
-  enviados: number;
-  erros: number;
-  /** true quando a fila está pausada pelo usuário */
-  pausado: boolean;
-}
+/**
+ * Item da campanha (payload do envelope `cliente.enviar`).
+ * A fila vive no broker — ver `src/clientes/fila.ts`.
+ */
+export type ItemCampanha = ItemCampanhaMensagem;
 
 let cache: Store | null = null;
-let cacheFila: StoreFila | null = null;
 
 function carregar(): Store {
   try {
@@ -104,35 +102,6 @@ function salvar(s: Store): void {
     const tmp = `${file}.tmp`;
     writeFileSync(tmp, JSON.stringify(s, null, 2));
     renameSync(tmp, file);
-  } catch {
-    /* ignore */
-  }
-}
-
-function carregarFila(): StoreFila {
-  try {
-    if (!existsSync(filaFile)) return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0, pausado: false };
-    const raw: any = JSON.parse(readFileSync(filaFile, "utf8"));
-    cacheFila = {
-      itens: Array.isArray(raw?.itens) ? raw.itens : [],
-      ultimoEnvio: raw?.ultimoEnvio ?? null,
-      enviados: Number(raw?.enviados ?? 0),
-      erros: Number(raw?.erros ?? 0),
-      pausado: Boolean(raw?.pausado),
-    };
-    return cacheFila;
-  } catch {
-    return cacheFila ?? { itens: [], ultimoEnvio: null, enviados: 0, erros: 0, pausado: false };
-  }
-}
-
-function salvarFila(s: StoreFila): void {
-  try {
-    mkdirSync(dataDir, { recursive: true });
-    cacheFila = s;
-    const tmp = `${filaFile}.tmp`;
-    writeFileSync(tmp, JSON.stringify(s, null, 2));
-    renameSync(tmp, filaFile);
   } catch {
     /* ignore */
   }
@@ -400,25 +369,28 @@ export function intervaloClientes(): number {
 }
 
 export function estadoFilaClientes(): { pendentes: number; enviados: number; erros: number; intervalo: number; pausado: boolean; horarioComercial: boolean } {
-  const s = carregarFila();
-  return { pendentes: s.itens.length, enviados: s.enviados, erros: s.erros, intervalo: intervaloClientes(), pausado: s.pausado, horarioComercial: dentroDaJanelaComercial() };
+  const s = estadoFila();
+  return {
+    pendentes: totalPendentes(),
+    enviados: s.enviados,
+    erros: s.erros,
+    intervalo: intervaloClientes(),
+    pausado: s.pausado,
+    horarioComercial: dentroDaJanelaComercial(),
+  };
 }
 
 export function pausarFilaClientes(): void {
-  const s = carregarFila();
-  if (!s.pausado) {
-    s.pausado = true;
-    salvarFila(s);
-  }
+  const s = estadoFila();
+  if (!s.pausado) atualizarEstado({ pausado: true });
 }
 
 /** Retoma a fila de clientes pausada. */
 export function retomarFilaClientes(): void {
-  const s = carregarFila();
+  const s = estadoFila();
   if (s.pausado) {
-    s.pausado = false;
-    s.ultimoEnvio = null; // libera o próximo imediatamente
-    salvarFila(s);
+    // libera o próximo imediatamente
+    atualizarEstado({ pausado: false, ultimoEnvio: null });
   }
 }
 
@@ -436,18 +408,20 @@ export interface CampanhaArgs {
   instancia?: string | null;
 }
 
-/** Coloca 1 mensagem por contato na fila (não envia na hora). */
-export function enfileirarCampanha(args: CampanhaArgs): number {
+/**
+ * Coloca 1 mensagem por contato na fila (não envia na hora).
+ * Cada item vira um envelope `cliente.enviar` no broker.
+ */
+export async function enfileirarCampanha(args: CampanhaArgs): Promise<number> {
   const texto = textoComLink(args.texto, args.link);
   const midia = args.midia ?? null;
   if (!texto && !midia) throw new Error("escreva a propaganda ou escolha uma mídia");
   const jids = [...new Set((args.jids ?? []).filter(Boolean))];
   if (!jids.length) throw new Error("selecione pelo menos 1 contato");
-  const s = carregarFila();
   const contatos = carregar().contatos;
-  for (const jid of jids) {
+  const itens: ItemCampanhaMensagem[] = jids.map((jid) => {
     const c = contatos.find((x) => x.jid === jid);
-    s.itens.push({
+    return {
       id: randomUUID(),
       jid,
       nome: c?.nome || c?.telefone || jid.split("@")[0],
@@ -458,23 +432,20 @@ export function enfileirarCampanha(args: CampanhaArgs): number {
       // número fixado na campanha (copiado do disparo) — null = automático
       instancia: String(args.instancia ?? "").trim() || null,
       criadoEm: new Date().toISOString(),
-    });
-  }
-  salvarFila(s);
-  return s.itens.length;
+    };
+  });
+  // garante que o store legado foi importado antes de publicar (idempotente)
+  await migrarLegadoSeNecessario();
+  return enfileirarMensagens(itens);
 }
 
 /** Remove da fila tudo que pertence a um disparo (excluir/cancelar). */
-export function removerItensDaFila(disparoId: string): number {
-  const s = carregarFila();
-  const n = s.itens.length;
-  s.itens = s.itens.filter((i) => i.disparoId !== disparoId);
-  if (s.itens.length !== n) salvarFila(s);
-  return n - s.itens.length;
+export async function removerItensDaFila(disparoId: string): Promise<number> {
+  return removerPorDisparo(disparoId);
 }
 
 /** Atualiza texto/link/mídia dos itens ainda na fila (edição de pendente). */
-export function atualizarItensDaFila(
+export async function atualizarItensDaFila(
   disparoId: string,
   patch: {
     texto: string;
@@ -483,33 +454,20 @@ export function atualizarItensDaFila(
     /** troca o número remetente dos itens ainda na fila (issue #45) */
     instancia?: string | null;
   },
-): number {
-  const s = carregarFila();
-  const texto = textoComLink(patch.texto, patch.link);
-  let n = 0;
-  for (const item of s.itens) {
-    if (item.disparoId !== disparoId) continue;
-    item.texto = texto;
-    if (patch.midia !== undefined) {
-      item.midia = patch.midia;
-      item.imagem = patch.midia?.arquivo ?? "";
-    }
-    if (patch.instancia !== undefined) {
-      item.instancia = String(patch.instancia ?? "").trim() || null;
-    }
-    n++;
-  }
-  if (n) salvarFila(s);
-  return n;
+): Promise<number> {
+  return atualizarPorDisparo(disparoId, {
+    texto: textoComLink(patch.texto, patch.link),
+    midia: patch.midia,
+    instancia: patch.instancia,
+  });
 }
 
-export function limparFilaClientes(): number {
-  const s = carregarFila();
-  const n = s.itens.length;
+export async function limparFilaClientes(): Promise<number> {
   // Os disparos que tinham itens na fila viram CANCELADO no grid.
-  const ids = [...new Set(s.itens.map((i) => i.disparoId).filter(Boolean))] as string[];
-  s.itens = [];
-  salvarFila(s);
+  const ids = [
+    ...new Set(envelopesPendentes().map((e: EnvelopeCliente) => e.payload?.disparoId).filter(Boolean)),
+  ] as string[];
+  const n = await limparFila();
   for (const id of ids) cancelarDisparo(id, "fila cancelada pelo usuário");
   return n;
 }
@@ -529,12 +487,27 @@ export function intervaloClientesMsComVariacao(): number {
   return Math.max(1000, Math.round(base + variacaoMinuto + variacaoSegundos));
 }
 
-/** Libera o próximo contato se já passou o intervalo e a fila não está pausada. */
+/**
+ * Libera o próximo contato se já passou o intervalo e a fila não está pausada.
+ *
+ * SEMÂNTICA DE ACK (issue #49) — a mensagem **só sai da fila depois de ser
+ * processada com sucesso**:
+ * 1. **reserva** o item (marca `emAndamento`/`reservadoEm`) **sem removê-lo**
+ *    da fila — é isso que impede a perda de mensagem (foi assim que 206
+ *    mensagens sumiram em 10/11/2026);
+ * 2. processa (envia);
+ * 3. **ACK** → remove da fila e conta o sucesso;
+ * 4. **NACK** → devolve o item à fila com `tentativas + 1`, `ultimoErro` e
+ *    `proximaTentativaEm` (backoff) ou manda para a **DLQ**.
+ */
 export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
-  const s = carregarFila();
-  if (!s.itens.length) return null;
+  // importa o store legado uma vez (idempotente) — nada se perde na migração
+  await migrarLegadoSeNecessario();
+
+  const s = estadoFila();
+  if (!totalPendentes()) return null;
   if (s.pausado) return null;
-  
+
   // Verifica janela de envio (mantém compatibilidade se MONITOR_JANELA=0)
   if (process.env.MONITOR_JANELA !== "0") {
     if (!podeEnviarAgora()) return null;
@@ -542,14 +515,18 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     // Fallback para janela antiga
     if (!dentroDaJanelaComercial()) return null;
   }
-  
+
   const desde = s.ultimoEnvio ? Date.now() - new Date(s.ultimoEnvio).getTime() : Infinity;
   const intervaloComVariacao = intervaloClientesMsComVariacao();
   if (desde < intervaloComVariacao) return null;
 
-  const item = s.itens.shift()!;
-  s.ultimoEnvio = new Date().toISOString();
-  salvarFila(s); // sai da fila antes de tentar (não reenvia em loop)
+  // reserva o próximo item elegível (sem tirar da fila)
+  const env = await reservarProximo();
+  if (!env) return null;
+  const item = env.payload;
+
+  // ritmo: conta o envio a partir do início
+  atualizarEstado({ ultimoEnvio: new Date().toISOString() });
 
   const dry = process.env.MONITOR_DRY === "1";
   try {
@@ -564,15 +541,18 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
       mediatype: item.midia?.tipo === "video" ? "video" : undefined,
       mimetype: item.midia?.mime,
     });
-    s.enviados++;
-    salvarFila(s);
+    // ACK: só agora a mensagem sai da fila
+    await confirmarMensagem(env);
     if (item.disparoId) registrarResultadoDisparo(item.disparoId, true);
     console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId} intervalo=${Math.round(intervaloComVariacao/1000)}s`);
   } catch (e: any) {
-    s.erros++;
-    salvarFila(s);
     const msg = String(e?.message ?? e);
-    if (item.disparoId) registrarResultadoDisparo(item.disparoId, false, msg);
+    // NACK: volta para a fila (retry com backoff) ou vai para a DLQ
+    await falharMensagem(env, msg);
+    // só conta a falha no disparo quando a mensagem MORREU (DLQ): erro
+    // transitório com retry não é perda
+    const morreu = getBroker().dlq(TIPO_CLIENTE).some((i) => i.id === env.id);
+    if (morreu && item.disparoId) registrarResultadoDisparo(item.disparoId, false, msg);
     console.log(`[clientes] ERRO para ${item.nome} (${item.jid}): ${msg.slice(0, 120)}`);
   }
   return item;
@@ -583,6 +563,17 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Worker: checa a cada 5s e libera 1 contato por intervalo. */
 export function iniciarClientesWorker(tickMs = 5000): void {
   if (timer) return;
+  // boot: importa o store legado e devolve para a fila as reservas
+  // abandonadas por crash (o item NUNCA pode se perder)
+  void (async () => {
+    try {
+      await migrarLegadoSeNecessario();
+      const liberados = await liberarReservasAntigas();
+      if (liberados) console.log(`[clientes] ${liberados} item(ns) liberado(s) após crash`);
+    } catch (e: any) {
+      console.log(`[clientes] falha na recuperação da fila: ${String(e?.message ?? e).slice(0, 120)}`);
+    }
+  })();
   timer = setInterval(() => void liberarProximoCliente(), tickMs);
   if (typeof (timer as any).unref === "function") (timer as any).unref();
 }
