@@ -13,7 +13,7 @@ import { getBroker } from "./broker.js";
 import { lerDlq, tiposComDlq } from "./dlq.js";
 import type { ItemDLQ } from "./dlq.js";
 import { TIPO_CLIENTE } from "../clientes/fila.js";
-import { TIPO_MONITOR, dlqMonitor, reprocessarDlq, statsMonitor } from "../monitor/fila.js";
+import { TIPO_MONITOR, dlqMonitor, statsMonitor } from "../monitor/fila.js";
 
 export interface ResumoFila {
   tipo: string;
@@ -56,16 +56,4 @@ export function itensDlq(tipo?: string | null): ItemDLQ[] {
 /** Itens da DLQ do Monitor (fila própria, fora do broker). */
 export function dlqDoMonitor(): ItemDLQ[] {
   return dlqMonitor();
-}
-
-/**
- * Reprocessa um item da DLQ: ele volta para a fila de origem.
- * Só acontece por ação explícita do operador.
- */
-export async function reprocessarMensagem(id: string): Promise<boolean> {
-  const item = itensDlq().find((i) => i.id === id);
-  if (!item) return false;
-  if (item.tipo === TIPO_MONITOR) return reprocessarDlq(id);
-  await getBroker().reprocessar(id);
-  return true;
 }

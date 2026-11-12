@@ -59,6 +59,10 @@ export interface ItemFila {
   proximaTentativaEm?: string | null;
   /** correlação do fluxo (webhook → fila → envio → evento) */
   correlationId?: string | null;
+  /** último erro de envio (preenchido quando o item vai para a DLQ) */
+  ultimoErro?: string | null;
+  /** quantas vezes o operador reprocessou este item a partir da DLQ */
+  reprocessos?: number;
 }
 
 interface StoreFila {
@@ -462,6 +466,10 @@ export async function liberarProximo(): Promise<ItemFila | null> {
 /**
  * Reprocessa um item da DLQ do Monitor: ele volta para a fila de reenvio.
  * Só volta por ação explícita do operador.
+ *
+ * O item volta com `tentativas: 0` (o reenvio conta do zero), mas **preserva
+ * o `ultimoErro`** (auditoria) e **incrementa `reprocessos`** (quantas vezes
+ * o operador reparou a mensagem).
  */
 export function reprocessarDlq(id: string): boolean {
   const item = removerDlq(id);
@@ -470,13 +478,17 @@ export function reprocessarDlq(id: string): boolean {
   const payload = item.envelope.payload as any;
   const original = payload?.item as ItemFila | undefined;
   if (!original) return false;
+  const ultimoErro = item.ultimoErro ?? item.envelope.ultimoErro ?? null;
+  const reprocessos = Number(item.envelope.reprocessos ?? 0) + 1;
   const s = carregar();
   const existente = s.itens.find((i) => i.id === original.id);
   if (existente) {
     existente.destinos = original.destinos;
     existente.tentativas = 0;
+    existente.ultimoErro = ultimoErro;
+    existente.reprocessos = reprocessos;
   } else {
-    s.itens.push({ ...original, tentativas: 0 });
+    s.itens.push({ ...original, tentativas: 0, ultimoErro, reprocessos });
   }
   salvar(s);
   return true;

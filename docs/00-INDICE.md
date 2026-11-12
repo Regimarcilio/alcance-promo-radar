@@ -47,12 +47,13 @@
 | [`docs/15-plano-sincronizacao-docs.md`](15-plano-sincronizacao-docs.md) | 2026-10-22 | vigente | Plano de sincronização; §9 registra o que foi concluído nesta rodada e o que segue pendente. |
 | [`docs/SRS.md`](SRS.md) | v0.3 · 2026-10-17 | histórico | Substituído por [`docs/SRS-v0.4.md`](SRS-v0.4.md). Contém SQLite/Afilimax/CloudProvider/EngAI fictícios. |
 | [`docs/SRS-v0.2-delta.md`](SRS-v0.2-delta.md) | v0.2 · 2026-10-12 | histórico | Absorvido pelo SRS v0.4 (RF-015–021 e RNs correspondentes). |
-| [`docs/SRS-v0.4-delta-mensageria.md`](SRS-v0.4-delta-mensageria.md) | 2026-11-11 | vigente | Requisitos da camada de Mensageria (RF-057–061, RN-028–032): envelope, ACK/DLQ/retry, idempotência, tópicos e observabilidade. Épico #47, ADR-011. |
+| [`docs/SRS-v0.4-delta-mensageria.md`](SRS-v0.4-delta-mensageria.md) | 2026-11-12 | vigente | Requisitos da camada de Mensageria (RF-057–062, RN-028–033): envelope, ACK/DLQ/retry, idempotência, tópicos, observabilidade e o **painel da Mensageria** (descartar/reprocessar em lote). Épico #47, ADR-011. |
 | [`docs/SRS-v0.4.md`](SRS-v0.4.md) | v0.4 · 2026-10-22 | vigente | Substitui SRS v0.3 + delta v0.2. Fonte de requisitos atual. |
 | [`docs/dev-log.md`](dev-log.md) | append-only · 2026-10-22 | vigente | Diário de bordo com evidência por entrega; complementa (não substitui) o CHANGELOG. |
 | [`docs/conhecimento/whatsapp-anti-ban.md`](conhecimento/whatsapp-anti-ban.md) | 2026-11-03 | vigente | Lições aprendidas e implementação anti-bloqueio WhatsApp (janela comercial, variação de tempo, estado close, controle de fila). |
 | [`docs/prototipo/index.html`](prototipo/index.html) | 2026-10-12 | histórico | Protótipo visual original; não é o painel em produção. |
 | [`docs/prototipos/auth/README.md`](prototipos/auth/README.md) | 2026-10-20 | histórico | Protótipos de login que originaram a opção implementada (ADR-005). |
+| [`docs/prototipos/mensageria/README.md`](prototipos/mensageria/README.md) | 2026-11-12 | vigente | Protótipo **aprovado** da view Mensageria (filas + DLQ + Reprocessar) e referência visual da implementação (#54). |
 
 ## Ordem de leitura recomendada
 
