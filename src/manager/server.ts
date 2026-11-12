@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, createReadStream, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { versaoDoApp } from "../config/versao.js";
 import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
 import { listarPublicacoes, resumoRastreio, publicacoesCsv } from "../store/publicacoes.js";
@@ -210,7 +211,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
 
   // ---------- health (público, sem detalhes sensíveis) ----------
   if (metodo === "GET" && caminho === "/healthz") {
-    json(200, { ok: true, uptime: Math.floor(process.uptime()), versao: "0.8.0" });
+    json(200, { ok: true, uptime: Math.floor(process.uptime()), versao: versaoDoApp() });
     return;
   }
   if (metodo === "GET" && caminho === "/readyz") {

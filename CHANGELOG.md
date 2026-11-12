@@ -6,6 +6,13 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 [SemVer](https://semver.org/lang/pt-BR/). As versões anteriores a 0.8.0 são reconstruídas a partir
 do histórico do git (`git log`), sem tags formais.
 
+## [Unreleased]
+
+### Correções
+- **`/healthz` reportava uma versão literal fixo** (`"0.8.0"`), que envelheceu em silêncio a cada
+  release. Agora a versão vem do `package.json` (fonte única), com cache e fallback
+  (`src/config/versao.ts`).
+
 ## [0.10.0] — 2026-11-12
 
 Release da **camada de Mensageria** (semântica de broker interna) e do **número por campanha**.
