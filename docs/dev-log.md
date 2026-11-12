@@ -2662,7 +2662,10 @@ pela aprovação do operador.
 - **Objetivo:** implementar no painel real a tela **Mensageria** (filas + DLQ + Reprocessar),
   a partir do protótipo **aprovado** pelo operador (`docs/prototipos/mensageria/opcao-1.html`,
   #53) — a tela entra em produção **funcional**, não como esqueleto.
-- **Branch:** `ISSUE-mensageria-view-dlq` (de `develop`) · **PR:** #71 (→ `develop`, `Closes #54`).
+- **Branch:** `ISSUE-mensageria-view-dlq` (de `develop`) · **PR:** #71 (→ `develop`, **mergeado** em
+  `df212c5`) · **Issue #54 fechada** (o auto-close do GitHub só dispara na branch padrão do
+  repositório — `develop` não é a padrão — então o fechamento foi feito pelo `gh issue close`
+  com a evidência).
 - **Decisões:**
   - **Endpoint de descarte** (pendência do #53): `POST /api/mensageria/dlq/descartar` `{ id }` —
     **destrutivo** (o item sai da DLQ e **não** volta para a fila) e **auditado** em
