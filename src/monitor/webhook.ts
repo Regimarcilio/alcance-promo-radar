@@ -14,6 +14,8 @@ import { destinosPara, ehMonitorado, carregarMonitor } from "./grupos.js";
 import { registrarOfertaDeGrupo } from "./grupos-vistos.js";
 import { jaMonitorado, reservarMonitorado, registrarEvento } from "./state.js";
 import { enfileirar, tamanhoFila, intervaloFila, ehRajada, entregarItem } from "./fila.js";
+import { comCorrelacao } from "../messaging/envelope.js";
+import { publicarEvento } from "../messaging/eventos.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { formatar } from "../wa/formatter.js";
 
@@ -195,6 +197,24 @@ export async function processar(
     return { acao: "REVISAO", programa: rotulo(oferta.principal.programa), motivo: tr.motivo };
   }
 
+  // 5.5) EVENTO (Mensageria #51): a oferta foi recebida.
+  // O produtor publica; os assinantes (auditoria, métricas, log) recebem —
+  // sem que o webhook conheça nenhum deles. Um evento nunca derruba o fluxo.
+  const correlationId = randomUUID();
+  const programaOferta = oferta.principal.programa;
+  try {
+    comCorrelacao(correlationId, () => {
+      publicarEvento("oferta.recebida", {
+        origem: msg.origem,
+        programa: programaOferta,
+        idProduto: idEfetivo ?? null,
+        link: tr.url ?? null,
+      });
+    });
+  } catch {
+    /* evento é acessório: nunca quebra o recebimento da oferta */
+  }
+
   // 6) Monta a mensagem repassada (formato anterior + link do usuário)
   const corpo = montarRepasse(msg.texto, oferta, tr.url, tr.produto ?? null);
 
@@ -279,7 +299,7 @@ export async function processar(
   // 9) Rajada? Só da 4ª mensagem da MESMA origem no último minuto em diante
   //    entra na fila (liberada 1 a cada 2 min). Até 3, segue na hora.
   if (ehRajada(msg.origem)) {
-    enfileirar(item);
+    enfileirar({ ...item, correlationId });
     registrar({
       em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
       idProduto: idEfetivo, linkTransformado: tr.url,

@@ -22,6 +22,7 @@ import { gravarJsonAtomico, lerJson } from "../store/json.js";
 import { criarEnvelope } from "../messaging/envelope.js";
 import { lerDlq, registrarDlq, removerDlq } from "../messaging/dlq.js";
 import { deveRetentar, proximaTentativaEm } from "../messaging/politica.js";
+import { publicarEvento } from "../messaging/eventos.js";
 
 // caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
 function file(): string {
@@ -54,6 +55,8 @@ export interface ItemFila {
   tentativas?: number;
   /** ISO da próxima tentativa (backoff exponencial com jitter) */
   proximaTentativaEm?: string | null;
+  /** correlação do fluxo (webhook → fila → envio → evento) */
+  correlationId?: string | null;
 }
 
 interface StoreFila {
@@ -301,7 +304,11 @@ function registrarDlqMonitor(
   motivo: string,
 ): void {
   const id = `${item.id}:${destino}`;
-  const env = criarEnvelope(TIPO_MONITOR, { item, destino }, { id, tentativas });
+  const env = criarEnvelope(TIPO_MONITOR, { item, destino }, {
+    id,
+    tentativas,
+    correlationId: item.correlationId ?? undefined,
+  });
   registrarDlq({
     id,
     tipo: TIPO_MONITOR,
@@ -312,6 +319,16 @@ function registrarDlqMonitor(
     ultimaTentativaEm: new Date().toISOString(),
     origem: item.origem ?? null,
   });
+  // EVENTO: a mensagem foi para a DLQ (painel/auditoria podem acompanhar)
+  try {
+    publicarEvento(
+      "mensagem.dlq",
+      { tipo: TIPO_MONITOR, id, motivo, tentativas },
+      { correlationId: item.correlationId ?? undefined },
+    );
+  } catch {
+    /* evento é acessório */
+  }
 }
 
 /**

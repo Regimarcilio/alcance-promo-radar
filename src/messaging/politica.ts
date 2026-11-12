@@ -13,7 +13,7 @@
  * Defaults: base 30s, teto 30 min, 3 tentativas (preserva o retry atual da
  * fila do Monitor).
  */
-import { ehErroTransitorio } from "../wa/dispatch.js";
+import { ehErroTransitorio } from "../wa/erros.js";
 import type { Envelope } from "./envelope.js";
 import type { ContextoNack, PoliticaNack } from "./broker.js";
 import type { ItemDLQ } from "./dlq.js";

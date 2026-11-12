@@ -137,3 +137,29 @@ A decisão acima foi aplicado no fluxo de Campanhas (aba Clientes) e na fila do 
   `registrarEnvio`) **inalterados** (histórico preservado).
 - **Métrica**: `alcance_msg_duplicadas_total{tipo}` (contador em memória, exportado
   no Prometheus pela issue #52).
+
+---
+
+## Addendum (2026-11-11) — issue #51: tópicos (Publicação/Assinatura)
+
+- **Tópicos** (`src/messaging/eventos.ts`): `publicarEvento` / `assinarEvento` /
+  `desassinarEvento`. O produtor publica e **não conhece** os assinantes.
+- **Fila por assinante**: `data/messaging/topico-<tipo>-<assinante>.json` — um
+  assinante que falha **não afeta** os outros e um assinante que estava fora do
+  ar recebe o que ficou na fila dele (reentrega no boot, via `processarPendentes`).
+- **Semântica de tópico**: assinante **novo não recebe histórico** — a fila do
+  assinante só passa a existir a partir da primeira publicação feita enquanto ele
+  estava assinado.
+- **Payload validado** pelo schema zod do tipo (`src/messaging/tipos.ts`): a
+  publicação é **rejeitada** se o payload não bater com o schema.
+- **Consumidores padrão** (`src/messaging/consumidores.ts`): `auditoria`
+  (append-only em `data/auditoria-mensageria.json`, sem PII), `metricas`
+  (contadores) e `log` (linha estruturada com `correlationId`).
+- **Produtores**: `oferta.recebida` (webhook da Evolution), `disparo.criado`
+  (painel), `disparo.mensagem.enviada` e `disparo.concluido` (worker de
+  clientes), `instancia.conectada`/`instancia.desconectada` (camada de
+  rotação, na mudança de estado) e `mensagem.dlq` (quando algo morre na DLQ).
+- **Correlação**: o `correlationId` do envelope é propagado para o evento
+  publicado; o painel cria a campanha dentro de `comCorrelacao(...)` e os
+  itens da fila herdam o mesmo identificador → `disparo.criado`,
+  `disparo.mensagem.enviada` e `disparo.concluido` compartilham a correlação.

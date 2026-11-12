@@ -2460,3 +2460,44 @@ imediata de toda demanda aberta.
   formato do arquivo.
 - **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
 - **Próximo:** #51 (tópicos Pub/Sub com fila por assinante) e #52 (métricas + correlationId).
+
+## 2026-11-11 — Issue #51 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** tópicos de eventos (Pub/Sub) com **fila por assinante**, desacoplando
+  produtor e consumidor (item 3 da aula de Mensageria).
+- **Branch:** ISSUE · **PR:** #61 (aberto para `develop`)
+- **Decisões:**
+  - `src/messaging/eventos.ts`: `publicarEvento` / `assinarEvento` / `desassinarEvento`;
+    **fila por assinante** em `data/messaging/topico-<tipo>-<assinante>.json`; falha de um
+    assinante é **isolada** (o item fica na fila dele) e o que ficou pendente é **reentregue**
+    (no boot, via `processarPendentes`). **Assinante novo não recebe histórico** (semântica de
+    tópico) — a fila do assinante só nasce na primeira publicação enquanto ele estava assinado.
+  - **Payload validado** pelo schema zod do tipo: a publicação é rejeitada se o payload não
+    bater (`payload inválido para <tipo>: <campos>`).
+  - **Consumidores padrão** (`src/messaging/consumidores.ts`): `auditoria` (append-only em
+    `data/auditoria-mensageria.json`, **sem PII**), `metricas` (contadores) e `log` (linha
+    estruturada com `correlationId`). Nenhum consumidor altera o produtor — é o teste do
+    desacoplamento.
+  - **Produtores** (publicam; não conhecem assinantes): `oferta.recebida` (webhook da
+    Evolution), `disparo.criado` (painel), `disparo.mensagem.enviada` + `disparo.concluido`
+    (worker de clientes), `instancia.conectada`/`instancia.desconectada` (camada de rotação,
+    na **mudança** de estado) e `mensagem.dlq` (fila de clientes e fila do Monitor).
+  - **Correlação ponta a ponta**: o painel cria a campanha dentro de `comCorrelacao(...)` e os
+    envelopes da fila **herdam** o `correlationId` → `disparo.criado`,
+    `disparo.mensagem.enviada` e `disparo.concluido` compartilham a correlação. O item da
+    fila do Monitor também carrega o `correlationId` (do webhook) até a DLQ.
+  - **Ciclo de import quebrado**: `ehErroTransitorio` foi movido para `src/wa/erros.ts`
+    (re-exportado pelo dispatch, **API preservada**) — a política de retry precisa classificar
+    o erro e a camada de Mensageria é importada pela rotação.
+  - **API**: `GET /api/mensageria/eventos?tipo=&limite=` (eventos recentes + estado dos
+    assinantes). A **UI** fica para a #53.
+- **Arquivos:** src/messaging/eventos.ts, src/messaging/eventos.test.ts,
+  src/messaging/consumidores.ts, src/messaging/politica.ts, src/wa/erros.ts, src/wa/dispatch.ts,
+  src/wa/rotacao.ts, src/monitor/webhook.ts, src/monitor/fila.ts, src/clientes/clientes.ts,
+  src/clientes/clientes.test.ts, src/manager/server.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 9 novos (fan-out, falha isolada, reentrega do assinante fora do ar, assinante novo
+  sem histórico, correlação do mesmo fluxo, payload inválido rejeitado, produtor não afetado
+  pelo assinante, desassinatura e correlação na campanha de Clientes) — **267/267**
+  (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes:** nenhum alterado — as assinaturas dos produtores seguem as mesmas.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #52 (métricas de fila/DLQ/retry + rastreio por correlationId).
