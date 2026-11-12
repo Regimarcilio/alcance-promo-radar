@@ -2733,3 +2733,77 @@ pela aprovação do operador.
   - **Nada de envio real**: manager em `ALCANCE_SMOKE=1` (sem workers) e Evolution API intocada.
 - **Próximo:** promoção a `main` no release; os endpoints de descarte/lote fecham as
   pendências que o #53 deixou em aberto.
+
+---
+
+## 2026-11-12 — feat(mensageria): reenviar duplicados 24h após o lançamento, pela sequência da fila — @master — `task: issue #78`
+
+- **Objetivo:** issue #78 — a idempotência **descartava** a duplicata (ACK sem reenviar). Agora a
+  duplicata **volta para a fila**, agendada para **24h depois do lançamento original**, passando de
+  novo pelo ritmo da Mensageria (intervalo anti-rajada, janela comercial, ACK/retry/DLQ) — nunca
+  por envio avulso.
+- **Branch:** `ISSUE-78-reenvio-duplicados` (de `develop`) · **PR:** ver link no comentário da issue
+  (`Closes #78`) · **Issue:** #78.
+- **Decisões do operador (12/11/2026) respeitadas:**
+  1. as **24h contam do lançamento original** (`envelope.timestamp` / `criadoEm` do item), não da
+     detecção da duplicata;
+  2. vale para **todos os fluxos** (Clientes/Disparo **e** Monitor) e é **configurável por tipo**
+     (`MENSAGERIA_REENVIO_DUP_TIPOS`) — desligável sem mexer em código;
+  3. **reenvio único**: se o reenvio falhar, segue o **retry/DLQ normal** (nunca reagenda +24h).
+- **Regra do "próximo momento válido"** (documentada no ADR-011): `alvo = lançamento + N horas` e,
+  enquanto `alvo <= agora`, `alvo = alvo + N horas`. Lançado ontem às 08:00 e detectado hoje às
+  10:00 → reagendado para **as 08:00 de amanhã**. `proximaTentativaEm` nunca fica no passado.
+- **Escopo OUT respeitado:** nada de envio avulso; retry/DLQ intactos; Piloto
+  (`src/ml/piloto.ts`) e boas-vindas (`src/clientes/boas-vindas.ts`) intocados (são filtros de
+  seleção pré-publicação); retenção da idempotência inalterada (30 dias); aba Números intocada.
+- **Arquivos**
+  - `src/messaging/reenvio.ts` — **novo**: `agendarReenvioDuplicado`, `ehReenvioAgendado`,
+    `reenvioPermitido`, `momentoReenvio`, `marcadorReenvio` + leitura dos switches do ambiente.
+  - `src/messaging/envelope.ts` — campo opcional `reenvio` (`{originalEm, agendadoEm, chave}`) no
+    envelope e no schema zod; `MarcadorReenvio` como fonte única do formato.
+  - `src/messaging/tipos.ts` — eventos `disparo.mensagem.reagendada` e `mensagem.reagendada`
+    (schema zod: `chave`, `originalEm`, `agendadoEm`, `envioEm`, `correlationId`).
+  - `src/messaging/contadores.ts` — gauges (`definirGauge`/`lerGauges`/`valorGauge`/`zerarGauges`).
+  - `src/monitor/metrics.ts` — gauges da Mensageria exportados como `# TYPE ... gauge`.
+  - `src/clientes/fila.ts` — `reagendar(env)`: devolve o envelope à fila **sem** ACK.
+  - `src/clientes/clientes.ts` — consumidor `cliente.enviar`: duplicata → reagendamento (+24h) ou
+    descarte (switch); reenvio pula a idempotência e conta `alcance_msg_reenvios_realizados_total`.
+  - `src/monitor/fila.ts` — consumidor `monitor.encaminhar`: chave de negócio da oferta
+    (`mlbId|preco|cupom`, a mesma do Piloto), `extrairCupom`, marcador `reenvio` no item,
+    `chaveOferta`, reagendamento/descarte e registro da oferta junto do ACK.
+  - `src/monitor/webhook.ts` — caminho direto também trata a duplicata (ação nova `REAGENDADO`).
+  - `src/manager/server.ts` — badge **↻ reenvio 24h** na tabela de DLQ e na de eventos (+ CSS).
+  - `.env.example` — `MENSAGERIA_REENVIO_DUP_ATIVO`, `MENSAGERIA_REENVIO_DUP_HORAS`,
+    `MENSAGERIA_REENVIO_DUP_TIPOS` (com o aviso do Monitor).
+  - `docs/04-ADRs/ADR-011-mensageria.md` — addendum do #78 (decisão, regra do próximo momento
+    válido, **efeito colateral do Monitor em destaque**, alternativas).
+  - `README.md` — bullet do reenvio na seção Mensageria + o aviso do Monitor.
+  - `src/messaging/reenvio.test.ts` — **novo** (7 testes do núcleo);
+    `src/clientes/clientes.test.ts` (+5), `src/monitor/fila.test.ts` (+6),
+    `src/monitor/metrics.test.ts` (1 ajuste: a idade da fila é comparada sem o valor volátil).
+- **Evidências**
+  - **Testes:** 300/300 (`npm test`), `npm run typecheck` e `npm run build` verdes.
+  - **Revisão do MASTER (pós-PR):** 2 testes de regressão acrescentados no
+    `src/monitor/fila.test.ts` — (a) a duplicata reagendada **não trava a fila** do Monitor (o
+    item seguinte é enviado) e (b) o reenvio é enviado **uma única vez** quando a hora chega pelo
+    caminho natural (sem `reenfileirar`), provando que ele não se reagenda em loop.
+  - **Cenários Gherkin cobertos:** duplicata reagendada (+24h, não confirmada, contador aumenta);
+    reenvio segue a sequência da fila (não elegível antes da hora); reenvio não se reagenda em loop
+    (pula a idempotência e é enviado); falha no reenvio → retry com backoff (sem novo +24h); switch
+    global desliga (descarte, como antes); switch por tipo desliga só o Monitor; 24h do **lançamento**
+    (lançado ontem 08:00, detectado hoje 10:00 → amanhã 08:00).
+  - **Painel:** JS inline validado com `node --check` nos 3 blocos `<script>` (extraídos do template
+    `PAGINA`) e com o teste `src/manager/pagina.test.ts` (`new Function` parseia cada bloco).
+  - **Nada de envio real:** Evolution sempre mockada nos testes; nenhum deploy/rebuild do container;
+    Evolution API intocada.
+  - **SAST (`kalimaster-sast`):** nenhum segredo no diff; `npm audit` mantém **1 high pré-existente**
+    (`zod < 4.6.6`) — fora do escopo deste PR (nenhuma dependência foi adicionada).
+- **Desvios do enunciado (documentados no relatório do PR):**
+  - o contador de duplicatas **descartadas** mantém o nome já existente no projeto
+    `alcance_msg_duplicadas_total{tipo}` (a issue escreve `..._duplicatas_total`; o nome real está
+    no ADR-011 e no dashboard do Grafana — trocar quebraria os dois);
+  - o 1º cenário Gherkin ("10:00 → 18:00 do mesmo dia") conflita com a regra das 24h a partir do
+    lançamento: implementado como **lançamento + 24h** (e o cenário "24h após o lançamento, não
+    após a detecção" é cumprido ao pé da letra).
+- **Próximo:** revisão multidimensional (corretude, legibilidade, arquitetura, segurança,
+  performance) e merge em `develop`; depois, promoção a `main` no release.

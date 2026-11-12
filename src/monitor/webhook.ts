@@ -95,7 +95,14 @@ function fotoDaOrigemPrimeiro(): boolean {
 }
 
 export interface ResultadoMonitor {
-  acao: "IGNORADO" | "DUPLICADO" | "REVISAO" | "ENCAMINHADO" | "ENFILEIRADO" | "ERRO";
+  acao:
+    | "IGNORADO"
+    | "DUPLICADO"
+    | "REVISAO"
+    | "ENCAMINHADO"
+    | "ENFILEIRADO"
+    | "REAGENDADO"
+    | "ERRO";
   programa?: string;
   motivo?: string;
   mensagem?: string;
@@ -314,12 +321,41 @@ export async function processar(
     };
   }
 
-  const enviados = await entregarItem(item);
+  const entrega = await entregarItem(item);
+  // issue #78: a oferta já tinha sido encaminhada → o item foi REAGENDADO
+  // para o reenvio (+N horas, pela fila). Nada foi enviado agora.
+  if (entrega.reagendado) {
+    registrar({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: idEfetivo, linkTransformado: tr.url,
+      destino: destinos.map((d) => d.jid).join(","),
+      status: "ENFILEIRADA",
+      detalhe: `reenvio 24h: oferta duplicada reagendada para ${entrega.reagendado.proximaTentativaEm ?? "?"}`,
+    });
+    return {
+      acao: "REAGENDADO",
+      programa: rotulo(oferta.principal.programa),
+      mensagem: corpo,
+      motivo: `reenvio 24h (reagendado para ${entrega.reagendado.proximaTentativaEm ?? "?"})`,
+    };
+  }
+  if (entrega.descartado) {
+    registrar({
+      em: new Date().toISOString(), origem: msg.origem, programa: oferta.principal.programa,
+      idProduto: idEfetivo, linkTransformado: tr.url, destino: null,
+      status: "DUPLICADO",
+    });
+    return {
+      acao: "DUPLICADO",
+      programa: rotulo(oferta.principal.programa),
+      motivo: "oferta já encaminhada (reenvio desligado)",
+    };
+  }
   return {
     acao: "ENCAMINHADO",
     programa: rotulo(oferta.principal.programa),
     mensagem: corpo,
-    destinos: enviados,
+    destinos: entrega.enviados,
   };
 }
 

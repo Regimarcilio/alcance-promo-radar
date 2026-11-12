@@ -212,6 +212,19 @@ export async function confirmar(env: EnvelopeCliente, op: { contar?: boolean } =
 }
 
 /**
+ * REAGENDAR: devolve o envelope à fila **sem** confirmar (issue #78).
+ *
+ * Usado pelo reenvio de duplicatas: o item fica na fila com
+ * `proximaTentativaEm` = lançamento + N horas e o marcador `reenvio`, para
+ * ser liberado quando chegar a hora (mesmo ritmo anti-rajada, mesma janela
+ * comercial, mesmo ACK/retry/DLQ). **Não** é ACK: a mensagem não se perde.
+ */
+export async function reagendar(env: EnvelopeCliente): Promise<void> {
+  const { atualizar } = brokerCapaz();
+  await atualizar(env.id, env);
+}
+
+/**
  * NACK: a mensagem volta para a fila (retry com backoff) ou vai para a DLQ —
  * decisão da política de retry. **Nunca** some com a mensagem.
  */

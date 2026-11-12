@@ -51,6 +51,31 @@ export interface Envelope<T = unknown> {
    * (reprocessamento). Zera nunca: é o contador de "reparos" da mensagem.
    */
   reprocessos?: number;
+  /**
+   * Marcador do **reenvio agendado** (issue #78): a mensagem foi detectada
+   * como duplicata e foi reagendada para `lançamento original + N horas`.
+   *
+   * - `originalEm`: ISO do lançamento original (a referência do relógio);
+   * - `agendadoEm`: ISO de quando o reenvio foi agendado;
+   * - `chave`: a chave de negócio que originou a duplicata.
+   *
+   * A presença do marcador faz o consumidor **pular a checagem de
+   * idempotência** (senão o reenvio se detectaria como duplicata e se
+   * reagendaria em loop).
+   */
+  reenvio?: MarcadorReenvio;
+}
+
+/**
+ * Marcador do reenvio agendado (issue #78) — viaja dentro do envelope.
+ */
+export interface MarcadorReenvio {
+  /** ISO do lançamento original (a referência do relógio do reenvio) */
+  originalEm: string;
+  /** ISO de quando o reenvio foi agendado */
+  agendadoEm: string;
+  /** chave de negócio (idempotência) que originou a duplicata */
+  chave: string;
 }
 
 export interface OpcoesEnvelope {
@@ -94,6 +119,13 @@ export function schemaEnvelope() {
     emAndamento: z.boolean().optional(),
     reservadoEm: z.string().optional(),
     reprocessos: z.number().int().min(0).optional(),
+    reenvio: z
+      .object({
+        originalEm: z.string().min(1, "reenvio.originalEm obrigatório"),
+        agendadoEm: z.string().min(1, "reenvio.agendadoEm obrigatório"),
+        chave: z.string().optional(),
+      })
+      .optional(),
   });
 }
 

@@ -134,3 +134,19 @@ export function extrairPrecos(texto: string): {
   if (precoDe != null && precoAtual != null && precoDe <= precoAtual) precoDe = null;
   return { precoDe, precoAtual };
 }
+
+/**
+ * Extrai o **cupom** do texto da oferta (issue #78).
+ *
+ * O cupom entra na chave de negócio da oferta (a mesma do Piloto:
+ * `mlbId|preco|cupom`), então precisa ser lido do texto de forma estável.
+ * Reconhece o formato do formatter (`🎟️ Cupom: *CODE*`) e o texto livre
+ * ("cupom CODE"). Devolve "" quando não há cupom.
+ */
+export function extrairCupom(texto: string): string {
+  const t = String(texto ?? "");
+  if (!t) return "";
+  const explicito = t.match(/cupom[^A-Za-z0-9]{0,12}\*{0,2}([A-Za-z0-9]{3,24})/i);
+  if (explicito?.[1]) return explicito[1].toUpperCase();
+  return "";
+}
