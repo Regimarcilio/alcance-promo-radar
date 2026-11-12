@@ -2344,3 +2344,36 @@ imediata de toda demanda aberta.
   container roda `dist` embutido na imagem); (2) pareamento por QR das instâncias
   (`device_removed`) para retomar a fila; (3) teste em campo do envio com número fixado
   depende de instâncias conectadas.
+
+## 2026-11-11 — Issue #48 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** núcleo da camada de Mensageria (épico #47) — envelope padronizado e versionado,
+  abstração de broker (port) com adapter de arquivo e ADR-011. **Nenhuma** mudança de
+  comportamento nos fluxos existentes.
+- **Branch:** ISSUE · **PR:** #55 (aberto para `develop`)
+- **Decisões:**
+  - **Port/adaptador** (`src/messaging/broker.ts`): a interface `Broker`
+    (publish/consume/ack/nack/tamanho/dlq/reprocessar/stats) é o contrato; `FileBroker` é o
+    adapter inicial (fila `data/messaging/<tipo>.json` = **array de envelopes**, DLQ
+    `dlq-<tipo>.json`, contadores `stats-<tipo>.json`), tudo com `gravarJsonAtomico` (0600).
+  - **Registro global** (`setBroker`/`getBroker`/`resetBroker`): trocar por AMQP/SQS depois não
+    toca em produtores nem consumidores (AC de "broker substituível").
+  - **`nack` tira a mensagem da fila** e a política decide o destino (reenfileirar = retry,
+    DLQ = esgotou). Default: reenfileirar com `tentativas + 1`. O gancho `politicaNack` é o
+    ponto de entrada da #49 (retry/backoff/DLQ).
+  - **Envelope** (`src/messaging/envelope.ts`) validado com **zod** (`EnvelopeInvalidoError`
+    carrega os campos inválidos); `correlationId` = explícito > contexto (`AsyncLocalStorage`)
+    > uuid novo — é o que permite o rastreio ponta a ponta do #52.
+  - **Migração do legado** (`migrarLegado`): converte `data/clientes-fila.json` em envelopes
+    da fila `cliente.enviar`, **idempotente** (id do envelope = id do item legado) e **sem
+    apagar o arquivo legado** — até a #49 o worker de Clientes ainda lê esse store; apagar
+    agora perderia a fila viva. Premissa registrada no ADR-011.
+  - **Catálogo** (`src/messaging/tipos.ts`): tipos de mensagem e de evento com **schema zod**
+    por evento (payloads sem PII) — nenhum tipo "solto" no código.
+- **Arquivos:** src/messaging/envelope.ts, src/messaging/tipos.ts, src/messaging/broker.ts,
+  src/messaging/envelope.test.ts, src/messaging/tipos.test.ts, src/messaging/broker.test.ts,
+  docs/04-ADRs/ADR-011-mensageria.md, docs/04-ADRs/README.md
+- **Testes:** 19 novos (236 no total, **236/236** em `npm test`); `npm run typecheck` e
+  `npm run build` verdes; smoke do manager OK. Nenhum teste existente foi alterado.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #49 (ACK real, retry com backoff+jitter e DLQ na fila de Clientes/Disparo e na
+  fila do Monitor) — pluga a política no gancho `politicaNack`.
