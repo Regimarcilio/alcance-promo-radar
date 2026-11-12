@@ -20,6 +20,9 @@ export const TIPOS_EVENTO = [
   "instancia.conectada",
   "instancia.desconectada",
   "mensagem.dlq",
+  // issue #78: duplicata reagendada para o reenvio (Clientes e Monitor)
+  "disparo.mensagem.reagendada",
+  "mensagem.reagendada",
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -58,6 +61,22 @@ export const SCHEMAS_EVENTO: Record<TipoEvento, z.ZodTypeAny> = {
     id: z.string().min(1),
     motivo: z.string().min(1),
     tentativas: z.number().int().min(0),
+  }),
+  // issue #78 — duplicata reagendada para o reenvio (24h após o lançamento).
+  // `envioEm` = quando a mensagem volta para a fila (o `proximaTentativaEm`).
+  "disparo.mensagem.reagendada": z.object({
+    chave: z.string(),
+    originalEm: z.string().min(1),
+    agendadoEm: z.string().min(1),
+    envioEm: z.string().nullable().optional(),
+    correlationId: z.string().nullable(),
+  }),
+  "mensagem.reagendada": z.object({
+    chave: z.string(),
+    originalEm: z.string().min(1),
+    agendadoEm: z.string().min(1),
+    envioEm: z.string().nullable().optional(),
+    correlationId: z.string().nullable(),
   }),
 };
 

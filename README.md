@@ -222,6 +222,20 @@ broker — ver o [ADR-011](docs/04-ADRs/ADR-011-mensageria.md).
   logs estruturados.
 - **Broker substituível**: hoje o adapter é de arquivo (`data/messaging/`); a interface permite
   trocar por RabbitMQ/Kafka sem tocar em produtores e consumidores.
+- **Reenvio de duplicatas (24h)**: a duplicata (chave de negócio já processada) **não é mais
+  descartada** — ela volta para a fila, agendada para **24h depois do lançamento original**, e
+  passa de novo pelo ritmo da mensageria (intervalo anti-rajada, janela comercial, ACK/retry/DLQ).
+  Nunca há envio avulso, e o reenvio é **único** (se falhar, segue o retry/DLQ normal).
+  Switches: `MENSAGERIA_REENVIO_DUP_ATIVO` (1 = ligado), `MENSAGERIA_REENVIO_DUP_HORAS` (24) e
+  `MENSAGERIA_REENVIO_DUP_TIPOS` (tipos com reenvio; `*` = todos). Com o switch desligado, a
+  duplicata volta ao descarte.
+
+  > ⚠️ **Atenção no Monitor**: a chave de negócio do Monitor é o **hash da oferta**
+  > (`mlbId|preco|cupom`, o mesmo do Piloto). Portanto **a mesma oferta encaminhada antes é
+  > reencaminhada aos grupos 24h depois** — risco aceito pelo operador em 12/11/2026. Para
+  > desligar só o Monitor: `MENSAGERIA_REENVIO_DUP_TIPOS=cliente.enviar`. O painel mostra a
+  > origem do reenvio (badge **↻ reenvio 24h**) na tabela de DLQ e na de eventos.
+  > Detalhes no [ADR-011](docs/04-ADRs/ADR-011-mensageria.md).
 
 APIs: `GET /api/mensageria/stats`, `GET /api/mensageria/filas`, `GET /api/mensageria/dlq`,
 `GET /api/mensageria/eventos` e `POST /api/mensageria/dlq/reprocessar`.

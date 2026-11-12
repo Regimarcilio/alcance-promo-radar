@@ -2007,6 +2007,8 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 }
 .badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
 .live{background:var(--ok-soft);color:var(--ok-tx);border-color:var(--ok-bd)}
+/* issue #78: badge da origem "reenvio" (duplicata reagendada) */
+.badge.reenvio{background:var(--primary-soft);color:var(--primary-hover);border-color:var(--primary-border)}
 .mock{background:var(--warn-soft);color:var(--warn-tx);border-color:var(--warn-bd)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .18s ease,transform .18s ease}
@@ -4078,8 +4080,10 @@ function msgRenderDlq(){
     const perigo=String(it.motivo||'')==='erro não transitório';
     const corr=env.correlationId||'';
     const chave=env.chave||'';
+    const reenvio=env.reenvio||null;
     t+='<tr'+(busy?' class="sel"':'')+'>'
-      +'<td class="nowrap"><span class="badge">'+esc(it.tipo)+'</span></td>'
+      +'<td class="nowrap"><span class="badge">'+esc(it.tipo)+'</span>'
+      +(reenvio?' <span class="badge reenvio" title="Reagendado para reenvio em '+esc(reenvio.agendadoEm||'')+'">↻ reenvio 24h</span>':'')+'</td>'
       +'<td><span class="dlq-chave"><span class="mono trunc" title="'+esc(chave||'—')+'">'+(chave?esc(chave):'—')+'</span>'
       +(chave?' <button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(chave)+'" title="Copiar chave">⧉</button>':'')+'</span>'
       +(corr?'<div class="mini" style="font-family:var(--mono);font-size:10px;margin-top:2px">corr '+esc(corr.slice(0,8))+'…</div>':'')+'</td>'
@@ -4125,7 +4129,9 @@ function msgRenderEventos(){
   let h='<div style="max-height:280px;overflow:auto">';
   MSG.eventos.slice(0,14).forEach(function(e){
     const corr=e.correlationId||'';
+    const reenv=String(e.tipo||'').indexOf('reagendada')>=0;
     h+='<div class="evt"><time>'+esc(msgHhmm(e.em))+'</time><span class="badge">'+esc(e.tipo)+'</span>'
+      +(reenv?'<span class="badge reenvio" title="Duplicata reagendada para o reenvio">↻ reenvio 24h</span>':'')
       +'<span class="t mono" title="'+esc(e.chave||'')+'">'+esc(e.chave||'—')+'</span>'
       +(corr?'<button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(corr)+'" title="Copiar correlationId">⧉</button>':'')
       +(corr?'<button class="mbtn sm" data-msg-act="trail" data-msg-corr="'+esc(corr)+'" title="Ver trilha">🔗</button>':'')+'</div>';

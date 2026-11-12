@@ -205,3 +205,184 @@ test("fila do monitor: reprocessar devolve o item da DLQ para a fila", async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------- issue #78: reenvio de duplicatas (+24h, pela fila) ----------
+
+/** Libera o ritmo da fila do Monitor (o intervalo entre liberações). */
+function liberarRitmoMonitor(dir: string): void {
+  const arq = join(dir, "monitor-fila.json");
+  const raw = JSON.parse(readFileSync(arq, "utf8"));
+  raw.ultimoEnvio = null;
+  writeFileSync(arq, JSON.stringify(raw, null, 2));
+}
+
+/** Valor de um contador da Mensageria (mesmo módulo do processo). */
+async function contador(nome: string, labels?: Record<string, string>): Promise<number> {
+  const contadores = await import("../messaging/contadores.js");
+  return contadores.valorContador(nome, labels);
+}
+
+/** Isola os switches do reenvio (restaura no fim do teste). */
+function guardarSwitches() {
+  const antes = {
+    ativo: process.env.MENSAGERIA_REENVIO_DUP_ATIVO,
+    horas: process.env.MENSAGERIA_REENVIO_DUP_HORAS,
+    tipos: process.env.MENSAGERIA_REENVIO_DUP_TIPOS,
+  };
+  return {
+    restaurar() {
+      for (const [k, v] of Object.entries({
+        MENSAGERIA_REENVIO_DUP_ATIVO: antes.ativo,
+        MENSAGERIA_REENVIO_DUP_HORAS: antes.horas,
+        MENSAGERIA_REENVIO_DUP_TIPOS: antes.tipos,
+      })) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    },
+  };
+}
+
+test("fila do monitor: a oferta já encaminhada é reagendada para 24h depois do lançamento", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+    process.env.MENSAGERIA_REENVIO_DUP_TIPOS = "cliente.enviar,monitor.encaminhar";
+
+    // 1ª oferta: encaminhada (registra a chave de negócio junto do ACK)
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+    const enviados = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+    assert.equal(enviados, 1);
+    assert.equal(mod.tamanhoFila(), 0);
+
+    // 2ª vez a MESMA oferta → duplicata
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    const antes = await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "monitor.encaminhar" });
+    await mod.liberarProximo();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      1,
+      "a duplicata não é enviada agora",
+    );
+    assert.equal(mod.tamanhoFila(), 1, "o item continua na fila (sem ACK)");
+    const item = mod.itensFila()[0];
+    assert.ok(item.reenvio, "o item foi marcado como reenvio");
+    assert.equal(item.reenvio!.originalEm, item.criadoEm, "o relógio é o lançamento original");
+    assert.ok(item.reenvio!.chave.includes("MLB123"), "a chave é a da oferta (mlbId|preco|cupom)");
+    assert.ok(Date.parse(item.proximaTentativaEm!) > Date.now(), "a próxima tentativa é no futuro");
+    const horas = (Date.parse(item.proximaTentativaEm!) - Date.now()) / 3_600_000;
+    assert.ok(horas > 23 && horas <= 24, `reagendado para ~24h (${horas.toFixed(2)}h)`);
+    assert.equal(
+      await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "monitor.encaminhar" }),
+      antes + 1,
+      "o contador de duplicatas reagendadas aumenta",
+    );
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila do monitor: o reenvio é enviado de fato e não se reagenda em loop", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    await mod.liberarProximo();
+    assert.equal(mod.tamanhoFila(), 1, "a duplicata ficou reagendada");
+
+    // o horário do reenvio chegou
+    const item = mod.itensFila()[0];
+    mod.reenfileirar({ ...item, proximaTentativaEm: new Date(Date.now() - 1000).toISOString() });
+    liberarRitmoMonitor(dir);
+    const antes = await contador("alcance_msg_reenvios_realizados_total", { tipo: "monitor.encaminhar" });
+    await mod.liberarProximo();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      2,
+      "o reenvio foi enviado de fato",
+    );
+    assert.equal(
+      await contador("alcance_msg_reenvios_realizados_total", { tipo: "monitor.encaminhar" }),
+      antes + 1,
+      "o contador de reenvios realizados aumenta",
+    );
+    assert.equal(mod.tamanhoFila(), 0, "o reenvio saiu da fila (ACK)");
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila do monitor: com o reenvio desligado a duplicata é descartada", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "0";
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    const antes = await contador("alcance_msg_duplicadas_total", { tipo: "monitor.encaminhar" });
+    await mod.liberarProximo();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      1,
+      "nada foi enviado (a duplicata é descartada)",
+    );
+    assert.equal(mod.tamanhoFila(), 0, "o item saiu da fila (descartado)");
+    assert.equal(
+      await contador("alcance_msg_duplicadas_total", { tipo: "monitor.encaminhar" }),
+      antes + 1,
+      "o contador de duplicatas (não reagendadas) aumenta",
+    );
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila do monitor: o switch por tipo desliga só o Monitor (o Clientes continua reagendando)", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_TIPOS = "cliente.enviar";
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    await mod.liberarProximo();
+    assert.equal(mod.tamanhoFila(), 0, "no Monitor a oferta é descartada como antes");
+
+    const reenvio = await import("../messaging/reenvio.js");
+    assert.equal(reenvio.reenvioPermitido("cliente.enviar"), true, "no Clientes continua reagendando");
+    assert.equal(reenvio.reenvioPermitido("monitor.encaminhar"), false, "o Monitor fica de fora");
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

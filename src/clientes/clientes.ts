@@ -38,6 +38,7 @@ import {
   limpar as limparFila,
   migrarLegadoSeNecessario,
   pendentes as envelopesPendentes,
+  reagendar as reagendarMensagem,
   removerPorDisparo,
   reservarProximo,
   totalPendentes,
@@ -46,7 +47,12 @@ import {
 } from "./fila.js";
 import { getBroker } from "../messaging/broker.js";
 import { chaveDe, jaProcessado } from "../messaging/idempotencia.js";
-import { incrementar, observarLatencia } from "../messaging/contadores.js";
+import { incrementar, definirGauge, observarLatencia } from "../messaging/contadores.js";
+import {
+  agendarReenvioDuplicado,
+  ehReenvioAgendado,
+  reenvioPermitido,
+} from "../messaging/reenvio.js";
 import { publicarEvento } from "../messaging/eventos.js";
 import { logger } from "../observability/logger.js";
 
@@ -533,10 +539,52 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
   // ritmo: conta o envio a partir do início
   atualizarEstado({ ultimoEnvio: new Date().toISOString() });
 
-  // IDEMPOTÊNCIA (issue #50): a chave de negócio já foi processada?
-  // sim → ACK sem reenviar (a propaganda não vai duas vezes ao cliente)
+  // IDEMPOTÊNCIA (issue #50) + REENVIO DE DUPLICATAS (issue #78)
+  //
+  // A chave de negócio já foi processada?
+  // - NÃO → segue o envio normal;
+  // - SIM e o reenvio está ligado → a mensagem **não é confirmada**: ela
+  //   volta para a fila, agendada para `lançamento original + N horas`
+  //   (24h por padrão). O reenvio passa de novo pelo ritmo da mensageria
+  //   (intervalo anti-rajada, janela comercial, ACK/retry/DLQ) — nunca é
+  //   envio avulso;
+  // - SIM e o reenvio está desligado → comportamento anterior: descarta.
+  //
+  // O reenvio é **único**: o marcador `reenvio` no envelope faz o consumidor
+  // pular a checagem de idempotência (senão ele se reagendaria em loop) e
+  // uma falha no reenvio cai no retry/DLQ normal (sem novo +24h).
   const chave = env.chave ?? chaveDe(TIPO_CLIENTE, item);
-  if (chave && jaProcessado(chave)) {
+  const ehReenvio = ehReenvioAgendado(env);
+  if (!ehReenvio && chave && jaProcessado(chave)) {
+    if (reenvioPermitido(TIPO_CLIENTE)) {
+      const reagendado = agendarReenvioDuplicado(env);
+      await reagendarMensagem(reagendado);
+      incrementar("alcance_msg_duplicatas_reagendadas_total", { tipo: TIPO_CLIENTE });
+      const esperaHoras = Math.max(
+        0,
+        (Date.parse(reagendado.proximaTentativaEm ?? "") - Date.now()) / 3_600_000,
+      );
+      definirGauge("alcance_msg_reenvios_agendados_horas", { tipo: TIPO_CLIENTE }, esperaHoras);
+      try {
+        publicarEvento(
+          "disparo.mensagem.reagendada",
+          {
+            chave,
+            originalEm: env.timestamp,
+            agendadoEm: reagendado.reenvio?.agendadoEm ?? new Date().toISOString(),
+            envioEm: reagendado.proximaTentativaEm ?? null,
+            correlationId: env.correlationId,
+          },
+          { correlationId: env.correlationId },
+        );
+      } catch {
+        /* evento é acessório: nunca quebra a fila */
+      }
+      console.log(
+        `[mensageria] duplicata reagendada para ${reagendado.proximaTentativaEm}: ${chave}`,
+      );
+      return item;
+    }
     await confirmarMensagem(env, { contar: false });
     incrementar("alcance_msg_duplicadas_total", { tipo: TIPO_CLIENTE });
     console.log(`[mensageria] duplicata ignorada: ${chave}`);
@@ -559,6 +607,11 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     });
     // ACK: só agora a mensagem sai da fila
     await confirmarMensagem(env);
+    if (ehReenvio) {
+      // o reenvio foi de fato realizado (o contador mede envios efetivos)
+      incrementar("alcance_msg_reenvios_realizados_total", { tipo: TIPO_CLIENTE });
+      definirGauge("alcance_msg_reenvios_agendados_horas", { tipo: TIPO_CLIENTE }, 0);
+    }
     if (item.disparoId) registrarResultadoDisparo(item.disparoId, true);
     // EVENTO: a mensagem foi enviada. O correlationId do envelope atravessa o
     // fluxo: disparo.criado → disparo.mensagem.enviada → disparo.concluido.
