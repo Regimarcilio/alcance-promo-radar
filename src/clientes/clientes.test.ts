@@ -45,6 +45,14 @@ async function carregarFila() {
   return { mod, fila, broker, dir };
 }
 
+/** Libera o ritmo da fila (o intervalo entre envios é de ~1 min). */
+function liberarRitmo(dir: string): void {
+  const arq = join(dir, "clientes-estado.json");
+  const raw = JSON.parse(readFileSync(arq, "utf8"));
+  raw.ultimoEnvio = new Date(Date.now() - 3600_000).toISOString();
+  writeFileSync(arq, JSON.stringify(raw));
+}
+
 /** Mock da Evolution: estado "open" + sendText com sucesso ou falha. */
 function mockEvolution(op: { falhar?: boolean; status?: number; corpo?: string } = {}) {
   return mockFetch(async (url: string) => {
@@ -404,6 +412,87 @@ test("fila: o estado legado (enviados/erros/pausa) é herdado sem perder histór
     assert.equal(mod.estadoFilaClientes().enviados, 254);
     assert.equal(mod.estadoFilaClientes().pausado, true);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- issue #50: consumidor idempotente ----------
+
+test("fila: reentrega não duplica a propaganda ao cliente (ACK sem reenvio)", async () => {
+  const { mod, fila, dir } = await carregarFila();
+  const m = mockEvolution();
+  try {
+    const campanha = { texto: "oferta", jids: ["5511900000020@s.whatsapp.net"], disparoId: "promo-1" };
+    await mod.enfileirarCampanha(campanha);
+    // 1ª entrega: envia e registra a chave junto do ACK
+    await mod.liberarProximoCliente();
+    const envios = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+    assert.equal(envios, 1, "a mensagem foi enviada uma vez");
+    assert.equal(mod.estadoFilaClientes().pendentes, 0);
+
+    // 2ª entrega da MESMA campanha (reentrega): não pode reenviar
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    assert.equal(mod.estadoFilaClientes().pendentes, 1);
+    await mod.liberarProximoCliente();
+    const envios2 = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+    assert.equal(envios2, 1, "nenhuma mensagem foi enviada ao contato de novo");
+    assert.equal(mod.estadoFilaClientes().pendentes, 0, "o item é confirmado (ACK) sem reenvio");
+    // mesmo módulo (sem cache-buster) para ler o contador em memória
+    const contadores = await import("../messaging/contadores.js");
+    assert.equal(
+      contadores.valorContador("alcance_msg_duplicadas_total", { tipo: "cliente.enviar" }),
+      1,
+      "o contador de duplicatas aumenta"
+    );
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: a chave só é registrada depois do ACK (at-least-once)", async () => {
+  const { mod, fila, dir } = await carregarFila();
+  const m = mockEvolution({ falhar: true, status: 500 });
+  try {
+    await mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000021@s.whatsapp.net"],
+      disparoId: "promo-2",
+    });
+    await mod.liberarProximoCliente();
+    const env = fila.pendentes()[0];
+    assert.ok(env.chave, "o envelope carrega a chave de idempotência");
+    const idem = await import("../messaging/idempotencia.js");
+    assert.equal(idem.jaProcessado(env.chave!), false, "a chave NÃO foi registrada (falhou antes do ACK)");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: campanhas diferentes para o mesmo contato não colidem", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  try {
+    await mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000022@s.whatsapp.net"],
+      disparoId: "promo-1",
+    });
+    await mod.liberarProximoCliente();
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha({
+      texto: "oferta",
+      jids: ["5511900000022@s.whatsapp.net"],
+      disparoId: "promo-2",
+    });
+    await mod.liberarProximoCliente();
+    const envios = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+    assert.equal(envios, 2, "as duas campanhas foram enviadas (a segunda não colide)");
+    assert.equal(mod.estadoFilaClientes().pendentes, 0);
+  } finally {
+    m.restaurar();
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -44,6 +44,8 @@ import {
   type ItemCampanhaMensagem,
 } from "./fila.js";
 import { getBroker } from "../messaging/broker.js";
+import { chaveDe, jaProcessado } from "../messaging/idempotencia.js";
+import { incrementar } from "../messaging/contadores.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -527,6 +529,16 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
 
   // ritmo: conta o envio a partir do início
   atualizarEstado({ ultimoEnvio: new Date().toISOString() });
+
+  // IDEMPOTÊNCIA (issue #50): a chave de negócio já foi processada?
+  // sim → ACK sem reenviar (a propaganda não vai duas vezes ao cliente)
+  const chave = env.chave ?? chaveDe(TIPO_CLIENTE, item);
+  if (chave && jaProcessado(chave)) {
+    await confirmarMensagem(env, { contar: false });
+    incrementar("alcance_msg_duplicadas_total", { tipo: TIPO_CLIENTE });
+    console.log(`[mensageria] duplicata ignorada: ${chave}`);
+    return item;
+  }
 
   const dry = process.env.MONITOR_DRY === "1";
   try {

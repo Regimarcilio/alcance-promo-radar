@@ -1,9 +1,31 @@
-import { readFileSync, existsSync } from "node:fs";
+/**
+ * DEDUP do Monitor — anti-duplicidade de 7 dias (RN-010).
+ *
+ * A estrutura de armazenamento (retenção, limite e escrita atômica) foi
+ * **generalizada** em `src/messaging/idempotencia.ts` (usada também pela
+ * idempotência da Mensageria). A API pública deste módulo **não muda**:
+ * `hashEnvio`, `jaEnviado` e `registrarEnvio` seguem iguais, e o arquivo
+ * `data/envios.json` mantém o mesmo formato (`{hash, data, dia}`) — o
+ * histórico de 7 dias é preservado.
+ */
 import { join } from "node:path";
 import { dataDirAtual } from "../config/paths.js";
-import { gravarJsonAtomico } from "./json.js";
+import { criarRegistro } from "../messaging/idempotencia.js";
 
-const file = join(dataDirAtual(), "envios.json");
+/** Caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR). */
+function arquivo(): string {
+  return join(dataDirAtual(), "envios.json");
+}
+
+/** Registro de envios (7 dias, formato antigo preservado). */
+function registro() {
+  return criarRegistro({
+    arquivo: arquivo(),
+    retencaoDias: 7,
+    limite: 50_000,
+    campoChave: "hash",
+  });
+}
 
 export function hashEnvio(mlbId: string, preco: number, cupom?: string | null): string {
   return `${mlbId}|${preco}|${(cupom ?? "").toUpperCase()}`;
@@ -24,27 +46,9 @@ export function diaLocal(d: Date = new Date()): string {
 
 /** Anti-duplicidade 7 dias (RN-010). Retorna true se já enviado. */
 export function jaEnviado(mlbId: string, preco: number, cupom?: string | null, dias = 7): boolean {
-  if (!existsSync(file)) return false;
-  try {
-    const arr: { hash: string; data: string }[] = JSON.parse(readFileSync(file, "utf8"));
-    const h = hashEnvio(mlbId, preco, cupom);
-    const corte = Date.now() - dias * 86400000;
-    return arr.some((e) => e.hash === h && new Date(e.data).getTime() >= corte);
-  } catch {
-    return false;
-  }
+  return registro().tem(hashEnvio(mlbId, preco, cupom), dias);
 }
 
 export function registrarEnvio(mlbId: string, preco: number, cupom?: string | null, dias = 7): void {
-  let arr: { hash: string; data: string; dia?: string }[] = [];
-  try {
-    arr = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
-    if (!Array.isArray(arr)) arr = [];
-  } catch {
-    arr = [];
-  }
-  const corte = Date.now() - dias * 86_400_000;
-  arr = arr.filter((e) => new Date(e.data).getTime() >= corte);
-  arr.push({ hash: hashEnvio(mlbId, preco, cupom), data: new Date().toISOString(), dia: diaLocal() });
-  gravarJsonAtomico(file, arr);
+  registro().registrar(hashEnvio(mlbId, preco, cupom), { dia: diaLocal() }, dias);
 }
