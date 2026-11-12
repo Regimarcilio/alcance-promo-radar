@@ -44,3 +44,37 @@ export function lerContadores(): Contador[] {
 export function zerarContadores(): void {
   contadores.clear();
 }
+
+/** Buckets do histograma de latência (ms). */
+export const BUCKETS_LATENCIA = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000];
+
+export interface Histograma {
+  nome: string;
+  labels: Record<string, string>;
+  /** contagem acumulada por bucket */
+  buckets: number[];
+  soma: number;
+  total: number;
+}
+
+const histogramas = new Map<string, Histograma>();
+
+/** Observa um valor de latência (ms) no histograma. */
+export function observarLatencia(nome: string, labels: Record<string, string> | undefined, ms: number): void {
+  const k = chave(nome, labels);
+  let h = histogramas.get(k);
+  if (!h) {
+    h = { nome, labels: labels ?? {}, buckets: BUCKETS_LATENCIA.map(() => 0), soma: 0, total: 0 };
+    histogramas.set(k, h);
+  }
+  h.soma += ms;
+  h.total += 1;
+  for (let i = 0; i < BUCKETS_LATENCIA.length; i++) {
+    if (ms <= BUCKETS_LATENCIA[i]) h.buckets[i] += 1;
+  }
+}
+
+/** Todos os histogramas (para a exportação Prometheus). */
+export function lerHistogramas(): Histograma[] {
+  return [...histogramas.values()].map((h) => ({ ...h, labels: { ...h.labels } }));
+}

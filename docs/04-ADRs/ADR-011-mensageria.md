@@ -163,3 +163,22 @@ A decisão acima foi aplicado no fluxo de Campanhas (aba Clientes) e na fila do 
   publicado; o painel cria a campanha dentro de `comCorrelacao(...)` e os
   itens da fila herdam o mesmo identificador → `disparo.criado`,
   `disparo.mensagem.enviada` e `disparo.concluido` compartilham a correlação.
+
+---
+
+## Addendum (2026-11-11) — issue #52: observabilidade da mensageria
+
+- **Métricas Prometheus** (`src/monitor/metrics.ts`): `alcance_msg_publicadas_total{tipo}`,
+  `alcance_msg_processadas_total{tipo,resultado}` (`ok`|`erro`|`dlq`),
+  `alcance_msg_fila_tamanho{tipo}`, `alcance_msg_dlq_tamanho{tipo}`,
+  `alcance_msg_retries_total{tipo}`, `alcance_msg_duplicadas_total{tipo}`,
+  `alcance_msg_idade_fila_ms{tipo}`, `alcance_msg_taxa_erro{tipo}` e o histograma
+  `alcance_msg_latencia_envio_ms{tipo}`. A métrica antiga `alcance_fila_tamanho` continua
+  exposta (compatibilidade).
+- **Rastreio por `correlationId`**: o log da mensagem processada carrega campos
+  **estruturados** (pino): `tipo`, `chave`, `correlationId`, `ok`, `tentativas`, `duracaoMs` —
+  sem concatenar texto solto. O `correlationId` atravessa o fluxo
+  (webhook → oferta → fila → envio → evento).
+- **Diagnóstico**: `GET /api/mensageria/stats` devolve o snapshot por tipo (pendentes,
+  processadas, falhas, DLQ, mais antiga, idade e taxa de erro).
+- **Grafana**: o dashboard provisionado ganhou os painéis de fila/DLQ/duplicatas.

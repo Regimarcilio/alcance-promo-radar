@@ -22,15 +22,26 @@ export interface ResumoFila {
   falhas: number;
   dlq: number;
   maisAntigaEm: string | null;
+  /** idade da mensagem mais antiga na fila (ms) */
+  idadeFilaMs: number;
+  /** taxa de erro (falhas / (processadas + falhas)) */
+  taxaErro: number;
 }
 
-/** Retrato de todas as filas conhecidas. */
+/** Retrato de todas as filas conhecidas (base das métricas e do /stats). */
 export function resumoFilas(): ResumoFila[] {
   const broker = getBroker();
   const tipos = [TIPO_CLIENTE, TIPO_MONITOR];
   return tipos.map((tipo) => {
-    if (tipo === TIPO_MONITOR) return { tipo, ...statsMonitor() };
-    return { tipo, ...broker.stats(tipo) };
+    const base = tipo === TIPO_MONITOR ? statsMonitor() : broker.stats(tipo);
+    const idade = base.maisAntigaEm ? Date.now() - Date.parse(base.maisAntigaEm) : 0;
+    const total = base.processadas + base.falhas;
+    return {
+      tipo,
+      ...base,
+      idadeFilaMs: Number.isFinite(idade) && idade > 0 ? Math.round(idade) : 0,
+      taxaErro: total > 0 ? Number((base.falhas / total).toFixed(4)) : 0,
+    };
   });
 }
 

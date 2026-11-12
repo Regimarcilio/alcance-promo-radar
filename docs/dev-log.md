@@ -2501,3 +2501,35 @@ imediata de toda demanda aberta.
 - **Testes existentes:** nenhum alterado — as assinaturas dos produtores seguem as mesmas.
 - **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
 - **Próximo:** #52 (métricas de fila/DLQ/retry + rastreio por correlationId).
+
+## 2026-11-11 — Issue #52 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** observabilidade da Mensageria — métricas de fila/DLQ/retry/duplicatas/latência e
+  rastreio ponta a ponta por `correlationId`.
+- **Branch:** ISSUE · **PR:** #62 (aberto para `develop`)
+- **Decisões:**
+  - **Métricas** (`src/monitor/metrics.ts`): `alcance_msg_publicadas_total{tipo}`,
+    `alcance_msg_processadas_total{tipo,resultado}` (ok|erro|dlq), `alcance_msg_fila_tamanho{tipo}`,
+    `alcance_msg_dlq_tamanho{tipo}`, `alcance_msg_retries_total{tipo}`,
+    `alcance_msg_duplicadas_total{tipo}`, `alcance_msg_idade_fila_ms{tipo}`,
+    `alcance_msg_taxa_erro{tipo}` e o histograma `alcance_msg_latencia_envio_ms{tipo}`.
+    A métrica antiga `alcance_fila_tamanho` continua exposta (compatibilidade).
+  - **Gauges calculados no scrape** (fila/DLQ/idade/taxa de erro) e **contadores em memória**
+    (`src/messaging/contadores.ts`) — zerados a cada restart, como as demais métricas de processo.
+  - **Log estruturado** (pino) da mensagem processada: `tipo`, `chave`, `correlationId`, `ok`,
+    `tentativas`, `duracaoMs` — **sem concatenar texto solto**. O `correlationId` do envelope
+    atravessa webhook → oferta → fila → envio → evento.
+  - **Diagnóstico**: `GET /api/mensageria/stats` (snapshot por tipo: pendentes, processadas,
+    falhas, dlq, mais antiga, idade e taxa de erro) — base da UI da #53.
+  - **Grafana**: dashboard provisionado com 3 painéis novos (pendentes, DLQ, curva
+    fila/DLQ/duplicatas) — sem dashboard novo.
+- **Arquivos:** src/monitor/metrics.ts, src/monitor/metrics.test.ts, src/messaging/contadores.ts,
+  src/messaging/filas.ts, src/clientes/clientes.ts, src/clientes/clientes.test.ts,
+  src/monitor/fila.ts, src/manager/server.ts,
+  grafana/provisioning/dashboards/alcance-overview.json, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 6 novos (fila nas métricas, DLQ nas métricas, duplicatas + histograma, formato
+  Prometheus válido com a seção nova, log com correlationId, snapshot do /stats) — **273/273**
+  (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes:** nenhum alterado — as métricas antigas continuam válidas (testes
+  existentes de `metrics.test.ts` passam sem mudança).
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #53 (protótipo da tela Mensageria) e #54 (UI) — fora do escopo deste programa.

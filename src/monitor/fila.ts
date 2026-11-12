@@ -23,6 +23,8 @@ import { criarEnvelope } from "../messaging/envelope.js";
 import { lerDlq, registrarDlq, removerDlq } from "../messaging/dlq.js";
 import { deveRetentar, proximaTentativaEm } from "../messaging/politica.js";
 import { publicarEvento } from "../messaging/eventos.js";
+import { incrementar, observarLatencia } from "../messaging/contadores.js";
+import { logger } from "../observability/logger.js";
 
 // caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
 function file(): string {
@@ -383,8 +385,28 @@ export async function liberarProximo(): Promise<ItemFila | null> {
   salvar(s);
 
   processando = (async () => {
+    const inicio = Date.now();
     try {
       const r = await entregarItemDetalhado(item);
+      // OBSERVABILIDADE (issue #52): latência + log com o correlationId
+      const duracaoMs = Date.now() - inicio;
+      observarLatencia("alcance_msg_latencia_envio_ms", { tipo: TIPO_MONITOR }, duracaoMs);
+      incrementar("alcance_msg_processadas_total", {
+        tipo: TIPO_MONITOR,
+        resultado: r.restantes.length ? "erro" : "ok",
+      });
+      logger.info(
+        {
+          tipo: TIPO_MONITOR,
+          chave: item.id,
+          correlationId: item.correlationId ?? null,
+          ok: !r.restantes.length,
+          tentativas: item.tentativas ?? 0,
+          duracaoMs,
+          erro: r.erro ? r.erro.slice(0, 200) : null,
+        },
+        "[mensageria] mensagem processada",
+      );
       const atual = carregar();
       if (atual.emAndamento?.item.id !== item.id) return; // já recuperado
 
@@ -399,6 +421,7 @@ export async function liberarProximo(): Promise<ItemFila | null> {
 
       const tentativas = (item.tentativas ?? 0) + 1;
       if (r.transitorio && deveRetentar(r.erro ?? "", tentativas)) {
+        incrementar("alcance_msg_retries_total", { tipo: TIPO_MONITOR });
         // NACK: reenfileira do destino que falhou (sem duplicar o item),
         // com backoff exponencial (evita rajada contra o WhatsApp)
         reenfileirar({

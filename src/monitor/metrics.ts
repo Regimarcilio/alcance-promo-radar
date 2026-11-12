@@ -14,6 +14,8 @@ import { tamanhoFila } from "./fila.js";
 import { listarInstancias } from "../wa/rotacao.js";
 import { resumoDisparos } from "../clientes/disparos.js";
 import { estadoJanela } from "./janela.js";
+import { resumoFilas } from "../messaging/filas.js";
+import { lerContadores, lerHistogramas, BUCKETS_LATENCIA } from "../messaging/contadores.js";
 
 /** Cache de métricas para evitar leituras repetidas (5s TTL) */
 let metricsCache: string | null = null;
@@ -48,7 +50,7 @@ function help(name: string, description: string): string {
 /**
  * Tipo da métrica (counter, gauge, histogram, summary).
  */
-function type(name: string, typ: "counter" | "gauge"): string {
+function type(name: string, typ: "counter" | "gauge" | "histogram"): string {
   return `# TYPE ${name} ${typ}`;
 }
 
@@ -215,6 +217,67 @@ function metricsHealth(): string {
 }
 
 /**
+ * Métricas da camada de Mensageria (fila, DLQ, retry, duplicatas, latência).
+ */
+function metricsMensageria(): string {
+  const lines: string[] = [];
+  const filas = resumoFilas();
+
+  // --- gauges: estado das filas (calculado no scrape) ---
+  const gauges: Array<[string, (f: (typeof filas)[number]) => number, string]> = [
+    ["alcance_msg_fila_tamanho", (f) => f.pendentes, "Mensagens pendentes na fila por tipo"],
+    ["alcance_msg_dlq_tamanho", (f) => f.dlq, "Itens na dead letter queue por tipo"],
+    ["alcance_msg_idade_fila_ms", (f) => f.idadeFilaMs, "Idade da mensagem mais antiga na fila (ms)"],
+    ["alcance_msg_taxa_erro", (f) => f.taxaErro, "Taxa de erro do tipo de mensagem"],
+  ];
+  for (const [nome, valor, desc] of gauges) {
+    lines.push(help(nome, desc));
+    lines.push(type(nome, "gauge"));
+    for (const f of filas) {
+      lines.push(`${nome}{tipo="${escapeLabel(f.tipo)}"} ${valor(f)}`);
+    }
+  }
+
+  // --- contadores ---
+  const contadores = lerContadores();
+  const contadoresMensageria = contadores.filter((c) => c.nome.startsWith("alcance_msg_"));
+  const vistos = new Set<string>();
+  for (const c of contadoresMensageria) {
+    if (vistos.has(c.nome)) continue;
+    vistos.add(c.nome);
+    lines.push(help(c.nome, `Contador de mensageria ${c.nome.replace("alcance_msg_", "")}`));
+    lines.push(type(c.nome, "counter"));
+  }
+  for (const c of contadoresMensageria) {
+    const l = Object.keys(c.labels)
+      .sort()
+      .map((k) => `${k}="${escapeLabel(c.labels[k])}"`)
+      .join(", ");
+    lines.push(`${c.nome}${l ? `{${l}}` : ""} ${c.valor}`);
+  }
+
+  // --- histogramas de latência ---
+  const histogramas = lerHistogramas();
+  for (const h of histogramas) {
+    lines.push(help(h.nome, `Latência do processamento em ms (${h.nome})`));
+    lines.push(type(h.nome, "histogram"));
+    const l = Object.keys(h.labels)
+      .sort()
+      .map((k) => `${k}="${escapeLabel(h.labels[k])}"`)
+      .join(", ");
+    const base = l ? `{${l},` : "{";
+    for (let i = 0; i < BUCKETS_LATENCIA.length; i++) {
+      lines.push(`${h.nome}_bucket${base}le="${BUCKETS_LATENCIA[i]}"} ${h.buckets[i]}`);
+    }
+    lines.push(`${h.nome}_bucket${base}le="+Inf"} ${h.total}`);
+    lines.push(`${h.nome}_sum${l ? `{${l}}` : ""} ${h.soma}`);
+    lines.push(`${h.nome}_count${l ? `{${l}}` : ""} ${h.total}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Exporta todas as métricas no formato Prometheus.
  * Usa cache por 5 segundos para evitar leituras repetidas do disco.
  */
@@ -242,6 +305,8 @@ export function exportarMetricas(): string {
     metricsJanela(),
     "",
     metricsDisparos(),
+    "",
+    metricsMensageria(),
   ];
 
   metricsCache = seccoes.join("\n") + "\n";
