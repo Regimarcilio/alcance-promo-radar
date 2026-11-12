@@ -386,3 +386,85 @@ test("fila do monitor: o switch por tipo desliga só o Monitor (o Clientes conti
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("fila do monitor: a duplicata reagendada NÃO trava a fila (o item seguinte é enviado)", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+
+    // 1ª oferta: encaminhada (registra a chave de negócio)
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+
+    // 2ª vez a MESMA oferta → duplicata → reagendada (+24h, sem ACK)
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    await mod.liberarProximo();
+    assert.equal(mod.tamanhoFila(), 1, "a duplicata ficou reagendada na fila");
+    assert.equal(mod.emAndamento(), null, "nenhum item fica travado em andamento");
+
+    // 3ª oferta: NOVA (outro produto) → tem de ser enviada normalmente
+    mod.enfileirar({ ...ITEM, idProduto: "MLB999" });
+    liberarRitmoMonitor(dir);
+    const antes = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+    await mod.liberarProximo();
+    const depois = m.chamadas.filter((u) => u.includes("/message/sendText/")).length;
+
+    assert.equal(depois, antes + 1, "a fila do Monitor não travou: a oferta nova foi enviada");
+    assert.equal(mod.emAndamento(), null, "o item não fica em andamento");
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila do monitor: quando a hora do reenvio chega, ele é enviado uma única vez (caminho natural)", async () => {
+  const { mod, dir } = await carregarFilaMonitor();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+
+    mod.enfileirar(ITEM);
+    await mod.liberarProximo();
+    mod.enfileirar(ITEM);
+    liberarRitmoMonitor(dir);
+    await mod.liberarProximo();
+    assert.equal(mod.tamanhoFila(), 1, "a duplicata ficou reagendada");
+
+    // o relógio avança: a hora do reenvio chega (sem reenfileirar nada)
+    const arq = join(dir, "monitor-fila.json");
+    const raw = JSON.parse(readFileSync(arq, "utf8"));
+    raw.itens.forEach((i: any) => {
+      i.proximaTentativaEm = new Date(Date.now() - 1000).toISOString();
+    });
+    writeFileSync(arq, JSON.stringify(raw, null, 2));
+    liberarRitmoMonitor(dir);
+
+    await mod.liberarProximo();
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      2,
+      "o reenvio foi enviado (1 original + 1 reenvio)",
+    );
+    assert.equal(mod.tamanhoFila(), 0, "o reenvio saiu da fila (ACK)");
+
+    // a próxima liberação NÃO reenvia de novo (o reenvio é único)
+    liberarRitmoMonitor(dir);
+    await mod.liberarProximo();
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      2,
+      "o reenvio é único: não repete",
+    );
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

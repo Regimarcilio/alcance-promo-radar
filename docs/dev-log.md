@@ -2779,10 +2779,14 @@ pela aprovação do operador.
     válido, **efeito colateral do Monitor em destaque**, alternativas).
   - `README.md` — bullet do reenvio na seção Mensageria + o aviso do Monitor.
   - `src/messaging/reenvio.test.ts` — **novo** (7 testes do núcleo);
-    `src/clientes/clientes.test.ts` (+5), `src/monitor/fila.test.ts` (+4),
+    `src/clientes/clientes.test.ts` (+5), `src/monitor/fila.test.ts` (+6),
     `src/monitor/metrics.test.ts` (1 ajuste: a idade da fila é comparada sem o valor volátil).
 - **Evidências**
-  - **Testes:** 298/298 (`npm test`), `npm run typecheck` e `npm run build` verdes.
+  - **Testes:** 300/300 (`npm test`), `npm run typecheck` e `npm run build` verdes.
+  - **Revisão do MASTER (pós-PR):** 2 testes de regressão acrescentados no
+    `src/monitor/fila.test.ts` — (a) a duplicata reagendada **não trava a fila** do Monitor (o
+    item seguinte é enviado) e (b) o reenvio é enviado **uma única vez** quando a hora chega pelo
+    caminho natural (sem `reenfileirar`), provando que ele não se reagenda em loop.
   - **Cenários Gherkin cobertos:** duplicata reagendada (+24h, não confirmada, contador aumenta);
     reenvio segue a sequência da fila (não elegível antes da hora); reenvio não se reagenda em loop
     (pula a idempotência e é enviado); falha no reenvio → retry com backoff (sem novo +24h); switch
