@@ -12,12 +12,13 @@ import { ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
 
-/** Erro de rede/conexão (vale repetir)? 5xx, "Connection Closed", socket, timeout. */
-export function ehErroTransitorio(msg: string): boolean {
-  return /Evolution (sendMedia|sendText)?\s*5\d\d|Connection Closed|Precondition Required|ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|socket hang up|terminated|other side closed/i.test(
-    msg
-  );
-}
+/**
+ * Erro de rede/conexão (vale repetir)? 5xx, "Connection Closed", socket, timeout.
+ * A implementação vive em `src/wa/erros.ts` (módulo neutro) para que a camada
+ * de Mensageria classifique o erro sem criar ciclo de import.
+ */
+export { ehErroTransitorio } from "./erros.js";
+import { ehErroTransitorio } from "./erros.js";
 
 /**
  * Repete só erros TRANSITÓRIOS (WhatsApp/Evolution cai e volta em segundos).

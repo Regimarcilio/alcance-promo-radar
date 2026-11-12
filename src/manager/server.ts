@@ -41,6 +41,9 @@ import {
 } from "../clientes/disparos.js";
 import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
 import { itensDlq, reprocessarMensagem, resumoFilas } from "../messaging/filas.js";
+import { comCorrelacao } from "../messaging/envelope.js";
+import { publicarEvento, estadoAssinantes, processarPendentes } from "../messaging/eventos.js";
+import { lerAuditoria } from "../messaging/consumidores.js";
 import { lerTitulos, definirTitulo } from "../ui/titulos.js";
 import { resolverMidia } from "./midia.js";
 import { logger } from "../observability/logger.js";
@@ -1298,6 +1301,16 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     return;
   }
   // ---------- Mensageria (filas, DLQ e reprocessamento) ----------
+  if (req.method === "GET" && url.pathname === "/api/mensageria/eventos") {
+    const tipo = url.searchParams.get("tipo");
+    const limite = Math.min(500, Math.max(1, Number(url.searchParams.get("limite") ?? 50)));
+    const eventos = lerAuditoria()
+      .filter((e: any) => !tipo || e.tipo === tipo)
+      .slice(-limite)
+      .reverse();
+    json(200, { eventos, assinantes: estadoAssinantes() });
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/mensageria/filas") {
     json(200, { filas: resumoFilas() });
     return;
@@ -1378,17 +1391,28 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
         jids = l.contatos;
         listaNome = l.nome;
       }
-      const d = criarDisparo({
-        texto: String(b.texto ?? ""),
-        link: String(b.link ?? ""),
-        midia: b.midia === undefined ? null : midiaDoBody(b.midia),
-        listaId: listaId || null,
-        listaNome,
-        jids,
-        // número que envia a campanha (issue #45) — vazio/null = Automático
-        instancia:
-          b.instancia === undefined || b.instancia === null ? null : String(b.instancia ?? ""),
-      });
+      // correlação do fluxo: campanha criada → mensagens enviadas → conclusão
+      const correlationId = randomUUID();
+      const d = comCorrelacao(correlationId, () =>
+        criarDisparo({
+          texto: String(b.texto ?? ""),
+          link: String(b.link ?? ""),
+          midia: b.midia === undefined ? null : midiaDoBody(b.midia),
+          listaId: listaId || null,
+          listaNome,
+          jids,
+          // número que envia a campanha (issue #45) — vazio/null = Automático
+          instancia:
+            b.instancia === undefined || b.instancia === null ? null : String(b.instancia ?? ""),
+        }),
+      );
+      // EVENTO (Mensageria #51): o disparo foi criado. Quem assina é problema
+      // do assinante — o painel não conhece auditoria, métricas nem log.
+      try {
+        publicarEvento("disparo.criado", { disparoId: d.id, total: d.total }, { correlationId });
+      } catch {
+        /* evento é acessório */
+      }
 
       // Detecta se jids contém apenas um grupo (@g.us) - envia direto
       if (jids.length === 1 && jids[0].endsWith("@g.us")) {
@@ -1408,10 +1432,13 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       } else {
         // Fluxo normal: enfileira individualmente
         try {
-          await enfileirarCampanha({
-            texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
-            instancia: d.instancia ?? null,
-          });
+          // herda o correlationId da campanha (contexto de correlação)
+          await comCorrelacao(correlationId, () =>
+            enfileirarCampanha({
+              texto: d.texto, link: d.link, midia: d.midia, jids: d.jids, disparoId: d.id,
+              instancia: d.instancia ?? null,
+            }),
+          );
         } catch (e) {
           excluirDisparo(d.id); // rollback: não deixa disparo sem fila
           throw e;
@@ -3690,6 +3717,11 @@ server.listen(PORT, HOST, () => {
   iniciarFilaWorker();
   iniciarClientesWorker();
   iniciarSyncGruposDiario();
+  // Mensageria: reentrega o que ficou na fila dos assinantes (eventos
+  // publicados enquanto o processo estava fora).
+  void processarPendentes().then((n) => {
+    if (n) console.log(`mensageria: ${n} evento(s) reentregue(s) no boot`);
+  });
   // Piloto: o store é lazy — sem isto, os timers nunca são agendados no boot
   // e o Piloto fica muda (mesmo com a grade "ligada" no painel).
   const rl = retomarLoopsNoBoot();

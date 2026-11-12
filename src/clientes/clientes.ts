@@ -21,6 +21,7 @@ import { dentroDaJanela } from "../util/janela.js";
 import { podeEnviarAgora } from "../monitor/janela.js";
 import {
   cancelarDisparo,
+  obterDisparo,
   registrarResultadoDisparo,
   textoComLink,
   type MidiaDisparo,
@@ -46,6 +47,7 @@ import {
 import { getBroker } from "../messaging/broker.js";
 import { chaveDe, jaProcessado } from "../messaging/idempotencia.js";
 import { incrementar } from "../messaging/contadores.js";
+import { publicarEvento } from "../messaging/eventos.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
@@ -556,6 +558,18 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     // ACK: só agora a mensagem sai da fila
     await confirmarMensagem(env);
     if (item.disparoId) registrarResultadoDisparo(item.disparoId, true);
+    // EVENTO: a mensagem foi enviada. O correlationId do envelope atravessa o
+    // fluxo: disparo.criado → disparo.mensagem.enviada → disparo.concluido.
+    try {
+      publicarEvento(
+        "disparo.mensagem.enviada",
+        { disparoId: item.disparoId ?? null, jid: item.jid, ok: true },
+        { correlationId: env.correlationId },
+      );
+    } catch {
+      /* evento é acessório: nunca quebra o envio */
+    }
+    await talvezConcluirDisparo(env, item);
     console.log(`[clientes] enviado para ${item.nome} (${item.jid}) id=${r.messageId} intervalo=${Math.round(intervaloComVariacao/1000)}s`);
   } catch (e: any) {
     const msg = String(e?.message ?? e);
@@ -565,9 +579,43 @@ export async function liberarProximoCliente(): Promise<ItemCampanha | null> {
     // transitório com retry não é perda
     const morreu = getBroker().dlq(TIPO_CLIENTE).some((i) => i.id === env.id);
     if (morreu && item.disparoId) registrarResultadoDisparo(item.disparoId, false, msg);
+    if (morreu) {
+      // EVENTO: a mensagem foi para a DLQ (o operador vê e reprocessa)
+      try {
+        publicarEvento(
+          "mensagem.dlq",
+          { tipo: TIPO_CLIENTE, id: env.id, motivo: msg.slice(0, 200), tentativas: env.tentativas },
+          { correlationId: env.correlationId },
+        );
+      } catch {
+        /* evento é acessório */
+      }
+    }
     console.log(`[clientes] ERRO para ${item.nome} (${item.jid}): ${msg.slice(0, 120)}`);
   }
   return item;
+}
+
+/**
+ * Publica `disparo.concluido` quando a campanha não tem mais itens pendentes
+ * (a última mensagem saiu da fila).
+ */
+async function talvezConcluirDisparo(env: any, item: ItemCampanha): Promise<void> {
+  if (!item.disparoId) return;
+  const restantes = envelopesPendentes().filter((e) => e.payload?.disparoId === item.disparoId);
+  if (restantes.length) return;
+  const d = obterDisparo(item.disparoId);
+  if (!d) return;
+  if (d.status === "CONCLUIDO" || d.status === "PARCIAL" || d.status === "ERRO") return;
+  try {
+    publicarEvento(
+      "disparo.concluido",
+      { disparoId: d.id, enviados: d.enviados, falhas: d.falhas },
+      { correlationId: env.correlationId },
+    );
+  } catch {
+    /* evento é acessório */
+  }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

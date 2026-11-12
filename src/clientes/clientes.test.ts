@@ -496,3 +496,27 @@ test("fila: campanhas diferentes para o mesmo contato não colidem", async () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("mensageria: a campanha e as mensagens enviadas compartilham o correlationId", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  try {
+    const envelopeMod = await import("../messaging/envelope.js");
+    await envelopeMod.comCorrelacao("corr-teste", () =>
+      mod.enfileirarCampanha({
+        texto: "oferta",
+        jids: ["5511900000030@s.whatsapp.net"],
+        disparoId: "promo-corr",
+      }),
+    );
+    await mod.liberarProximoCliente();
+    const consumidores = await import("../messaging/consumidores.js");
+    const auditoria = consumidores.lerAuditoria();
+    const envio = auditoria.find((e: any) => e.tipo === "disparo.mensagem.enviada");
+    assert.ok(envio, "o evento da mensagem enviada foi registrado");
+    assert.equal(envio.correlationId, "corr-teste", "o correlationId atravessa o fluxo");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
