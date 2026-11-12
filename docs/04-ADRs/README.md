@@ -18,7 +18,7 @@ reescrever o antigo. O status indica se a decisão ainda vale no estado atual do
 | [ADR-008](ADR-008-ui-temas.md) | Painel: temas visuais e títulos editáveis por card | Vigente |
 | [ADR-009](ADR-009-shopee-open-api.md) | Shopee: link de afiliado via Open API (`generateShortLink`) | Vigente (validação live pendente de credenciais) |
 | [ADR-010](ADR-010-verificacao-celular-favoritos-ml.md) | Verificação de celular no 1º acesso + favoritos do ML | Vigente |
-| [ADR-011](ADR-011-mensageria.md) | Mensageria interna: envelope padronizado + port de broker + file broker | Vigente |
+| [ADR-011](ADR-011-mensageria.md) | Mensageria interna: envelope padronizado + port de broker + file broker | Vigente (épico #47: #48–#52 entregues; #53/#54 pendentes) |
 
 ## Mapa ADR × requisitos
 
@@ -34,7 +34,7 @@ reescrever o antigo. O status indica se a decisão ainda vale no estado atual do
 | ADR-008 | RF-048, RF-049 | RN-022 |
 | ADR-009 | RF-032 | RN-023 |
 | ADR-010 | RF-036, RF-037 | RN-018 |
-| ADR-011 | — (camada de Mensageria: RF/RN no delta do SRS) | — |
+| ADR-011 | RF-057, RF-058, RF-059, RF-060, RF-061 | RN-028, RN-029, RN-030, RN-031, RN-032 |
 
 Fonte canônica dos RF/RN: [`../SRS-v0.4.md`](../SRS-v0.4.md). Índice geral de documentos:
 [`../00-INDICE.md`](../00-INDICE.md).
