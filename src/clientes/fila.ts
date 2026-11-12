@@ -22,6 +22,7 @@ import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico, lerJson } from "../store/json.js";
 import { criarEnvelope, type Envelope } from "../messaging/envelope.js";
 import { getBroker, migrarLegado } from "../messaging/broker.js";
+import { chaveDe, registrarProcessado } from "../messaging/idempotencia.js";
 import type { MidiaDisparo } from "./disparos.js";
 
 /** Tipo da fila de campanhas. */
@@ -145,7 +146,13 @@ export function totalPendentes(): number {
 export async function enfileirar(itens: ItemCampanhaMensagem[]): Promise<number> {
   const { broker } = brokerCapaz();
   for (const item of itens) {
-    const env = criarEnvelope(TIPO_CLIENTE, item, { id: item.id, timestamp: item.criadoEm });
+    // a chave de idempotência vai no envelope: uma mensagem por contato por
+    // campanha (`${disparoId}:${jid}`)
+    const env = criarEnvelope(TIPO_CLIENTE, item, {
+      id: item.id,
+      timestamp: item.criadoEm,
+      chave: chaveDe(TIPO_CLIENTE, item),
+    });
     await broker.publish(env);
   }
   return totalPendentes();
@@ -185,10 +192,21 @@ export async function reservarProximo(): Promise<EnvelopeCliente | null> {
   return null;
 }
 
-/** ACK: o item foi processado com sucesso → sai da fila. */
-export async function confirmar(env: EnvelopeCliente): Promise<void> {
+/**
+ * ACK: o item foi processado com sucesso → sai da fila.
+ *
+ * A chave de idempotência é gravada **junto do ACK** (nunca antes): se o
+ * processo morrer entre o efeito e o registro, a reentrega reenvia
+ * (at-least-once com chave).
+ *
+ * `contar: false` → não soma no contador de enviados (usado quando a
+ * duplicata é descartada sem reenvio: a mensagem já foi contada na origem).
+ */
+export async function confirmar(env: EnvelopeCliente, op: { contar?: boolean } = {}): Promise<void> {
   const { broker } = brokerCapaz();
   await broker.ack(env.id);
+  if (env.chave) registrarProcessado(env.chave, TIPO_CLIENTE);
+  if (op.contar === false) return;
   const s = estado();
   salvarEstado({ ...s, enviados: s.enviados + 1 });
 }
