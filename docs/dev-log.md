@@ -2561,7 +2561,7 @@ tela nasce protótipo (PROPOSTA → NAVEGÁVEL → VALIDADA → APROVADA → IMP
 issue entrega **apenas o protótipo**; a implementação da interface é a **#54**, bloqueada
 pela aprovação do operador.
 
-**Branch**: `DOC-mensageria-prototipo` (a partir de `develop`) · **PR**: #64 (`Closes #53`)
+**Branch**: `DOC-mensageria-prototipo` (a partir de `develop`) · **PR**: #64 (`Closes #53`) — checks `build` e `smoke-test` verdes
 
 **Entregas**
 - `docs/prototipos/mensageria/opcao-1.html` — protótipo **navegável e autocontido** (CSS e JS
