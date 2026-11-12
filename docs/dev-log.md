@@ -2552,3 +2552,75 @@ imediata de toda demanda aberta.
   novo (o container roda o `dist` embutido na imagem); (2) pareamento por QR das instâncias
   (`device_removed`) para retomar a fila; (3) sem envio real validado (instâncias deslogadas e fila
   pausada) — a prova de não-regressão é por teste unitário com Evolution mockada.
+
+## 2026-11-12 | #53 | master | Protótipo navegável da tela Mensageria (filas + DLQ + Reprocessar)
+
+**Contexto**: o operador decidiu (10/11/2026) que as mensagens que falharam de vez **são
+reparadas na interface** ("na aba, com lista e Reprocessar"). O `AGENTS.md` exige que toda
+tela nasce protótipo (PROPOSTA → NAVEGÁVEL → VALIDADA → APROVADA → IMPLEMENTADA). Este
+issue entrega **apenas o protótipo**; a implementação da interface é a **#54**, bloqueada
+pela aprovação do operador.
+
+**Branch**: `DOC-mensageria-prototipo` (a partir de `develop`) · **PR**: #64 (`Closes #53`) — checks `build` e `smoke-test` verdes
+
+**Entregas**
+- `docs/prototipos/mensageria/opcao-1.html` — protótipo **navegável e autocontido** (CSS e JS
+  embutidos, **zero** recurso externo — abre em `file://`, sem build e sem servidor).
+- `docs/prototipos/mensageria/README.md` — objetivo, status (**aguardando aprovação**), lista
+  de arquivos, parâmetros, como abrir, decisões visuais e pendências.
+
+**Decisões**
+- **View nova, não redesenho**: *Mensageria* entra como item novo do menu lateral (badge com o
+  número de itens na DLQ). Clientes, Monitor, Números e Rastreio ficam intactos; o redesign da
+  aba Números segue fora de escopo, por decisão do operador.
+- **Visual fiel ao painel real** (`src/manager/server.ts`): paleta **verde** como referência,
+  as **6 paletas** do seletor de tema (persistidas em `localStorage`), cards `.panel`, KPIs
+  `.kpi`, tabelas `.tbl` em `.tblwrap`, botões `.mbtn`/`.mbtn.ok`, tomadores `.mini`,
+  sidebar de 258px e os mesmos breakpoints (980px / 700px).
+- **Dados fictícios (LGPD)**: JIDs `551900000000N@s.whatsapp.net`, “Contato Demo”,
+  “Grupo Demo Origem”, `MLB-902xx` — nenhum dado real de cliente. Selo “dados fictícios”
+  sempre visível.
+- **Formas idênticas às APIs reais** (`automensagem_manager`: 8091) — sem inventar campo:
+  `stats`/`filas` → `{ tipo, pendentes, processadas, falhas, dlq, maisAntigaEm, idadeFilaMs,
+  taxaErro }`; `dlq` → `{ id, tipo, envelope, motivo, ultimoErro, tentativas,
+  ultimaTentativaEm, origem }`; `eventos` → `{ em, tipo, id, correlationId, chave, tentativas }`
+  e `assinantes` → `{ tipo, nome, pendentes }`.
+- **Motivo colorido carrega a decisão**: `erro não transitório` em vermelho (retry não
+  resolve — exige intervenção) e `tentativas esgotadas` em âmbar (retry pode resolver).
+- **Trilha de correlação em gaveta lateral** (não modal): é consulta, não deve bloquear a
+  tabela; o rodapé da gaveta mantém o *Reprocessar* ao alcance (consultar → reparar).
+- **Reprocessar tudo age sobre o filtro visível** (tipo + busca) e o modal diz a contagem
+  exata — nunca uma ação às cegas. **Descartar** é destrutivo e sem volta: exige confirmação
+  explícita com o id da mensagem.
+- **8 estados obrigatórios** acessíveis por um seletor de cenário no topo: normal · fila vazia ·
+  fila grande · DLQ vazia · DLQ com 10 itens · item em reprocessamento · erro de API ·
+  carregando.
+
+**Arquivos**: `docs/prototipos/mensageria/opcao-1.html`, `docs/prototipos/mensageria/README.md`,
+`docs/dev-log.md` — **nenhum arquivo de produção (`src/`) tocado** (a #54 implementa a UI).
+
+**Evidências**
+- Protótipo aberto no Chromium: **abre sem erro de console** (único 404 é o `favicon.ico` do
+  servidor de teste) e **sem recurso externo quebrado** — `img/script[src]/link[href]/iframe`:
+  **zero**; URLs em CSS: **zero**.
+- **8 cenários** presentes no seletor e renderizando (KPIs, tabelas, esqueletos, banners e
+  estados vazios conferidos por `evaluate`).
+- **Ações exercitadas de ponta a ponta**: *Reprocessar* (item) tira a linha da DLQ (4 → 3
+  linhas), `dlq` da fila −1 (4 → 3) e `pendentes` +1 (12 → 13), com toast de confirmação;
+  *Reprocessar tudo* abre confirmação com a contagem exata e respeita o filtro por tipo
+  (3 mensagens de `cliente.enviar`); *Descartar* abre confirmação destrutiva com o id;
+  **trilha de correlação** abre a gaveta com as etapas (publicado → publicado → tentativas
+  esgotadas → falha definitiva → DLQ).
+- Tabela da DLQ com `table-layout: fixed` e larguras por coluna: cabe em 1440px **sem rolagem
+  lateral** (`scrollWidth == clientWidth`), coluna *Ações* visível.
+- Correções aplicadas nesta rodada: `<style>` de abertura ausente; bloco `@media` do painel
+  nunca fechado (o CSS extra do protótipo ficava aninhado e **não** se aplicava no desktop);
+  `.alerta` sem regra (banner de erro sem estilo); pluralização “4 mensagems”; coluna
+  *Mais antiga* com hora e idade invertidas; botão de copiar quebrando linha.
+- **Testes:** 273/273 (`npm test`), `npm run typecheck` e `npm run build` verdes — o diff é
+  só de documentação, sem código de produção.
+- **SAST**: sem segredo no diff (só `docs/`).
+
+**Próximo**: aprovação do operador sobre `docs/prototipos/mensageria/` → libera a **#54**
+(implementação da interface). Pendências decididas com o operador: **endpoint de descarte**
+(hoje só existe `POST /api/mensageria/dlq/reprocessar`) e **reprocessamento em lote**.
