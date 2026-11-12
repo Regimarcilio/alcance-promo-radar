@@ -10,7 +10,10 @@ import { createHash } from "node:crypto";
 import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico } from "../store/json.js";
 
-const file = join(dataDirAtual(), "monitor-estado.json");
+// caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
+function file(): string {
+  return join(dataDirAtual(), "monitor-estado.json");
+}
 
 export const DEDUP_DIAS = 7;
 
@@ -94,8 +97,8 @@ let cache: Estado | null = null;
 
 function carregar(): Estado {
   try {
-    if (!existsSync(file)) return cache ?? blank();
-    const s: any = JSON.parse(readFileSync(file, "utf8"));
+    if (!existsSync(file())) return cache ?? blank();
+    const s: any = JSON.parse(readFileSync(file(), "utf8"));
     const eventos = Array.isArray(s?.eventos) ? s.eventos : [];
     const totais = s?.totais && typeof s.totais === "object" ? s.totais : totaisDosEventos(eventos);
     cache = {
@@ -133,7 +136,7 @@ function salvar(s: Estado): void {
   if (LIMITE_EVENTOS > 0) s.eventos = s.eventos.slice(-LIMITE_EVENTOS);
   podarHashes(s.hashes);
   cache = s;
-  gravarJsonAtomico(file, s);
+  gravarJsonAtomico(file(), s);
 }
 
 export function hashMonitor(programa: string, idProduto: string | null, link: string, origem?: string): string {

@@ -2266,3 +2266,393 @@ imediata de toda demanda aberta.
 - **Testes:** 207/207 (`npm test`), build verde, smoke OK; JS inline validado com `vm.Script`.
 - **SAST:** sem segredo novo no diff; mesmo high pré-existente do zod.
 - **Pendências:** paginação da lista (fora do escopo).
+
+## 2026-11-11 — Release v0.9.0 — @issuemaster — `task: — (documentação e release)`
+- **Objetivo:** PR para `main` com README profissional e release publicada do projeto.
+- **Branch:** DOC · **PR:** #42 (README/CHANGELOG/versão → develop, merged) e #43 (promoção
+  `develop` → `main`, merged) · **Release:** `v0.9.0` (tag em `main`).
+- **Decisões:**
+  - `master` era ancestral de `develop` (92 commits atrás) e **foi renomeado para `main`** — o CI
+    (`.github/workflows/ci.yml`) já referenciava `main`, que não existia. Branch padrão do repo
+    alterada de `develop` para `main`.
+  - Versão **0.9.0** (minor): o CHANGELOG já tinha `[0.8.0]` (2026-10-22) e há features novas
+    (#36/#37/#38). `package.json` e `package-lock.json` sincronizados.
+  - README reescrito como documento de entrada: badges (CI, release, Node, TS, licença), sumário,
+    fluxo do monitor em texto, tabela de funcionalidades por área, diagrama Mermaid da arquitetura,
+    stack, requisitos, instalação local e Docker, tabela de variáveis de ambiente, seção de
+    multi-número (permissões por fluxo, pausa, override, principal), uso do painel por aba,
+    qualidade (207 testes), estrutura, segurança, observabilidade, documentação, pendências e licença.
+  - CHANGELOG: bloco `[Unreleased]` convertido em `[0.9.0] — 2026-11-10`, com as entregas das
+    issues #36/#37/#38, o fix do job `smoke-test` e a atualização de 181 para 207 testes.
+  - `SECURITY.md` já existia; **LICENSE não existe** — a seção de licença do README declara projeto
+    proprietário (todos os direitos reservados), sem abrir mão de direitos por omissão.
+- **Arquivos:** README.md, CHANGELOG.md, package.json, package-lock.json, docs/dev-log.md
+- **Testes:** `npm run build` verde; 207/207 (`npm test`) validados no `develop` antes do PR; CI
+  verde (typecheck + build + testes + smoke do manager) nos PRs #42 e #43.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Pendências:** (1) rebuild/recreate do container do manager para aplicar o `dist` novo — o
+  container atual tem o `dist` embutido na imagem e `docker restart` não aplica código novo;
+  (2) pareamento por QR das instâncias (`device_removed` do WhatsApp) para retomar a fila;
+  (3) `LICENSE` e `SECURITY.md` (#35) ainda não versionados; (4) default do repo agora `main` —
+  confirmar com o operador se prefere `develop` como branch de integração padrão.
+
+## 2026-11-11 — Issue #45 — @backdev/@frontdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** escolher, POR CAMPANHA, o número (instância) que envia as mensagens da aba
+  Clientes — sem mexer no override global do fluxo `disparo` (aba Números).
+- **Branch:** ISSUE · **PR:** #46 (aberto para `develop`)
+- **Decisões:**
+  - `Disparo.instancia?: string | null` — nome da instância que envia a campanha;
+    `null`/ausente = **Automático (rodízio)**. Disparos antigos (sem o campo) continuam
+    automáticos: migração sem tocar em `data/disparos.json`.
+  - `NovoDisparo.instancia`, `PatchDisparo.instancia`, `ItemCampanha.instancia` e
+    `CampanhaArgs.instancia` aceitam o campo; `enfileirarCampanha` copia a instância do disparo
+    para cada item da fila e `atualizarItensDaFila` troca a instância dos itens ainda pendentes
+    quando o disparo é editado (mesma regra já usada para texto/link/mídia).
+  - `rotacao.avaliarInstanciaFixada(instancia, fluxo, excluir)` valida a fixada no momento do
+    envio: existe no cadastro, `ativo`, `pausado === false`, `permissoes[fluxo] === true`,
+    não está em `excluir`, não é `instanciaRuim` e está `open`.
+  - `dispatch.comRetry` ganhou o parâmetro `fixada`: a **primeira** tentativa usa a instância
+    fixada quando ela é válida; se for inválida, registra
+    `[dispatch] instância fixada X inválida no fluxo disparo — usando automático (motivo)` e cai
+    no sorteio normal — **a campanha nunca trava** por número escolhido. As tentativas seguintes
+    já usam o sorteio existente (com a instância que falhou excluída).
+  - Sem fluxo informado (caminho de grupo direto em `POST /api/disparos`), a validação da fixada
+    usa a permissão de **Disparo**; o sorteio automático desse caminho continua sem filtro de
+    fluxo (comportamento anterior preservado).
+  - Boas-vindas por DM, "adicionar ao grupo", Piloto e Monitor **não** foram afetados: seguem o
+    override global do fluxo `disparo`/rodízio, porque a fixada só entra por parâmetro explícito.
+  - UI (aba Clientes): select **"Número que envia"** no formulário de criação e no modal de
+    edição (`#dinstancia` / `#dedinstancia`), populado por `GET /api/instancias`: lista **todos**
+    os números com estado visível (🟢 open / 🟡 connecting / 🔴 close, marcadores de pausado e
+    de sem permissão Disparo) e **desabilita** os que não podem enviar, mostrando o motivo.
+    Default = `Automático (rodízio)`. O grid de disparos ganhou a coluna "número".
+  - `POST /api/disparos` aceita `instancia` e a aplica **também no caminho direto para grupo**
+    (`jids.length === 1` e JID `@g.us`), que antes mandava sem passar pela fila.
+  - `PATCH /api/disparos/:id` aceita `instancia` (troca o número enquanto o disparo é PENDENTE).
+- **Arquivos:** src/clientes/disparos.ts, src/clientes/clientes.ts, src/wa/rotacao.ts,
+  src/wa/dispatch.ts, src/manager/server.ts, src/clientes/disparos.test.ts,
+  src/clientes/clientes.test.ts, src/wa/dispatch.test.ts
+- **Testes:** 217/217 (`npm test`) — 10 testes novos (4 em `disparos.test.ts`, 3 em
+  `clientes.test.ts`, 3 em `dispatch.test.ts`); `npm run build` e `npm run typecheck` verdes.
+  JS inline do painel validado com `node --check` (2/2 blocos) e o seletor exercitado em
+  harness (3 números: 1 liberado, 1 pausado e 1 sem permissão Disparo — todos desabilitados
+  com o motivo). Sem envio real (instâncias deslogadas, fila pausada) — só teste unitário.
+- **SAST:** sem segredo novo no diff (só `EVO_KEY = "k"` de fixture, mesmo padrão dos testes
+  existentes); sem CORS/cookie/CSP alterados; `npm audit` mantém 1 high **pré-existente**
+  (zod <4.6.6 — correção exige upgrade major para a linha 4.x, fora do escopo desta issue).
+- **Pendências:** (1) rebuild/recreate do container do manager para aplicar o `dist` novo (o
+  container roda `dist` embutido na imagem); (2) pareamento por QR das instâncias
+  (`device_removed`) para retomar a fila; (3) teste em campo do envio com número fixado
+  depende de instâncias conectadas.
+
+## 2026-11-11 — Issue #48 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** núcleo da camada de Mensageria (épico #47) — envelope padronizado e versionado,
+  abstração de broker (port) com adapter de arquivo e ADR-011. **Nenhuma** mudança de
+  comportamento nos fluxos existentes.
+- **Branch:** ISSUE · **PR:** #55 (aberto para `develop`)
+- **Decisões:**
+  - **Port/adaptador** (`src/messaging/broker.ts`): a interface `Broker`
+    (publish/consume/ack/nack/tamanho/dlq/reprocessar/stats) é o contrato; `FileBroker` é o
+    adapter inicial (fila `data/messaging/<tipo>.json` = **array de envelopes**, DLQ
+    `dlq-<tipo>.json`, contadores `stats-<tipo>.json`), tudo com `gravarJsonAtomico` (0600).
+  - **Registro global** (`setBroker`/`getBroker`/`resetBroker`): trocar por AMQP/SQS depois não
+    toca em produtores nem consumidores (AC de "broker substituível").
+  - **`nack` tira a mensagem da fila** e a política decide o destino (reenfileirar = retry,
+    DLQ = esgotou). Default: reenfileirar com `tentativas + 1`. O gancho `politicaNack` é o
+    ponto de entrada da #49 (retry/backoff/DLQ).
+  - **Envelope** (`src/messaging/envelope.ts`) validado com **zod** (`EnvelopeInvalidoError`
+    carrega os campos inválidos); `correlationId` = explícito > contexto (`AsyncLocalStorage`)
+    > uuid novo — é o que permite o rastreio ponta a ponta do #52.
+  - **Migração do legado** (`migrarLegado`): converte `data/clientes-fila.json` em envelopes
+    da fila `cliente.enviar`, **idempotente** (id do envelope = id do item legado) e **sem
+    apagar o arquivo legado** — até a #49 o worker de Clientes ainda lê esse store; apagar
+    agora perderia a fila viva. Premissa registrada no ADR-011.
+  - **Catálogo** (`src/messaging/tipos.ts`): tipos de mensagem e de evento com **schema zod**
+    por evento (payloads sem PII) — nenhum tipo "solto" no código.
+- **Arquivos:** src/messaging/envelope.ts, src/messaging/tipos.ts, src/messaging/broker.ts,
+  src/messaging/envelope.test.ts, src/messaging/tipos.test.ts, src/messaging/broker.test.ts,
+  docs/04-ADRs/ADR-011-mensageria.md, docs/04-ADRs/README.md
+- **Testes:** 19 novos (236 no total, **236/236** em `npm test`); `npm run typecheck` e
+  `npm run build` verdes; smoke do manager OK. Nenhum teste existente foi alterado.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #49 (ACK real, retry com backoff+jitter e DLQ na fila de Clientes/Disparo e na
+  fila do Monitor) — pluga a política no gancho `politicaNack`.
+
+## 2026-11-11 — Issue #49 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** ACK real + retry com backoff/jitter + DLQ na fila de Clientes/Disparo
+  (e a mesma semântica na fila do Monitor). **É a correção da perda de 206 mensagens**
+  (10/11/2026: a fila fazia `shift()` antes de enviar).
+- **Branch:** ISSUE · **PR:** #56 (aberto para `develop`)
+- **Decisões:**
+  - **A fila de Campanhas virou fila de Mensageria**: cada item é um envelope
+    `cliente.enviar` em `data/messaging/cliente.enviar.json`. O estado da fila
+    (contadores/pausa/último envio) foi para `data/clientes-estado.json` e **herda o
+    histórico legado** (254 enviados / 206 erros preservados).
+  - **Migração idempotente e sem perda**: `data/clientes-fila.json` → envelopes; marcador
+    de ids já migrados; o legado só é esvaziado **depois** da gravação bem-sucedida e o
+    **arquivo não é apagado** (recuperação manual). Premissa: o worker legado só deixa de
+    ler o store no fim desta issue.
+  - **ACK real**: o item **fica na fila** durante o envio (reserva `emAndamento` +
+    `reservadoEm`); só sai no ACK. NACK devolve com `tentativas + 1`, `ultimoErro` e
+    `proximaTentativaEm`; erro permanente/vagas esgotadas → **DLQ** com o motivo.
+  - **Política de retry** (`src/messaging/politica.ts`): `base * 2^(n-1)` (base 30s, teto
+    30 min) com **jitter ±20%**; re-tenta só erro **transitório** (`ehErroTransitorio`).
+  - **DLQ por tipo** (`data/messaging/dlq-<tipo>.json`): envelope completo, motivo,
+    `tentativas`, `ultimaTentativaEm`, `origem`; retenção de 1000 itens; **não volta
+    sozinha** — só por ação do operador (`POST /api/mensageria/dlq/reprocessar`).
+  - **Fila do Monitor**: mesma semântica, **preservando** o retry de 3 tentativas e o
+    `reenfileirar` idempotente (não duplica o item em andamento); a DLQ do Monitor é
+    `dlq-monitor.encaminhar.json` e o reprocessamento devolve o item para a fila do
+    Monitor (não para o broker).
+  - **Erro transitório NÃO conta como falha do disparo**: o contador de falha do disparo
+    só é incremented quando a mensagem **morre** na DLQ (com retry, o contato ainda vai
+    receber) — evita o grid mostrar campanha quebrada enquanto a fila trabalha.
+  - **Caminhos de estado resolvidos em tempo de chamada** (`monitor/grupos`, `monitor/fila`,
+    `monitor/state`, `store/publicacoes`): o `ALCANCE_DATA_DIR` pode ser trocado em
+    teste/smoke sem recarregar o módulo (mesma intenção de `config/paths.ts`).
+- **Arquivos:** src/clientes/fila.ts, src/clientes/clientes.ts, src/clientes/clientes.test.ts,
+  src/messaging/politica.ts, src/messaging/dlq.ts, src/messaging/caminhos.ts,
+  src/messaging/filas.ts, src/messaging/broker.ts, src/messaging/envelope.ts,
+  src/monitor/fila.ts, src/monitor/fila.test.ts, src/monitor/grupos.ts, src/monitor/state.ts,
+  src/store/publicacoes.ts, src/manager/server.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 12 novos (ACK, retry/backoff/jitter, DLQ por erro permanente, tentativas
+  esgotadas, recuperação de crash, reprocessar, migração, herança do estado legado,
+  ACK do Monitor, reenfileirar sem duplicar, DLQ do Monitor) — **248/248** (`npm test`);
+  `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes adaptados (com justificativa):** os 3 testes de `clientes.test.ts` que
+  liam `data/clientes-fila.json` passaram a ler a fila nova (`data/messaging/cliente.enviar.json`,
+  envelope → payload) e `enfileirarCampanha`/`atualizarItensDaFila` viraram `async`. O
+  **comportamento asserido** é idêntico (item carrega `instancia`/`disparoId`, contagem de pendentes, edição de
+  pendentes). Nenhum outro teste foi tocado.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #50 (idempotência por chave de negócio) e #51 (tópicos Pub/Sub).
+
+## 2026-11-11 — Issue #50 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** idempotência por chave de negócio nos consumidores (aula: *"não tratar
+  mensagens duplicadas"*) — sem quebrar a API de dedup do Monitor.
+- **Branch:** ISSUE · **PR:** #58 (aberto para `develop`)
+- **Decisões:**
+  - **Chave por tipo** (`chaveDe`): `cliente.enviar` → `${disparoId}:${jid}` (sem disparo
+    → id do item, para não colidir entre campanhas avulsas); `monitor.encaminhar` → hash
+    `mlbId|preco|cupom`; `monitor.add-grupo` → `${jid}:${telefone}`; evento → `${tipo}:${id}`.
+  - **Consumidor idempotente** no worker de Clientes: chave já processada → **ACK imediato
+    sem reenviar** (log `[mensageria] duplicata ignorada: <chave>`) + contador
+    `alcance_msg_duplicadas_total{tipo}`. A chave é gravada **junto do ACK** (nunca antes)
+    → at-least-once com chave (se o processo morrer entre o efeito e o registro, a
+    reentrega reenvia).
+  - **Registro genérico** (`src/messaging/idempotencia.ts`): retenção de 30 dias, limite de
+    50 000 chaves, escrita atômica em `data/messaging/processados.json`.
+  - **`src/store/dedup.ts` refatorado** para reusar a estrutura (registro genérico com
+    `campoChave: "hash"`): **API pública e formato do arquivo intactos** (`hashEnvio`,
+    `jaEnviado`, `registrarEnvio`, `{hash, data, dia}`) e **histórico de 7 dias preservado**
+    (sem recriar o arquivo `data/envios.json`).
+  - **Contadores** (`src/messaging/contadores.ts`): base para as métricas da #52.
+  - **Erro transitório não é falha de negócio**: o contador de falha do disparo só sobe
+    quando a mensagem morre na DLQ (mantido da #49).
+- **Arquivos:** src/messaging/idempotencia.ts, src/messaging/idempotencia.test.ts,
+  src/messaging/contadores.ts, src/store/dedup.ts, src/clientes/fila.ts,
+  src/clientes/clientes.ts, src/clientes/clientes.test.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 9 novos (chave derivada do disparo/contato, campanhas diferentes não colidem,
+  registro marca a chave, retenção limpa antigas, limite de tamanho, chave de evento,
+  reentrega sem reenvio + contador, chave só depois do ACK, campanhas distintas enviadas)
+  — **258/258** (`npm test`); `npm run typecheck` e `npm run build` verdes.
+- **Testes existentes:** nenhum alterado — a refatoração do `dedup.ts` manteve a API e o
+  formato do arquivo.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #51 (tópicos Pub/Sub com fila por assinante) e #52 (métricas + correlationId).
+
+## 2026-11-11 — Issue #51 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** tópicos de eventos (Pub/Sub) com **fila por assinante**, desacoplando
+  produtor e consumidor (item 3 da aula de Mensageria).
+- **Branch:** ISSUE · **PR:** #61 (aberto para `develop`)
+- **Decisões:**
+  - `src/messaging/eventos.ts`: `publicarEvento` / `assinarEvento` / `desassinarEvento`;
+    **fila por assinante** em `data/messaging/topico-<tipo>-<assinante>.json`; falha de um
+    assinante é **isolada** (o item fica na fila dele) e o que ficou pendente é **reentregue**
+    (no boot, via `processarPendentes`). **Assinante novo não recebe histórico** (semântica de
+    tópico) — a fila do assinante só nasce na primeira publicação enquanto ele estava assinado.
+  - **Payload validado** pelo schema zod do tipo: a publicação é rejeitada se o payload não
+    bater (`payload inválido para <tipo>: <campos>`).
+  - **Consumidores padrão** (`src/messaging/consumidores.ts`): `auditoria` (append-only em
+    `data/auditoria-mensageria.json`, **sem PII**), `metricas` (contadores) e `log` (linha
+    estruturada com `correlationId`). Nenhum consumidor altera o produtor — é o teste do
+    desacoplamento.
+  - **Produtores** (publicam; não conhecem assinantes): `oferta.recebida` (webhook da
+    Evolution), `disparo.criado` (painel), `disparo.mensagem.enviada` + `disparo.concluido`
+    (worker de clientes), `instancia.conectada`/`instancia.desconectada` (camada de rotação,
+    na **mudança** de estado) e `mensagem.dlq` (fila de clientes e fila do Monitor).
+  - **Correlação ponta a ponta**: o painel cria a campanha dentro de `comCorrelacao(...)` e os
+    envelopes da fila **herdam** o `correlationId` → `disparo.criado`,
+    `disparo.mensagem.enviada` e `disparo.concluido` compartilham a correlação. O item da
+    fila do Monitor também carrega o `correlationId` (do webhook) até a DLQ.
+  - **Ciclo de import quebrado**: `ehErroTransitorio` foi movido para `src/wa/erros.ts`
+    (re-exportado pelo dispatch, **API preservada**) — a política de retry precisa classificar
+    o erro e a camada de Mensageria é importada pela rotação.
+  - **API**: `GET /api/mensageria/eventos?tipo=&limite=` (eventos recentes + estado dos
+    assinantes). A **UI** fica para a #53.
+- **Arquivos:** src/messaging/eventos.ts, src/messaging/eventos.test.ts,
+  src/messaging/consumidores.ts, src/messaging/politica.ts, src/wa/erros.ts, src/wa/dispatch.ts,
+  src/wa/rotacao.ts, src/monitor/webhook.ts, src/monitor/fila.ts, src/clientes/clientes.ts,
+  src/clientes/clientes.test.ts, src/manager/server.ts, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 9 novos (fan-out, falha isolada, reentrega do assinante fora do ar, assinante novo
+  sem histórico, correlação do mesmo fluxo, payload inválido rejeitado, produtor não afetado
+  pelo assinante, desassinatura e correlação na campanha de Clientes) — **267/267**
+  (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes:** nenhum alterado — as assinaturas dos produtores seguem as mesmas.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #52 (métricas de fila/DLQ/retry + rastreio por correlationId).
+
+## 2026-11-11 — Issue #52 — @backdev — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** observabilidade da Mensageria — métricas de fila/DLQ/retry/duplicatas/latência e
+  rastreio ponta a ponta por `correlationId`.
+- **Branch:** ISSUE · **PR:** #62 (aberto para `develop`)
+- **Decisões:**
+  - **Métricas** (`src/monitor/metrics.ts`): `alcance_msg_publicadas_total{tipo}`,
+    `alcance_msg_processadas_total{tipo,resultado}` (ok|erro|dlq), `alcance_msg_fila_tamanho{tipo}`,
+    `alcance_msg_dlq_tamanho{tipo}`, `alcance_msg_retries_total{tipo}`,
+    `alcance_msg_duplicadas_total{tipo}`, `alcance_msg_idade_fila_ms{tipo}`,
+    `alcance_msg_taxa_erro{tipo}` e o histograma `alcance_msg_latencia_envio_ms{tipo}`.
+    A métrica antiga `alcance_fila_tamanho` continua exposta (compatibilidade).
+  - **Gauges calculados no scrape** (fila/DLQ/idade/taxa de erro) e **contadores em memória**
+    (`src/messaging/contadores.ts`) — zerados a cada restart, como as demais métricas de processo.
+  - **Log estruturado** (pino) da mensagem processada: `tipo`, `chave`, `correlationId`, `ok`,
+    `tentativas`, `duracaoMs` — **sem concatenar texto solto**. O `correlationId` do envelope
+    atravessa webhook → oferta → fila → envio → evento.
+  - **Diagnóstico**: `GET /api/mensageria/stats` (snapshot por tipo: pendentes, processadas,
+    falhas, dlq, mais antiga, idade e taxa de erro) — base da UI da #53.
+  - **Grafana**: dashboard provisionado com 3 painéis novos (pendentes, DLQ, curva
+    fila/DLQ/duplicatas) — sem dashboard novo.
+- **Arquivos:** src/monitor/metrics.ts, src/monitor/metrics.test.ts, src/messaging/contadores.ts,
+  src/messaging/filas.ts, src/clientes/clientes.ts, src/clientes/clientes.test.ts,
+  src/monitor/fila.ts, src/manager/server.ts,
+  grafana/provisioning/dashboards/alcance-overview.json, docs/04-ADRs/ADR-011-mensageria.md
+- **Testes:** 6 novos (fila nas métricas, DLQ nas métricas, duplicatas + histograma, formato
+  Prometheus válido com a seção nova, log com correlationId, snapshot do /stats) — **273/273**
+  (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Testes existentes:** nenhum alterado — as métricas antigas continuam válidas (testes
+  existentes de `metrics.test.ts` passam sem mudança).
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Próximo:** #53 (protótipo da tela Mensageria) e #54 (UI) — fora do escopo deste programa.
+
+## 2026-11-11 — Fechamento do épico #47 (Mensageria) — @master — `task: — (execução direta do MASTER; subagentes indisponíveis)`
+- **Objetivo:** fechar o programa de Mensageria (issues #48–#52) com SRS, índice e status do épico.
+- **Branch:** ISSUE · **PR:** #63 (documentação de fechamento)
+- **Entregas:** #48 → PR #55 · #49 → PR #57 · #50 → PR #58 + **PR #60** (completa — o squash do
+  #58 ficou incompleto e o PR #59 foi um merge vazio) · #51 → PR #61 · #52 → PR #62.
+- **Documentação:**
+  - `docs/SRS-v0.4-delta-mensageria.md` (novo): RF-057–RF-061 e RN-028–RN-032 da camada de
+    Mensageria, escopo IN/OUT, endpoints novos, matriz de rastreabilidade, evidência e **premissas**.
+  - `docs/SRS-v0.4.md`: ponteiro para o delta.
+  - `docs/00-INDICE.md`: linha do delta + linha do ADR-011.
+  - `docs/04-ADRs/README.md`: ADR-011 com RF/RN e status (épico #47: #48–#52 entregues).
+- **Fora do escopo (decisão do operador):** #53 (protótipo da tela) e #54 (UI) **não** foram
+  implementados — dependem de aprovação do operador.
+- **Testes:** 273/273 (`npm test`); `npm run typecheck` e `npm run build` verdes; smoke do manager OK.
+- **Pendências operacionais:** (1) rebuild/recreate do container do manager para aplicar o `dist`
+  novo (o container roda o `dist` embutido na imagem); (2) pareamento por QR das instâncias
+  (`device_removed`) para retomar a fila; (3) sem envio real validado (instâncias deslogadas e fila
+  pausada) — a prova de não-regressão é por teste unitário com Evolution mockada.
+
+## 2026-11-12 | #53 | master | Protótipo navegável da tela Mensageria (filas + DLQ + Reprocessar)
+
+**Contexto**: o operador decidiu (10/11/2026) que as mensagens que falharam de vez **são
+reparadas na interface** ("na aba, com lista e Reprocessar"). O `AGENTS.md` exige que toda
+tela nasce protótipo (PROPOSTA → NAVEGÁVEL → VALIDADA → APROVADA → IMPLEMENTADA). Este
+issue entrega **apenas o protótipo**; a implementação da interface é a **#54**, bloqueada
+pela aprovação do operador.
+
+**Branch**: `DOC-mensageria-prototipo` (a partir de `develop`) · **PR**: #64 (`Closes #53`) — checks `build` e `smoke-test` verdes
+
+**Entregas**
+- `docs/prototipos/mensageria/opcao-1.html` — protótipo **navegável e autocontido** (CSS e JS
+  embutidos, **zero** recurso externo — abre em `file://`, sem build e sem servidor).
+- `docs/prototipos/mensageria/README.md` — objetivo, status (**aguardando aprovação**), lista
+  de arquivos, parâmetros, como abrir, decisões visuais e pendências.
+
+**Decisões**
+- **View nova, não redesenho**: *Mensageria* entra como item novo do menu lateral (badge com o
+  número de itens na DLQ). Clientes, Monitor, Números e Rastreio ficam intactos; o redesign da
+  aba Números segue fora de escopo, por decisão do operador.
+- **Visual fiel ao painel real** (`src/manager/server.ts`): paleta **verde** como referência,
+  as **6 paletas** do seletor de tema (persistidas em `localStorage`), cards `.panel`, KPIs
+  `.kpi`, tabelas `.tbl` em `.tblwrap`, botões `.mbtn`/`.mbtn.ok`, tomadores `.mini`,
+  sidebar de 258px e os mesmos breakpoints (980px / 700px).
+- **Dados fictícios (LGPD)**: JIDs `551900000000N@s.whatsapp.net`, “Contato Demo”,
+  “Grupo Demo Origem”, `MLB-902xx` — nenhum dado real de cliente. Selo “dados fictícios”
+  sempre visível.
+- **Formas idênticas às APIs reais** (`automensagem_manager`: 8091) — sem inventar campo:
+  `stats`/`filas` → `{ tipo, pendentes, processadas, falhas, dlq, maisAntigaEm, idadeFilaMs,
+  taxaErro }`; `dlq` → `{ id, tipo, envelope, motivo, ultimoErro, tentativas,
+  ultimaTentativaEm, origem }`; `eventos` → `{ em, tipo, id, correlationId, chave, tentativas }`
+  e `assinantes` → `{ tipo, nome, pendentes }`.
+- **Motivo colorido carrega a decisão**: `erro não transitório` em vermelho (retry não
+  resolve — exige intervenção) e `tentativas esgotadas` em âmbar (retry pode resolver).
+- **Trilha de correlação em gaveta lateral** (não modal): é consulta, não deve bloquear a
+  tabela; o rodapé da gaveta mantém o *Reprocessar* ao alcance (consultar → reparar).
+- **Reprocessar tudo age sobre o filtro visível** (tipo + busca) e o modal diz a contagem
+  exata — nunca uma ação às cegas. **Descartar** é destrutivo e sem volta: exige confirmação
+  explícita com o id da mensagem.
+- **8 estados obrigatórios** acessíveis por um seletor de cenário no topo: normal · fila vazia ·
+  fila grande · DLQ vazia · DLQ com 10 itens · item em reprocessamento · erro de API ·
+  carregando.
+
+**Arquivos**: `docs/prototipos/mensageria/opcao-1.html`, `docs/prototipos/mensageria/README.md`,
+`docs/dev-log.md` — **nenhum arquivo de produção (`src/`) tocado** (a #54 implementa a UI).
+
+**Evidências**
+- Protótipo aberto no Chromium: **abre sem erro de console** (único 404 é o `favicon.ico` do
+  servidor de teste) e **sem recurso externo quebrado** — `img/script[src]/link[href]/iframe`:
+  **zero**; URLs em CSS: **zero**.
+- **8 cenários** presentes no seletor e renderizando (KPIs, tabelas, esqueletos, banners e
+  estados vazios conferidos por `evaluate`).
+- **Ações exercitadas de ponta a ponta**: *Reprocessar* (item) tira a linha da DLQ (4 → 3
+  linhas), `dlq` da fila −1 (4 → 3) e `pendentes` +1 (12 → 13), com toast de confirmação;
+  *Reprocessar tudo* abre confirmação com a contagem exata e respeita o filtro por tipo
+  (3 mensagens de `cliente.enviar`); *Descartar* abre confirmação destrutiva com o id;
+  **trilha de correlação** abre a gaveta com as etapas (publicado → publicado → tentativas
+  esgotadas → falha definitiva → DLQ).
+- Tabela da DLQ com `table-layout: fixed` e larguras por coluna: cabe em 1440px **sem rolagem
+  lateral** (`scrollWidth == clientWidth`), coluna *Ações* visível.
+- Correções aplicadas nesta rodada: `<style>` de abertura ausente; bloco `@media` do painel
+  nunca fechado (o CSS extra do protótipo ficava aninhado e **não** se aplicava no desktop);
+  `.alerta` sem regra (banner de erro sem estilo); pluralização “4 mensagems”; coluna
+  *Mais antiga* com hora e idade invertidas; botão de copiar quebrando linha.
+- **Testes:** 273/273 (`npm test`), `npm run typecheck` e `npm run build` verdes — o diff é
+  só de documentação, sem código de produção.
+- **SAST**: sem segredo no diff (só `docs/`).
+
+**Próximo**: aprovação do operador sobre `docs/prototipos/mensageria/` → libera a **#54**
+(implementação da interface). Pendências decididas com o operador: **endpoint de descarte**
+(hoje só existe `POST /api/mensageria/dlq/reprocessar`) e **reprocessamento em lote**.
+
+## 2026-11-12 — Release v0.10.0 — @issuemaster — `task: — (release e fechamento de issues)`
+- **Objetivo:** publicar a release **v0.10.0** (camada de Mensageria + número por campanha) e
+  fechar as issues efetivamente concluídas.
+- **Branch:** DOC · **PR:** #66 (versão/CHANGELOG/README → develop, merged) e #67
+  (promoção `develop` → `main`, merged) · **Release:** `v0.10.0` (tag em `main`).
+- **Decisões:**
+  - **0.10.0** (minor): desde a `v0.9.0` houve features (#45 número por campanha e o programa de
+    Mensageria #48–#53), logo bump minor. `package.json`/`package-lock.json` sincronizados.
+  - **CHANGELOG 0.10.0** aberto com o bloco da release (adicionado/corrigido/testes/documentação).
+  - **README** ganhou a seção **Mensageria** (envelope, ACK, DLQ, retry, idempotência, tópicos,
+    broker substituível + as 5 APIs), a linha de `src/messaging/` na estrutura, o link do
+    ADR-011, do delta do SRS e do protótipo, e o contador de testes atualizado (207 → **273**).
+  - **Limpeza de versionamento**: `.playwright-mcp/` (artefatos de sessão do Playwright, ~10k
+    linhas) removido do repositório e adicionado ao `.gitignore`.
+  - **Fix do protótipo**: favicon embutido inline (data URI) — elimina o `favicon.ico 404` no
+    console; verificado com Playwright: **0 erros, 0 avisos**.
+- **Issues fechadas (9, com evidência em comentário):** #1 (SRS v0.4), #2 (ADRs 005–008), #3
+  (backlog v0.4), #4 (README+CHANGELOG), #5 (TLS/Caddy), #6 (container non-root), #31 (README
+  setup público), #34 (CI/CD), #35 (SECURITY.md).
+- **Issues mantidas abertas (7):** #7 (extrair UI do `server.ts`), #29 (CRUD da lista pendente),
+  #30 (credenciais Shopee — depende de terceiro), #32 (publicação pública — falta o template de
+  issues), #33 (template de issues), #47 (épico da Mensageria — depende da #54), #54 (UI
+  Mensageria — aguarda aprovação do protótipo).
+- **Arquivos:** README.md, CHANGELOG.md, package.json, package-lock.json, .gitignore,
+  docs/dev-log.md, docs/prototipos/mensageria/opcao-1.html
+- **Testes:** 273/273 (`npm test`), build verde, typecheck verde, CI verde nos PRs do programa.
+- **SAST:** sem segredo novo no diff; permanece o high pré-existente do zod (<4.6.6).
+- **Pendências:** (1) aprovação do protótipo para liberar a #54; (2) endpoint de **descartar** da
+  DLQ e **reprocessamento em lote** (a API só expõe reprocessar item a item); (3) template de
+  issues (#33) que bloqueia a #32; (4) `LICENSE` ainda ausente no repo público; (5) pareamento por QR
+  das instâncias `zxs`/`uzz` para retomar a fila.

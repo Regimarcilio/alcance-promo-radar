@@ -33,6 +33,7 @@
 | [`docs/04-ADRs/ADR-008-ui-temas.md`](04-ADRs/ADR-008-ui-temas.md) | 2026-10-22 | vigente | 6 paletas via `data-paleta` + `localStorage`, títulos em `data/ui.json` (RF-048, RF-049). |
 | [`docs/04-ADRs/ADR-009-shopee-open-api.md`](04-ADRs/ADR-009-shopee-open-api.md) | 2026-10-21 | vigente | `generateShortLink`; validação live ainda depende de credenciais (RF-032, RN-023). |
 | [`docs/04-ADRs/ADR-010-verificacao-celular-favoritos-ml.md`](04-ADRs/ADR-010-verificacao-celular-favoritos-ml.md) | 2026-10-21 | vigente | Complementa o ADR-005 (2FA) e registra favoritos do ML (RF-036, RF-037). |
+| [`docs/04-ADRs/ADR-011-mensageria.md`](04-ADRs/ADR-011-mensageria.md) | 2026-11-11 | vigente | Camada de Mensageria interna: envelope padronizado, port de broker + file broker, ACK/DLQ/retry, idempotência, tópicos e observabilidade (RF-057–061, RN-028–032). Sem broker externo nesta etapa. |
 | [`docs/05-backlog.md`](05-backlog.md) | v0.3 · 2026-10-17 | histórico | Para em US-20; não cobre auth, clientes, multi-número, temas nem as entregas E6 recentes. Banner no topo. |
 | [`docs/05-backlog-v0.4.md`](05-backlog-v0.4.md) | v0.4 · 2026-10-22 | vigente | Substitui o v0.3; cobre 100% dos RF do SRS v0.4 (US-21+), com DoR/DoD, estados e evidência. |
 | [`docs/06-plano-de-entrega.md`](06-plano-de-entrega.md) | v0.3 · 2026-10-17 | histórico | Comandos e stack antigos (SQLite, Afilimax, `atendai/evolution-api`, `lote:approve`). Banner no topo. |
@@ -46,6 +47,7 @@
 | [`docs/15-plano-sincronizacao-docs.md`](15-plano-sincronizacao-docs.md) | 2026-10-22 | vigente | Plano de sincronização; §9 registra o que foi concluído nesta rodada e o que segue pendente. |
 | [`docs/SRS.md`](SRS.md) | v0.3 · 2026-10-17 | histórico | Substituído por [`docs/SRS-v0.4.md`](SRS-v0.4.md). Contém SQLite/Afilimax/CloudProvider/EngAI fictícios. |
 | [`docs/SRS-v0.2-delta.md`](SRS-v0.2-delta.md) | v0.2 · 2026-10-12 | histórico | Absorvido pelo SRS v0.4 (RF-015–021 e RNs correspondentes). |
+| [`docs/SRS-v0.4-delta-mensageria.md`](SRS-v0.4-delta-mensageria.md) | 2026-11-11 | vigente | Requisitos da camada de Mensageria (RF-057–061, RN-028–032): envelope, ACK/DLQ/retry, idempotência, tópicos e observabilidade. Épico #47, ADR-011. |
 | [`docs/SRS-v0.4.md`](SRS-v0.4.md) | v0.4 · 2026-10-22 | vigente | Substitui SRS v0.3 + delta v0.2. Fonte de requisitos atual. |
 | [`docs/dev-log.md`](dev-log.md) | append-only · 2026-10-22 | vigente | Diário de bordo com evidência por entrega; complementa (não substitui) o CHANGELOG. |
 | [`docs/conhecimento/whatsapp-anti-ban.md`](conhecimento/whatsapp-anti-ban.md) | 2026-11-03 | vigente | Lições aprendidas e implementação anti-bloqueio WhatsApp (janela comercial, variação de tempo, estado close, controle de fila). |

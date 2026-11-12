@@ -6,6 +6,56 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 [SemVer](https://semver.org/lang/pt-BR/). As versões anteriores a 0.8.0 são reconstruídas a partir
 do histórico do git (`git log`), sem tags formais.
 
+## [0.10.0] — 2026-11-12
+
+Release da **camada de Mensageria** (semântica de broker interna) e do **número por campanha**.
+
+### Adicionado
+- **Camada de Mensageria interna** (`src/messaging/`): envelope padronizado e versionado
+  (`id`, `tipo`, `versao`, `timestamp`, `correlationId`, `chave`, `payload`), abstração de broker
+  (port) com adapter de arquivo (`data/messaging/`) e **ADR-011** (#48, PR #55).
+- **ACK real + DLQ na fila de Clientes/Disparo**: a mensagem só sai da fila **depois** de
+  processada — antes, uma falha de envio **perdia** a mensagem (foram 206 na queda de 10/11);
+  retry exponencial com jitter só para erro transitório e **Dead Letter Queue** com o motivo
+  (#49, PR #57).
+- **Idempotência por chave de negócio** (`${disparoId}:${jid}`) nos consumidores: reentrega não
+  duplica mensagem ao cliente; generalize a estrutura de `src/store/dedup.ts` sem quebrar a API
+  (#50, PR #58 e #60).
+- **Tópicos de eventos (Pub/Sub)**: `publicarEvento`/`assinarEvento` com fila própria por assinante,
+  reentrega a quem estava fora do ar e eventos `oferta.recebida`, `disparo.criado`,
+  `disparo.concluido`, `disparo.mensagem.enviada`, `instancia.conectada`, `instancia.desconectada`
+  e `mensagem.dlq` (#51, PR #61).
+- **Observabilidade da mensageria**: 8 métricas novas (`alcance_msg_*`: fila, DLQ, idade da fila,
+  taxa de erro, retries, duplicatas, latência), `correlationId` nos logs estruturados e
+  `GET /api/mensageria/stats` (#52, PR #62).
+- **Número por campanha** na aba Clientes: cada disparo fixa o número que envia suas mensagens;
+  se o número fixado cair, volta ao rodízio com aviso (#45, PR #46).
+- **Protótipo navegável da tela Mensageria** em `docs/prototipos/mensageria/` — KPIs, filas por
+  tipo, DLQ com ações e trilha de correlação; 8 estados cobertos (#53, PR #64).
+- **APIs de mensageria**: `GET /api/mensageria/{stats,filas,dlq,eventos}` e
+  `POST /api/mensageria/dlq/reprocessar`.
+
+### Corrigido
+- **Fila de Clientes perdia mensagens em falha**: o `shift()` acontecia **antes** do envio, sem ACK —
+  a fila não tinha DLQ nem retry e as falhas viravam só um contador. Agora a mensagem volta para a
+  fila com `tentativas`, `ultimoErro` e `proximaTentativaEm`, ou vai para a DLQ.
+- **Crash perdia item em andamento**: itens marcados como em andamento voltam para a fila no boot.
+- **Protótipo da Mensageria** gerava erro de console `favicon.ico 404` — favicon embutido inline
+  (data URI), sem requisição externa.
+- Artefatos de sessão do Playwright (`.playwright-mcp/`, ~10k linhas) removidos do versionamento e
+  ignorados no `.gitignore`.
+
+### Testes
+- **273 testes** (node:test), +56 sobre o baseline de 217: envelope, broker e migração do legado,
+  ACK/retry/DLQ, idempotência, tópicos (fan-out, falha isolada, reentrega), métricas e
+  correlationId.
+
+### Documentação
+- `docs/04-ADRs/ADR-011-mensageria.md` — decisão da camada interna e caminho para um broker real.
+- `docs/SRS-v0.4-delta-mensageria.md` — RF-057 a RF-061 e RN-028 a RN-032.
+- `docs/conhecimento/` — lições do protótipo e da semântica de broker.
+- `README.md` — nova seção **Mensageria** e contagem de testes atualizada.
+
 ## [0.9.0] — 2026-11-10
 
 Release de **controle fino do envio por número** e **Rastreio sem teto de contagem**.

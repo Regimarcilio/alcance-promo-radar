@@ -104,6 +104,173 @@ test("dispatch: fluxo sem número permitido falha antes de chamar a Evolution", 
   }
 });
 
+/** Instância de teste no formato do cadastro (data/instancias.json). */
+function inst(
+  nome: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    instancia: nome,
+    nome,
+    ativo: true,
+    peso: 1,
+    principal: false,
+    enviadas: 0,
+    ultimaEm: null,
+    criadaEm: "",
+    permissoes: { piloto: true, monitor: true, disparo: true },
+    pausado: false,
+    ...extra,
+  };
+}
+
+test("dispatch: instância fixada válida é a que envia (issue #45)", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-fixa-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [inst("inst-fixa-45"), inst("inst-auto-45")],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/message/sendText/inst-fixa-45")) {
+      return new Response(JSON.stringify({ key: { id: "fixa-1" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error(`url inesperada: ${url}`);
+  });
+  try {
+    const { enviarParaGrupo } = await import("./dispatch.js");
+    const r = await enviarParaGrupo({
+      grupo: "5511999990001@s.whatsapp.net",
+      legenda: "oferta",
+      dryRun: false,
+      fluxo: "disparo",
+      instancia: "inst-fixa-45",
+    });
+    assert.equal(r.messageId, "fixa-1");
+    const enviados = m.chamadas.filter((u) => u.includes("/message/sendText/"));
+    assert.equal(enviados.length, 1);
+    assert.ok(enviados[0].includes("inst-fixa-45"), "a fixada tem que ser a remetente");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: instância fixada inválida (pausada) cai no automático com aviso", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-fixa-pausa-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [inst("inst-pausada-45", { pausado: true }), inst("inst-livre-45")],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/message/sendText/inst-livre-45")) {
+      return new Response(JSON.stringify({ key: { id: "auto-1" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error(`url inesperada: ${url}`);
+  });
+  const logs: string[] = [];
+  const logOriginal = console.log;
+  console.log = (...args: any[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  try {
+    const { enviarParaGrupo } = await import("./dispatch.js");
+    const r = await enviarParaGrupo({
+      grupo: "5511999990002@s.whatsapp.net",
+      legenda: "oferta",
+      dryRun: false,
+      fluxo: "disparo",
+      instancia: "inst-pausada-45",
+    });
+    assert.equal(r.messageId, "auto-1", "a fixada pausada não pode enviar");
+    const aviso = logs.find((l) => l.includes("instância fixada inst-pausada-45 inválida"));
+    assert.ok(aviso, `esperado aviso de instância fixada inválida; logs: ${logs.join(" | ")}`);
+    assert.ok(aviso!.includes("usando automático"), "o aviso precisa dizer que usa o automático");
+    assert.ok(aviso!.includes("fluxo disparo"), "o aviso precisa citar o fluxo");
+  } finally {
+    console.log = logOriginal;
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: instância fixada sem permissão Disparo não é usada", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-fixa-perm-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [
+      inst("inst-sem-perm-45", { permissoes: { piloto: true, monitor: true, disparo: false } }),
+      inst("inst-com-perm-45"),
+    ],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/message/sendText/inst-com-perm-45")) {
+      return new Response(JSON.stringify({ key: { id: "perm-1" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error(`url inesperada: ${url}`);
+  });
+  try {
+    const { enviarParaGrupo } = await import("./dispatch.js");
+    const r = await enviarParaGrupo({
+      grupo: "5511999990003@s.whatsapp.net",
+      legenda: "oferta",
+      dryRun: false,
+      fluxo: "disparo",
+      instancia: "inst-sem-perm-45",
+    });
+    assert.equal(r.messageId, "perm-1");
+    const enviados = m.chamadas.filter((u) => u.includes("/message/sendText/"));
+    assert.ok(enviados.every((u) => !u.includes("inst-sem-perm-45")));
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("dispatch: fluxo permitido envia normalmente", async () => {
   const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");

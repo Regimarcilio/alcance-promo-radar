@@ -5,6 +5,10 @@
 > **Stack real:** Node.js ≥ 20 · TypeScript ESM (`NodeNext`) · Evolution API v2.3.7 (Baileys) · Docker Compose
 > **Persistência real:** arquivos JSON atômicos em `data/` (não há SQLite nem banco próprio)
 > **Substitui:** `docs/SRS.md` v0.3 (2026-10-17) e `docs/SRS-v0.2-delta.md` (2026-10-12)
+> **Delta posterior (2026-11-11):** [`docs/SRS-v0.4-delta-mensageria.md`](SRS-v0.4-delta-mensageria.md)
+> acrescenta os requisitos da **camada de Mensageria** (RF-057–RF-061, RN-028–RN-032) — envelope,
+> ACK/DLQ/retry, idempotência, tópicos e observabilidade. Este documento permanece válido no que
+> descreve; onde houver conflito, o delta de Mensageria prevalece.
 
 Este documento consolida o SRS v0.3 + delta v0.2 e o que foi efetivamente entregue até o commit
 `98c4483`. Ele descreve **o produto que existe no código**, não o produto planejado em 2026-10-12.

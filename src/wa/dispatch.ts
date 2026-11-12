@@ -1,17 +1,24 @@
 import { engine, enviarViaGo, type EnvioResult } from "./evolution-go.js";
-import { marcarInstanciaRuim, proximaInstancia, registrarEnvio, type FluxoEnvio } from "./rotacao.js";
+import {
+  avaliarInstanciaFixada,
+  marcarInstanciaRuim,
+  proximaInstancia,
+  registrarEnvio,
+  type FluxoEnvio,
+} from "./rotacao.js";
 import { marcarEnvioAtivo } from "../monitor/envio-lock.js";
 import { ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
 
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
 
-/** Erro de rede/conexão (vale repetir)? 5xx, "Connection Closed", socket, timeout. */
-export function ehErroTransitorio(msg: string): boolean {
-  return /Evolution (sendMedia|sendText)?\s*5\d\d|Connection Closed|Precondition Required|ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|socket hang up|terminated|other side closed/i.test(
-    msg
-  );
-}
+/**
+ * Erro de rede/conexão (vale repetir)? 5xx, "Connection Closed", socket, timeout.
+ * A implementação vive em `src/wa/erros.ts` (módulo neutro) para que a camada
+ * de Mensageria classifique o erro sem criar ciclo de import.
+ */
+export { ehErroTransitorio } from "./erros.js";
+import { ehErroTransitorio } from "./erros.js";
 
 /**
  * Repete só erros TRANSITÓRIOS (WhatsApp/Evolution cai e volta em segundos).
@@ -20,13 +27,38 @@ export function ehErroTransitorio(msg: string): boolean {
 async function comRetry<T>(
   fn: (instancia: string) => Promise<T>,
   fluxo?: FluxoEnvio,
-  tentativas = 3
+  tentativas = 3,
+  /**
+   * Instância FIXADA pelo operador (issue #45): número escolhido na campanha
+   * da aba Clientes. Válida → a primeira tentativa usa ela; inválida (caída,
+   * pausada, sem permissão ou desconectada) → cai no sorteio automático com
+   * aviso no log, sem travar o envio.
+   */
+  fixada?: string | null
 ): Promise<T> {
   let ultimo: any;
   const falhas: string[] = [];
+  // A permissão usada na validação da fixada é a do fluxo; sem fluxo
+  // informado (caminho de grupo direto) vale a permissão de Disparo.
+  const fluxoPermissao: FluxoEnvio = fluxo ?? "disparo";
   for (let i = 0; i < tentativas; i++) {
-    // cada tentativa sorteia de novo, ignorando quem acabou de falhar
-    const instancia = await proximaInstancia(fluxo, falhas);
+    let instancia: string;
+    if (i === 0 && fixada) {
+      const fix = String(fixada).trim();
+      const aval = await avaliarInstanciaFixada(fix, fluxoPermissao, falhas);
+      if (aval.ok) {
+        instancia = fix;
+        console.log(`[dispatch] instância fixada ${fix} usada no fluxo ${fluxoPermissao}`);
+      } else {
+        console.log(
+          `[dispatch] instância fixada ${fix} inválida no fluxo ${fluxoPermissao} — usando automático (${aval.motivo ?? "motivo desconhecido"})`
+        );
+        instancia = await proximaInstancia(fluxo, falhas);
+      }
+    } else {
+      // cada tentativa sorteia de novo, ignorando quem acabou de falhar
+      instancia = await proximaInstancia(fluxo, falhas);
+    }
     try {
       const r = await fn(instancia);
       registrarEnvio(instancia);
@@ -121,6 +153,8 @@ async function enviarTexto(args: {
   grupo: string;
   legenda: string;
   fluxo?: FluxoEnvio;
+  /** instância fixada da campanha (null/ausente = rodízio do fluxo) */
+  instancia?: string | null;
 }): Promise<EnvioResult> {
   const evoUrl = process.env.EVO_URL;
   const evoKey = process.env.EVO_KEY;
@@ -136,7 +170,7 @@ async function enviarTexto(args: {
     if (!res.ok) throw new Error(`Evolution sendText ${res.status}: ${body.slice(0, 300)}`);
     const json: any = JSON.parse(body);
     return { messageId: String(json.key?.id ?? json.id ?? Date.now()), dryRun: false };
-  }, args.fluxo);
+  }, args.fluxo, 3, args.instancia ?? null);
 }
 
 export async function enviarParaGrupo(args: {
@@ -146,6 +180,11 @@ export async function enviarParaGrupo(args: {
   dryRun: boolean;
   /** fluxo de origem: filtra números por permissão/pausa (issues #36/#37). */
   fluxo?: FluxoEnvio;
+  /**
+   * Instância FIXADA por campanha (issue #45): número escolhido pelo
+   * operador na aba Clientes. Null/ausente = rodízio do fluxo.
+   */
+  instancia?: string | null;
   /** "video" envia como vídeo (upload da tela Clientes); padrão imagem. */
   mediatype?: "image" | "video" | "document";
   mimetype?: string;
@@ -194,6 +233,8 @@ export async function enviarMidia(args: {
   legenda: string;
   dryRun: boolean;
   fluxo?: FluxoEnvio;
+  /** instância fixada da campanha (null/ausente = rodízio do fluxo) */
+  instancia?: string | null;
   mediatype?: "image" | "video" | "document";
   mimetype?: string;
 }): Promise<EnvioResult> {
@@ -248,5 +289,5 @@ export async function enviarMidia(args: {
     } catch {
       return { messageId: `midia-${Date.now()}`, dryRun: false };
     }
-  }, args.fluxo);
+  }, args.fluxo, 3, args.instancia ?? null);
 }

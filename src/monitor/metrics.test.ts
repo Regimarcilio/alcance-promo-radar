@@ -7,6 +7,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 test("exportarMetricas retorna formato Prometheus válido", async () => {
   const { exportarMetricas } = await import("./metrics.js");
@@ -111,4 +114,107 @@ test("formato das métricas segue padrão Prometheus", async () => {
     }
   }
   assert.ok(foundCompleteMetric, "deve ter formato HELP, TYPE, valor");
+});
+// ---------- issue #52: métricas da Mensageria ----------
+
+/** Prepara um data dir temporário com fila e DLQ de clientes. */
+async function prepararMensageria(pendentes: number, dlq: number) {
+  const dir = mkdtempSync(join(tmpdir(), "alcance-metrics-"));
+  process.env.ALCANCE_DATA_DIR = dir;
+  mkdirSync(join(dir, "messaging"), { recursive: true });
+  const envelopes = Array.from({ length: pendentes }, (_, i) => ({
+    id: `e${i}`,
+    tipo: "cliente.enviar",
+    versao: 1,
+    timestamp: new Date(Date.now() - 60_000).toISOString(),
+    correlationId: "abc-123",
+    tentativas: 0,
+    payload: { jid: `551199999999${i}@s.whatsapp.net` },
+  }));
+  writeFileSync(join(dir, "messaging", "cliente.enviar.json"), JSON.stringify(envelopes, null, 2));
+  const itensDlq = Array.from({ length: dlq }, (_, i) => ({
+    id: `d${i}`,
+    tipo: "cliente.enviar",
+    envelope: envelopes[0],
+    motivo: "erro não transitório",
+    ultimoErro: "Connection Closed",
+    tentativas: 4,
+    ultimaTentativaEm: new Date().toISOString(),
+    origem: "disp-1",
+  }));
+  writeFileSync(join(dir, "messaging", "dlq-cliente.enviar.json"), JSON.stringify(itensDlq, null, 2));
+  return dir;
+}
+
+test("métricas: a fila aparece em alcance_msg_fila_tamanho", async () => {
+  const dir = await prepararMensageria(3, 0);
+  try {
+    const { exportarMetricas, resetarCacheMetricas } = await import("./metrics.js");
+    resetarCacheMetricas();
+    const output = exportarMetricas();
+    assert.ok(output.includes("# TYPE alcance_msg_fila_tamanho gauge"), "tipo gauge");
+    assert.ok(
+      output.includes('alcance_msg_fila_tamanho{tipo="cliente.enviar"} 3'),
+      "3 mensagens pendentes na fila de clientes",
+    );
+    assert.ok(output.includes("alcance_msg_idade_fila_ms"), "idade da fila exposta");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("métricas: a DLQ aparece em alcance_msg_dlq_tamanho", async () => {
+  const dir = await prepararMensageria(1, 2);
+  try {
+    const { exportarMetricas, resetarCacheMetricas } = await import("./metrics.js");
+    resetarCacheMetricas();
+    const output = exportarMetricas();
+    assert.ok(output.includes("# TYPE alcance_msg_dlq_tamanho gauge"), "tipo gauge");
+    assert.ok(
+      output.includes('alcance_msg_dlq_tamanho{tipo="cliente.enviar"} 2'),
+      "2 itens na DLQ de clientes",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("métricas: duplicatas e latência são contabilizadas", async () => {
+  const dir = await prepararMensageria(0, 0);
+  try {
+    const contadores = await import("../messaging/contadores.js");
+    contadores.zerarContadores();
+    contadores.incrementar("alcance_msg_duplicadas_total", { tipo: "cliente.enviar" });
+    contadores.observarLatencia("alcance_msg_latencia_envio_ms", { tipo: "cliente.enviar" }, 120);
+    const { exportarMetricas, resetarCacheMetricas } = await import("./metrics.js");
+    resetarCacheMetricas();
+    const output = exportarMetricas();
+    assert.ok(
+      output.includes('alcance_msg_duplicadas_total{tipo="cliente.enviar"} 1'),
+      "duplicatas contabilizadas",
+    );
+    assert.ok(output.includes("# TYPE alcance_msg_latencia_envio_ms histogram"), "histograma exposto");
+    assert.ok(output.includes("alcance_msg_latencia_envio_ms_count"), "contagem do histograma");
+    assert.ok(output.includes('alcance_msg_latencia_envio_ms_bucket{tipo="cliente.enviar",le="+Inf"}'), "bucket +Inf");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("métricas: o formato Prometheus continua válido com a seção de mensageria", async () => {
+  const dir = await prepararMensageria(1, 1);
+  try {
+    const { exportarMetricas, resetarCacheMetricas } = await import("./metrics.js");
+    resetarCacheMetricas();
+    const output = exportarMetricas();
+    const linhas = output.split("\n");
+    for (let i = 0; i < linhas.length; i++) {
+      if (linhas[i].startsWith("# HELP")) {
+        assert.ok(linhas[i + 1].startsWith("# TYPE"), `HELP sem TYPE em: ${linhas[i]}`);
+      }
+    }
+    assert.ok(output.includes("alcance_fila_tamanho"), "a métrica antiga continua exposta");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

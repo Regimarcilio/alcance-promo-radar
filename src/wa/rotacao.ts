@@ -19,6 +19,7 @@
  * - o rodízio é ponderado + anti-repetição para não concentrar volume.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { publicarEvento } from "../messaging/eventos.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -232,6 +233,28 @@ export function definirPrincipal(instancia: string, principal: boolean): void {
   salvar(s);
 }
 
+/** Último estado publicado por instância (para emitir só na mudança). */
+const estadoPublicado = new Map<string, string>();
+
+/**
+ * Publica o evento de conexão/desconexão **na mudança de estado** (o produtor
+ * não conhece quem assina — o painel, a auditoria e o watchdog decidem o que
+ * fazer). Um evento nunca pode derrubar a leitura de estado.
+ */
+function publicarEstado(instancia: string, estado: string): void {
+  if (estadoPublicado.get(instancia) === estado) return;
+  estadoPublicado.set(instancia, estado);
+  try {
+    if (estado === "open") {
+      publicarEvento("instancia.conectada", { instancia, motivo: null });
+    } else {
+      publicarEvento("instancia.desconectada", { instancia, motivo: estado });
+    }
+  } catch {
+    /* evento é acessório */
+  }
+}
+
 /** Estado da conexão com cache curto (evita 1 request por envio). */
 export async function estadoInstancia(instancia: string, forcar = false): Promise<string> {
   const c = estados.get(instancia);
@@ -240,9 +263,11 @@ export async function estadoInstancia(instancia: string, forcar = false): Promis
     const j = await evo(`/instance/connectionState/${encodeURIComponent(instancia)}`, {}, 15_000);
     const e = String(j?.instance?.state ?? "?");
     estados.set(instancia, { estado: e, em: Date.now() });
+    publicarEstado(instancia, e);
     return e;
   } catch {
     estados.set(instancia, { estado: "erro", em: Date.now() });
+    publicarEstado(instancia, "erro");
     return "erro";
   }
 }
@@ -361,6 +386,40 @@ export async function proximaInstancia(fluxo?: FluxoEnvio, excluir: string[] = [
   const ultima = candidatos[candidatos.length - 1].instancia;
   ultimaUsada = ultima;
   return ultima;
+}
+
+/**
+ * Valida uma instância FIXADA por campanha (issue #45).
+ *
+ * Usada quando o operador escolhe o número que envia uma campanha da aba
+ * Clientes: a fixada só vale se estiver realmente apta a enviar agora
+ * (existe no cadastro, ativa, não pausada, com permissão do fluxo, conectada
+ * e sem falha recente). Se qualquer uma dessas condições falhar, o chamador
+ * cai no sorteio automático — o envio NUNCA trava por causa do número escolhido.
+ */
+export interface AvaliacaoInstancia {
+  ok: boolean;
+  /** motivo da invalidez (null quando válida) */
+  motivo: string | null;
+}
+
+export async function avaliarInstanciaFixada(
+  instancia: string,
+  fluxo: FluxoEnvio,
+  excluir: string[] = [],
+): Promise<AvaliacaoInstancia> {
+  const nome = String(instancia ?? "").trim();
+  if (!nome) return { ok: false, motivo: "nenhum número escolhido" };
+  const item = carregar().itens.find((i) => i.instancia === nome);
+  if (!item) return { ok: false, motivo: "não está no cadastro" };
+  if (!item.ativo) return { ok: false, motivo: "número desativado" };
+  if (item.pausado) return { ok: false, motivo: "número pausado" };
+  if (item.permissoes[fluxo] !== true) return { ok: false, motivo: `sem permissão ${fluxo}` };
+  if (excluir.includes(nome)) return { ok: false, motivo: "já falhou nesta entrega" };
+  if (instanciaRuim(nome)) return { ok: false, motivo: "falhou por conexão recentemente" };
+  const estado = await estadoInstancia(nome);
+  if (estado !== "open") return { ok: false, motivo: `estado ${estado}` };
+  return { ok: true, motivo: null };
 }
 
 /**
