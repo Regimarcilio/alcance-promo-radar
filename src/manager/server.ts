@@ -2363,7 +2363,7 @@ body{padding:0;max-width:none;margin:0}
 </div>
 <div class="panel ac-piloto">
 <div class="panel-head"><span><b id="tit-piloto">🚀 Piloto automático</b> — 2 ofertas aleatórias a cada 5 min, sozinho</span><a class="lk-mini" href="#" onclick="renomearCard('piloto');return false">✏️ renomear</a></div>
-<div class="hint">Aperte <b>LIGA TUDO</b> e esqueça: liga 1 loop por categoria amarrada (conta+grupo do mapa, até 5). Ou monte 1 loop manual abaixo.</div>
+<div class="hint">Aperte <b>LIGA TUDO</b> e esqueça: liga 1 loop por categoria amarrada (conta+grupo do mapa, até 20). Ou monte 1 loop manual abaixo.</div>
 <div style="display:flex;gap:8px;margin-bottom:10px"><button class="buscar" style="margin-top:0;flex:1;font-size:16px" onclick="ligaTudo()">▶ LIGA TUDO (automático)</button><button class="ghost" style="margin-top:0;flex:1" onclick="pilotoStop()">⏹ DESLIGA TUDO</button></div>
 <div class="grid4">
 <div><label>Programa</label><select id="paprograma" onchange="trocarProgramaPiloto()">
@@ -2850,7 +2850,7 @@ async function atualizarPiloto(){
     const env=(s.loops||[]).reduce(function(a,l){return a+(l.enviadas||0)},0);
     const ult=(s.loops||[]).map(function(l){return l.ultimaMsg||''}).sort().pop()||'';
     const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
-    kp('kpi-loops',n+'/5');kp('kpi-piloto-env',env);kp('kpi-piloto-ult',ult?horaLocal(ult):'—');kp('badge-piloto',n);
+    kp('kpi-loops',n+'/20');kp('kpi-piloto-env',env);kp('kpi-piloto-ult',ult?horaLocal(ult):'—');kp('badge-piloto',n);
     let html=n? '' : '⚪ nenhum loop — monte acima e aperte START.';
     // loops que existiam mas estão parados (ex.: pausa de segurança no reinício)
     const parados=(s.loops||[]).filter(function(l){return !l.rodando;});
@@ -2875,7 +2875,7 @@ async function atualizarPiloto(){
         +(p.programa&&p.programa!=='ml'?' ['+esc(p.programa)+']':'')
         +' <button class="mbtn ok" style="width:auto;padding:4px 10px;margin:0" onclick="pilotoReligarUI('+i+')">▶ religar</button></div>';
     });
-    html+='<div style="margin-top:6px"><b>'+n+'/5 loops</b> <button class="ghost" style="width:auto;padding:4px 10px" onclick="pilotoStopAll()">⏹ parar todos</button></div>';
+    html+='<div style="margin-top:6px"><b>'+n+'/20 loops</b> <button class="ghost" style="width:auto;padding:4px 10px" onclick="pilotoStopAll()">⏹ parar todos</button></div>';
     $('pstatus').innerHTML=html;
     $('plog').textContent=(s.logs||[]).join('\\n')||'—';
   }catch(e){/* api acordando */}

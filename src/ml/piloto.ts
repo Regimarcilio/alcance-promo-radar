@@ -1,5 +1,5 @@
 /**
- * PILOTO AUTOMÁTICO MULTI-LOOP (máx 5 simultâneos).
+ * PILOTO AUTOMÁTICO MULTI-LOOP (máx 20 simultâneos).
  * Cada loop: etiqueta + categoria + grupo + ciclo fixo de 2 min.
  * Fontes: hunt LIVE → cesta da categoria → espera (NUNCA finge).
  *
@@ -29,7 +29,7 @@ const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const pilotoFile = join(dataDir, "piloto.json");
 const cestaFile = join(dataDir, "cestas.json");
 
-export const MAX_LOOPS = 5;
+export const MAX_LOOPS = 20;
 
 /** Oferta Amazon (Creators API) → Candidato do ML (mesmo scorer/formatador). */
 function paraCandidatoAmazon(o: {
