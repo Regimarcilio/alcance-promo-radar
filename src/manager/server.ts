@@ -1657,7 +1657,25 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     const [estado, conta, instancia] = await Promise.all([
       estadoConexao(), contaPareada(), instanciaParaServico(),
     ]);
-    json(200, { estado, ...conta, instancia });
+    // Remetente do Monitor: automático (rodízio entre os números liberados
+    // para o fluxo "monitor" na aba Números) ou fixo (override do fluxo).
+    // O painel mostra isso para o operador saber quem envia — antes só
+    // aparecia a instância de serviço, que NÃO é a remetente.
+    const itens = listarInstancias();
+    const elegiveis = itens.filter(
+      (i) => i.ativo && !i.pausado && i.permissoes?.monitor !== false
+    );
+    const fixada = overrideDoFluxo("monitor");
+    json(200, {
+      estado,
+      ...conta,
+      instancia,
+      remetente: {
+        modo: fixada ? "fixo" : "automatico",
+        fixada,
+        elegiveis: elegiveis.map((i) => ({ instancia: i.instancia, nome: i.nome, peso: i.peso })),
+      },
+    });
     return;
   }
   // Lista os grupos da conta pareada (origem/destino escolhidos daqui)
@@ -2007,6 +2025,8 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 }
 .badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
 .live{background:var(--ok-soft);color:var(--ok-tx);border-color:var(--ok-bd)}
+/* issue #78: badge da origem "reenvio" (duplicata reagendada) */
+.badge.reenvio{background:var(--primary-soft);color:var(--primary-hover);border-color:var(--primary-border)}
 .mock{background:var(--warn-soft);color:var(--warn-tx);border-color:var(--warn-bd)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .18s ease,transform .18s ease}
@@ -2388,7 +2408,7 @@ body{padding:0;max-width:none;margin:0}
 
 <div class="mrow">
 <div><b id="mcontalabel">Conta WhatsApp: …</b><br><span class="mini" id="mcontaestado"></span></div>
-<div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="trocarCelular()">📱 Trocar celular</button></div></div>
+<div style="display:flex;gap:8px"><button class="mbtn" onclick="reiniciarEvo()">↻ Reconectar</button><button class="mbtn" onclick="irParaNumeros()" title="gerenciar os números que enviam (aba Números)">📱 Números</button><button class="mbtn" onclick="trocarCelular()" title="desloga a conta atual para parear outro celular">Deslogar e parear outro</button></div></div>
 
 <div class="mrow">
 <div><b id="mautolabel">Envio direto — OFF (vai p/ revisão)</b><br><span class="mini">ON encaminha sozinho • OFF apenas registra para revisão</span></div>
@@ -3783,9 +3803,19 @@ async function carregarContaMonitor(){
     const d=await (await fetch('/api/monitor/conta')).json();
     const ok=d.estado==='open';
     $('mcontalabel').textContent='Conta WhatsApp: '+(d.nome||d.jid||'—')+(d.jid?' ('+d.jid.replace(/@.*/,'')+')':'');
-    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+esc(d.estado||'?'))+' • instância '+esc(d.instancia);
+    const r=d.remetente||{modo:'automatico',elegiveis:[]};
+    let envio;
+    if(r.modo==='fixo'){
+      envio='Envio: <b>fixo</b> em <b>'+esc(r.fixada||'?')+'</b> (aba Números → Remetente por fluxo)';
+    }else if((r.elegiveis||[]).length){
+      envio='Envio: <b>automático</b> — rodízio entre '+r.elegiveis.length+' número(s) liberado(s) para Monitor: '+r.elegiveis.map(function(i){return esc(i.nome);}).join(', ');
+    }else{
+      envio='<span style="color:var(--danger-tx)">Envio: <b>nenhum número liberado para Monitor</b> — ative a permissão na aba Números</span>';
+    }
+    $('mcontaestado').innerHTML=(ok?'🟢 conectada':'🔴 '+esc(d.estado||'?'))+' • '+envio+'<br><span class="mini">operações de serviço (adicionar contatos): '+esc(d.instancia)+'</span>';
   }catch(e){}
 }
+function irParaNumeros(){ location.hash='#/numeros'; }
 async function carregarGruposSelects(forcar){
   $('mgruposinfo').textContent='buscando grupos… (a Evolution leva 10-30s; se o WhatsApp limitar, mostramos a última lista salva)';
   try{
@@ -4078,8 +4108,10 @@ function msgRenderDlq(){
     const perigo=String(it.motivo||'')==='erro não transitório';
     const corr=env.correlationId||'';
     const chave=env.chave||'';
+    const reenvio=env.reenvio||null;
     t+='<tr'+(busy?' class="sel"':'')+'>'
-      +'<td class="nowrap"><span class="badge">'+esc(it.tipo)+'</span></td>'
+      +'<td class="nowrap"><span class="badge">'+esc(it.tipo)+'</span>'
+      +(reenvio?' <span class="badge reenvio" title="Reagendado para reenvio em '+esc(reenvio.agendadoEm||'')+'">↻ reenvio 24h</span>':'')+'</td>'
       +'<td><span class="dlq-chave"><span class="mono trunc" title="'+esc(chave||'—')+'">'+(chave?esc(chave):'—')+'</span>'
       +(chave?' <button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(chave)+'" title="Copiar chave">⧉</button>':'')+'</span>'
       +(corr?'<div class="mini" style="font-family:var(--mono);font-size:10px;margin-top:2px">corr '+esc(corr.slice(0,8))+'…</div>':'')+'</td>'
@@ -4125,7 +4157,9 @@ function msgRenderEventos(){
   let h='<div style="max-height:280px;overflow:auto">';
   MSG.eventos.slice(0,14).forEach(function(e){
     const corr=e.correlationId||'';
+    const reenv=String(e.tipo||'').indexOf('reagendada')>=0;
     h+='<div class="evt"><time>'+esc(msgHhmm(e.em))+'</time><span class="badge">'+esc(e.tipo)+'</span>'
+      +(reenv?'<span class="badge reenvio" title="Duplicata reagendada para o reenvio">↻ reenvio 24h</span>':'')
       +'<span class="t mono" title="'+esc(e.chave||'')+'">'+esc(e.chave||'—')+'</span>'
       +(corr?'<button class="copybtn" data-msg-act="copy" data-msg-val="'+esc(corr)+'" title="Copiar correlationId">⧉</button>':'')
       +(corr?'<button class="mbtn sm" data-msg-act="trail" data-msg-corr="'+esc(corr)+'" title="Ver trilha">🔗</button>':'')+'</div>';

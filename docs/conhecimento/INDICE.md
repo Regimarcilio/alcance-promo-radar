@@ -9,3 +9,4 @@ Lições e padrões aprendidos no projeto (uma lição por arquivo, com evidênc
 | [rastreio-contador-historico.md](rastreio-contador-historico.md) | teto de arquivo ≠ total histórico | issue #38, PR #41 |
 | [prototipo-html-autocontido.md](prototipo-html-autocontido.md) | abrir no navegador antes de dar o protótipo por pronto | issue #53, PR #64 |
 | [prototipo-tela-nova-decisoes.md](prototipo-tela-nova-decisoes.md) | view nova, estados por seletor, confirmação com contagem | issue #53, PR #64 |
+| [duplicata-reagendamento-marcador.md](duplicata-reagendamento-marcador.md) | duplicata reagendada em vez de descartada: marcador, relógio e chave de negócio | issue #78, PR #80 |

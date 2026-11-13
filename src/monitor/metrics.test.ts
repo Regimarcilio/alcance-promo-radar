@@ -63,7 +63,14 @@ test("exportarMetricas cacheia por 5 segundos", async () => {
   // Reset força nova leitura
   resetarCacheMetricas();
   const output3 = exportarMetricas();
-  assert.equal(output3, output1, "mesmo conteúdo após reset");
+  // A idade da fila é calculada no scrape (sobe 1ms a cada leitura): ela é
+  // comparada sem o valor volátil, senão o teste vira uma corrida.
+  const semIdade = (s: string) =>
+    s
+      .split("\n")
+      .filter((l) => !l.startsWith("alcance_msg_idade_fila_ms{"))
+      .join("\n");
+  assert.equal(semIdade(output3), semIdade(output1), "mesmo conteúdo após reset");
 });
 
 test("metricsJanela indica estado com alcance_janela_aberta", async () => {

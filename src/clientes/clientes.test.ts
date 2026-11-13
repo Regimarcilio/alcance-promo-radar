@@ -418,9 +418,14 @@ test("fila: o estado legado (enviados/erros/pausa) é herdado sem perder histór
 
 // ---------- issue #50: consumidor idempotente ----------
 
+// Com o reenvio LIGADO (issue #78) a duplicata é REAGENDADA (não descartada) —
+// o comportamento do #50 (ACK sem reenvio) é o de quando o reenvio está
+// desligado. Os dois caminhos são verificados aqui e nos testes do #78.
 test("fila: reentrega não duplica a propaganda ao cliente (ACK sem reenvio)", async () => {
   const { mod, fila, dir } = await carregarFila();
   const m = mockEvolution();
+  const sw = guardarSwitches();
+  process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "0";
   try {
     const campanha = { texto: "oferta", jids: ["5511900000020@s.whatsapp.net"], disparoId: "promo-1" };
     await mod.enfileirarCampanha(campanha);
@@ -446,6 +451,7 @@ test("fila: reentrega não duplica a propaganda ao cliente (ACK sem reenvio)", a
       "o contador de duplicatas aumenta"
     );
   } finally {
+    sw.restaurar();
     m.restaurar();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -573,6 +579,244 @@ test("mensageria: /api/mensageria/stats devolve o snapshot por tipo", async () =
     assert.ok("idadeFilaMs" in clientes!, "o snapshot traz a idade da fila");
     assert.ok(snapshot.some((f) => f.tipo === "monitor.encaminhar"), "a fila do monitor aparece");
   } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- issue #78: reenvio de duplicatas (+24h, pela fila) ----------
+
+/** Valor de um contador da Mensageria (mesmo módulo do processo). */
+async function contador(nome: string, labels?: Record<string, string>): Promise<number> {
+  const contadores = await import("../messaging/contadores.js");
+  return contadores.valorContador(nome, labels);
+}
+
+/** Isola os switches do reenvio (restaura no fim do teste). */
+function guardarSwitches() {
+  const antes = {
+    ativo: process.env.MENSAGERIA_REENVIO_DUP_ATIVO,
+    horas: process.env.MENSAGERIA_REENVIO_DUP_HORAS,
+    tipos: process.env.MENSAGERIA_REENVIO_DUP_TIPOS,
+  };
+  return {
+    restaurar() {
+      for (const [k, v] of Object.entries({
+        MENSAGERIA_REENVIO_DUP_ATIVO: antes.ativo,
+        MENSAGERIA_REENVIO_DUP_HORAS: antes.horas,
+        MENSAGERIA_REENVIO_DUP_TIPOS: antes.tipos,
+      })) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    },
+  };
+}
+
+test("fila: a duplicata é reagendada 24h depois do lançamento (não é confirmada)", async () => {
+  const { mod, fila, dir } = await carregarFila();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+    process.env.MENSAGERIA_REENVIO_DUP_TIPOS = "cliente.enviar,monitor.encaminhar";
+    const campanha = { texto: "oferta", jids: ["5511900000050@s.whatsapp.net"], disparoId: "promo-re" };
+
+    // 1ª entrega: envia e registra a chave (junto do ACK)
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+    assert.equal(m.chamadas.filter((u) => u.includes("/message/sendText/")).length, 1);
+
+    // 2ª entrega da MESMA campanha → duplicata
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    const antes = await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" });
+    await mod.liberarProximoCliente();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      1,
+      "a duplicata não é enviada agora",
+    );
+    assert.equal(mod.estadoFilaClientes().pendentes, 1, "a mensagem NÃO é confirmada: continua na fila");
+    const env = fila.pendentes()[0];
+    assert.ok(env.reenvio, "o envelope foi marcado como reenvio");
+    assert.equal(env.reenvio!.chave, env.chave);
+    assert.equal(env.reenvio!.originalEm, env.timestamp, "o relógio é o lançamento original");
+    assert.ok(
+      Date.parse(env.proximaTentativaEm!) > Date.now(),
+      "a próxima tentativa é no futuro (nunca no passado)",
+    );
+    const horas = (Date.parse(env.proximaTentativaEm!) - Date.now()) / 3_600_000;
+    assert.ok(horas > 23 && horas <= 24, `reagendado para ~24h (${horas.toFixed(2)}h)`);
+    assert.equal(
+      await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" }),
+      antes + 1,
+      "o contador de duplicatas reagendadas aumenta",
+    );
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: o reenvio é enviado de fato e não se reagenda em loop", async () => {
+  const { mod, fila, broker, dir } = await carregarFila();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+    const campanha = { texto: "oferta", jids: ["5511900000051@s.whatsapp.net"], disparoId: "promo-loop" };
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+    assert.equal(mod.estadoFilaClientes().pendentes, 1, "a duplicata ficou reagendada");
+
+    // o horário do reenvio chegou: o item fica elegível
+    const env = fila.pendentes()[0];
+    await broker.getBroker().atualizar!(env.id, {
+      ...env,
+      proximaTentativaEm: new Date(Date.now() - 1000).toISOString(),
+    });
+    liberarRitmo(dir);
+    const antes = await contador("alcance_msg_reenvios_realizados_total", { tipo: "cliente.enviar" });
+    await mod.liberarProximoCliente();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      2,
+      "o reenvio foi enviado de fato",
+    );
+    assert.equal(
+      await contador("alcance_msg_reenvios_realizados_total", { tipo: "cliente.enviar" }),
+      antes + 1,
+      "o contador de reenvios realizados aumenta",
+    );
+    assert.equal(mod.estadoFilaClientes().pendentes, 0, "o reenvio saiu da fila (ACK)");
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: falha no reenvio vai para o retry normal (backoff), sem reagendar +24h", async () => {
+  const { mod, fila, broker, dir } = await carregarFila();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_HORAS = "24";
+    const campanha = { texto: "oferta", jids: ["5511900000052@s.whatsapp.net"], disparoId: "promo-falha" };
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+
+    // duplicata → reagendada (+24h)
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+    const reagendado = fila.pendentes()[0];
+    assert.ok(reagendado.reenvio, "a duplicata foi reagendada");
+
+    // o horário chega e o envio do reenvio FALHA (transitório)
+    await broker.getBroker().atualizar!(reagendado.id, {
+      ...reagendado,
+      proximaTentativaEm: new Date(Date.now() - 1000).toISOString(),
+    });
+    const falhar = mockEvolution({ falhar: true, status: 500, corpo: "Connection Closed" });
+    try {
+      liberarRitmo(dir);
+      await mod.liberarProximoCliente();
+    } finally {
+      falhar.restaurar();
+    }
+
+    const env = fila.pendentes()[0];
+    assert.ok(env, "a mensagem continua na fila (nada se perde)");
+    assert.equal(env.tentativas, 1, "contou uma tentativa (retry normal)");
+    assert.ok(env.ultimoErro, "o erro ficou registrado");
+    const atraso = Date.parse(env.proximaTentativaEm!) - Date.now();
+    const base = Number(process.env.MENSAGERIA_RETRY_BASE_MS ?? 30_000);
+    assert.ok(atraso > 0 && atraso <= base * 1.2, `volta com backoff exponencial (${atraso}ms), não +24h`);
+    assert.ok(atraso < 3_600_000, "não foi reagendado para +24h de novo");
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: com o reenvio desligado a duplicata é descartada como antes", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "0";
+    const campanha = { texto: "oferta", jids: ["5511900000053@s.whatsapp.net"], disparoId: "promo-off" };
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    const antesDup = await contador("alcance_msg_duplicadas_total", { tipo: "cliente.enviar" });
+    const antesReag = await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" });
+    await mod.liberarProximoCliente();
+
+    assert.equal(
+      m.chamadas.filter((u) => u.includes("/message/sendText/")).length,
+      1,
+      "nada foi enviado (a duplicata é descartada)",
+    );
+    assert.equal(mod.estadoFilaClientes().pendentes, 0, "a duplicata foi confirmada (ACK sem reenvio)");
+    assert.equal(
+      await contador("alcance_msg_duplicadas_total", { tipo: "cliente.enviar" }),
+      antesDup + 1,
+      "o contador de duplicatas (não reagendadas) aumenta",
+    );
+    assert.equal(
+      await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" }),
+      antesReag,
+      "nada foi reagendado",
+    );
+  } finally {
+    sw.restaurar();
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fila: o switch por tipo desliga o reenvio só do Monitor", async () => {
+  const { mod, dir } = await carregarFila();
+  const m = mockEvolution();
+  const sw = guardarSwitches();
+  try {
+    process.env.MENSAGERIA_REENVIO_DUP_ATIVO = "1";
+    process.env.MENSAGERIA_REENVIO_DUP_TIPOS = "cliente.enviar";
+    const campanha = { texto: "oferta", jids: ["5511900000054@s.whatsapp.net"], disparoId: "promo-tipo" };
+    await mod.enfileirarCampanha(campanha);
+    await mod.liberarProximoCliente();
+
+    liberarRitmo(dir);
+    await mod.enfileirarCampanha(campanha);
+    const antes = await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" });
+    await mod.liberarProximoCliente();
+
+    assert.equal(mod.estadoFilaClientes().pendentes, 1, "no Clientes a duplicata continua sendo reagendada");
+    assert.equal(
+      await contador("alcance_msg_duplicatas_reagendadas_total", { tipo: "cliente.enviar" }),
+      antes + 1,
+    );
+    const reenvio = await import("../messaging/reenvio.js");
+    assert.equal(reenvio.reenvioPermitido("cliente.enviar"), true);
+    assert.equal(reenvio.reenvioPermitido("monitor.encaminhar"), false, "o Monitor fica de fora");
+  } finally {
+    sw.restaurar();
     m.restaurar();
     rmSync(dir, { recursive: true, force: true });
   }

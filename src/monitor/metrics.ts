@@ -15,7 +15,7 @@ import { listarInstancias } from "../wa/rotacao.js";
 import { resumoDisparos } from "../clientes/disparos.js";
 import { estadoJanela } from "./janela.js";
 import { resumoFilas } from "../messaging/filas.js";
-import { lerContadores, lerHistogramas, BUCKETS_LATENCIA } from "../messaging/contadores.js";
+import { lerContadores, lerGauges, lerHistogramas, BUCKETS_LATENCIA } from "../messaging/contadores.js";
 
 /** Cache de métricas para evitar leituras repetidas (5s TTL) */
 let metricsCache: string | null = null;
@@ -236,6 +236,18 @@ function metricsMensageria(): string {
     for (const f of filas) {
       lines.push(`${nome}{tipo="${escapeLabel(f.tipo)}"} ${valor(f)}`);
     }
+  }
+
+  // --- gauges da mensageria (aging do reenvio) ---
+  const gaugesMensageria = lerGauges().filter((g) => g.nome.startsWith("alcance_msg_"));
+  for (const g of gaugesMensageria) {
+    lines.push(help(g.nome, `Gauge de mensageria ${g.nome.replace("alcance_msg_", "")}`));
+    lines.push(type(g.nome, "gauge"));
+    const l = Object.keys(g.labels)
+      .sort()
+      .map((k) => `${k}="${escapeLabel(g.labels[k])}"`)
+      .join(", ");
+    lines.push(`${g.nome}${l ? `{${l}}` : ""} ${g.valor}`);
   }
 
   // --- contadores ---

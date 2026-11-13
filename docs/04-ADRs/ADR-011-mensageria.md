@@ -182,3 +182,79 @@ A decisão acima foi aplicado no fluxo de Campanhas (aba Clientes) e na fila do 
 - **Diagnóstico**: `GET /api/mensageria/stats` devolve o snapshot por tipo (pendentes,
   processadas, falhas, DLQ, mais antiga, idade e taxa de erro).
 - **Grafana**: o dashboard provisionado ganhou os painéis de fila/DLQ/duplicatas.
+
+---
+
+## Addendum (2026-11-12) — issue #78: duplicata deixa de ser descartada e vira **reenvio** (+24h)
+
+### Contexto
+
+A idempotência do #50 **descartava** a duplicata: em `src/clientes/clientes.ts` a
+mensagem era confirmada (ACK) sem reenviar, com o log `duplicata ignorada`. O
+operador pediu o contrário: a duplicata deve **voltar para a fila** e ser
+reenviada **24h depois do lançamento original**, **pela sequência da fila**
+(mesmo ritmo anti-rajada, mesma janela comercial, mesmo ACK/retry/DLQ) — nunca
+por um envio avulso.
+
+### Decisão
+
+- **Núcleo genérico** (`src/messaging/reenvio.ts`): `agendarReenvioDuplicado(env)`
+  devolve o envelope **reagendado** (`proximaTentativaEm` = lançamento + N horas,
+  marcador `reenvio: {originalEm, agendadoEm, chave}`), preservando
+  `correlationId` e a chave; `ehReenvioAgendado(env)` faz o consumidor **pular a
+  checagem de idempotência** no reenvio (senão ele se reagendaria em loop);
+  `reenvioPermitido(tipo)` decide pelo switch global e pelo switch por tipo.
+- **O relógio é o lançamento original** (`envelope.timestamp` / item `criadoEm`),
+  não a detecção da duplicata — decisão do operador (12/11/2026).
+- **Regra do "próximo momento válido"**: `alvo = lançamento + N horas` e, enquanto
+  `alvo <= agora`, `alvo = alvo + N horas`. Com o padrão de 24h, uma mensagem
+  lançada ontem às 08:00 e detectada hoje às 10:00 é reagendada para **as 08:00
+  de amanhã**. `proximaTentativaEm` **nunca** fica no passado; a fila continua
+  respeitando a janela comercial e o intervalo anti-rajada (o reagendamento só
+  define *quando* a mensagem fica elegível).
+- **Reenvio único**: se o reenvio falhar, cai no **retry/DLQ normal** (backoff
+  exponencial, até 3 tentativas) — o marcador `reenvio` viaja com o envelope e
+  **não** gera um novo +24h.
+- **Switches** (desligáveis sem mexer em código):
+  `MENSAGERIA_REENVIO_DUP_ATIVO` (1 = ligado), `MENSAGERIA_REENVIO_DUP_HORAS`
+  (24) e `MENSAGERIA_REENVIO_DUP_TIPOS` (`cliente.enviar,monitor.encaminhar`,
+  `*` = todos). Com o switch desligado, a duplicata volta ao **descarte**
+  (comportamento do #50).
+
+### ⚠️ Efeito colateral no Monitor (risco aceito pelo operador em 12/11/2026)
+
+No Monitor a chave de negócio é o **hash da oferta** (`mlbId|preco|cupom` — a
+mesma do Piloto), não o id do item. Consequência: **a mesma oferta encaminhada
+antes é reencaminhada aos grupos 24h depois** (não é "a mesma oferta para o
+mesmo contato", é "a mesma oferta para os grupos"). Isso vale também para a
+mesma oferta publicada por **origens diferentes** quando `DEDUP_POR_ORIGEM=1`.
+
+Mitigações: `MENSAGERIA_REENVIO_DUP_TIPOS=cliente.enviar` desliga o reenvio só
+do Monitor; `MENSAGERIA_REENVIO_DUP_ATIVO=0` desliga em todos os fluxos. O
+painel mostra a origem do reenvio (badge **↻ reenvio 24h**) na tabela de DLQ e
+na de eventos.
+
+### Observabilidade
+
+- `alcance_msg_duplicatas_reagendadas_total{tipo}` — duplicatas reagendadas.
+- `alcance_msg_reenvios_realizados_total{tipo}` — reenvios efetivamente enviados.
+- `alcance_msg_reenvios_agendados_horas{tipo}` — gauge do tempo de espera (aging).
+- Eventos `disparo.mensagem.reagendada` (Clientes) e `mensagem.reagendada`
+  (Monitor), com `chave`, `originalEm`, `agendadoEm`, `envioEm` e `correlationId`.
+
+### Alternativas avaliadas
+
+| Alternativa | Por que não |
+| --- | --- |
+| Envio avulso 24h depois (sem fila) | quebra o ritmo anti-rajada e a janela comercial; não passa por ACK/retry/DLQ |
+| Reagendar a partir da **detecção** | o operador definiu que as 24h contam do **lançamento** |
+| Reenviar em loop (a cada 24h) | spam; o reenvio é **único** |
+| Reenviar o Monitor pela chave do item | a chave do Monitor é o **hash da oferta**; a chave do item não detecta a oferta repetida |
+
+### Referências
+
+- Implementação: `src/messaging/reenvio.ts`, `src/clientes/clientes.ts`,
+  `src/clientes/fila.ts`, `src/monitor/fila.ts`, `src/monitor/webhook.ts`
+- Testes: `src/messaging/reenvio.test.ts`, `src/clientes/clientes.test.ts`,
+  `src/monitor/fila.test.ts`
+- Épico: #47 (Camada de Mensageria interna) — issue #78

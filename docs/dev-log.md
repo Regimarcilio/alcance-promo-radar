@@ -2733,3 +2733,115 @@ pela aprovação do operador.
   - **Nada de envio real**: manager em `ALCANCE_SMOKE=1` (sem workers) e Evolution API intocada.
 - **Próximo:** promoção a `main` no release; os endpoints de descarte/lote fecham as
   pendências que o #53 deixou em aberto.
+
+---
+
+## 2026-11-12 — feat(mensageria): reenviar duplicados 24h após o lançamento, pela sequência da fila — @master — `task: issue #78`
+
+- **Objetivo:** issue #78 — a idempotência **descartava** a duplicata (ACK sem reenviar). Agora a
+  duplicata **volta para a fila**, agendada para **24h depois do lançamento original**, passando de
+  novo pelo ritmo da Mensageria (intervalo anti-rajada, janela comercial, ACK/retry/DLQ) — nunca
+  por envio avulso.
+- **Branch:** `ISSUE-78-reenvio-duplicados` (de `develop`) · **PR:** ver link no comentário da issue
+  (`Closes #78`) · **Issue:** #78.
+- **Decisões do operador (12/11/2026) respeitadas:**
+  1. as **24h contam do lançamento original** (`envelope.timestamp` / `criadoEm` do item), não da
+     detecção da duplicata;
+  2. vale para **todos os fluxos** (Clientes/Disparo **e** Monitor) e é **configurável por tipo**
+     (`MENSAGERIA_REENVIO_DUP_TIPOS`) — desligável sem mexer em código;
+  3. **reenvio único**: se o reenvio falhar, segue o **retry/DLQ normal** (nunca reagenda +24h).
+- **Regra do "próximo momento válido"** (documentada no ADR-011): `alvo = lançamento + N horas` e,
+  enquanto `alvo <= agora`, `alvo = alvo + N horas`. Lançado ontem às 08:00 e detectado hoje às
+  10:00 → reagendado para **as 08:00 de amanhã**. `proximaTentativaEm` nunca fica no passado.
+- **Escopo OUT respeitado:** nada de envio avulso; retry/DLQ intactos; Piloto
+  (`src/ml/piloto.ts`) e boas-vindas (`src/clientes/boas-vindas.ts`) intocados (são filtros de
+  seleção pré-publicação); retenção da idempotência inalterada (30 dias); aba Números intocada.
+- **Arquivos**
+  - `src/messaging/reenvio.ts` — **novo**: `agendarReenvioDuplicado`, `ehReenvioAgendado`,
+    `reenvioPermitido`, `momentoReenvio`, `marcadorReenvio` + leitura dos switches do ambiente.
+  - `src/messaging/envelope.ts` — campo opcional `reenvio` (`{originalEm, agendadoEm, chave}`) no
+    envelope e no schema zod; `MarcadorReenvio` como fonte única do formato.
+  - `src/messaging/tipos.ts` — eventos `disparo.mensagem.reagendada` e `mensagem.reagendada`
+    (schema zod: `chave`, `originalEm`, `agendadoEm`, `envioEm`, `correlationId`).
+  - `src/messaging/contadores.ts` — gauges (`definirGauge`/`lerGauges`/`valorGauge`/`zerarGauges`).
+  - `src/monitor/metrics.ts` — gauges da Mensageria exportados como `# TYPE ... gauge`.
+  - `src/clientes/fila.ts` — `reagendar(env)`: devolve o envelope à fila **sem** ACK.
+  - `src/clientes/clientes.ts` — consumidor `cliente.enviar`: duplicata → reagendamento (+24h) ou
+    descarte (switch); reenvio pula a idempotência e conta `alcance_msg_reenvios_realizados_total`.
+  - `src/monitor/fila.ts` — consumidor `monitor.encaminhar`: chave de negócio da oferta
+    (`mlbId|preco|cupom`, a mesma do Piloto), `extrairCupom`, marcador `reenvio` no item,
+    `chaveOferta`, reagendamento/descarte e registro da oferta junto do ACK.
+  - `src/monitor/webhook.ts` — caminho direto também trata a duplicata (ação nova `REAGENDADO`).
+  - `src/manager/server.ts` — badge **↻ reenvio 24h** na tabela de DLQ e na de eventos (+ CSS).
+  - `.env.example` — `MENSAGERIA_REENVIO_DUP_ATIVO`, `MENSAGERIA_REENVIO_DUP_HORAS`,
+    `MENSAGERIA_REENVIO_DUP_TIPOS` (com o aviso do Monitor).
+  - `docs/04-ADRs/ADR-011-mensageria.md` — addendum do #78 (decisão, regra do próximo momento
+    válido, **efeito colateral do Monitor em destaque**, alternativas).
+  - `README.md` — bullet do reenvio na seção Mensageria + o aviso do Monitor.
+  - `src/messaging/reenvio.test.ts` — **novo** (7 testes do núcleo);
+    `src/clientes/clientes.test.ts` (+5), `src/monitor/fila.test.ts` (+6),
+    `src/monitor/metrics.test.ts` (1 ajuste: a idade da fila é comparada sem o valor volátil).
+- **Evidências**
+  - **Testes:** 300/300 (`npm test`), `npm run typecheck` e `npm run build` verdes.
+  - **Revisão do MASTER (pós-PR):** 2 testes de regressão acrescentados no
+    `src/monitor/fila.test.ts` — (a) a duplicata reagendada **não trava a fila** do Monitor (o
+    item seguinte é enviado) e (b) o reenvio é enviado **uma única vez** quando a hora chega pelo
+    caminho natural (sem `reenfileirar`), provando que ele não se reagenda em loop.
+  - **Cenários Gherkin cobertos:** duplicata reagendada (+24h, não confirmada, contador aumenta);
+    reenvio segue a sequência da fila (não elegível antes da hora); reenvio não se reagenda em loop
+    (pula a idempotência e é enviado); falha no reenvio → retry com backoff (sem novo +24h); switch
+    global desliga (descarte, como antes); switch por tipo desliga só o Monitor; 24h do **lançamento**
+    (lançado ontem 08:00, detectado hoje 10:00 → amanhã 08:00).
+  - **Painel:** JS inline validado com `node --check` nos 3 blocos `<script>` (extraídos do template
+    `PAGINA`) e com o teste `src/manager/pagina.test.ts` (`new Function` parseia cada bloco).
+  - **Nada de envio real:** Evolution sempre mockada nos testes; nenhum deploy/rebuild do container;
+    Evolution API intocada.
+  - **SAST (`kalimaster-sast`):** nenhum segredo no diff; `npm audit` mantém **1 high pré-existente**
+    (`zod < 4.6.6`) — fora do escopo deste PR (nenhuma dependência foi adicionada).
+- **Desvios do enunciado (documentados no relatório do PR):**
+  - o contador de duplicatas **descartadas** mantém o nome já existente no projeto
+    `alcance_msg_duplicadas_total{tipo}` (a issue escreve `..._duplicatas_total`; o nome real está
+    no ADR-011 e no dashboard do Grafana — trocar quebraria os dois);
+  - o 1º cenário Gherkin ("10:00 → 18:00 do mesmo dia") conflita com a regra das 24h a partir do
+    lançamento: implementado como **lançamento + 24h** (e o cenário "24h após o lançamento, não
+    após a detecção" é cumprido ao pé da letra).
+- **Próximo:** revisão multidimensional (corretude, legibilidade, arquitetura, segurança,
+  performance) e merge em `develop`; depois, promoção a `main` no release.
+
+## 2026-11-12 — Monitor: remetente automático visível na aba Monitor (fix)
+
+- **Demanda (operador):** "Monitor não estou conseguindo mudar o celular para envio, deixar como
+  automático a escolha do que está disponível na configuração do Número."
+- **Diagnóstico:** o envio do Monitor **já era automático** — `src/monitor/fila.ts` e
+  `src/monitor/webhook.ts` chamam `enviarParaGrupo({ fluxo: "monitor" })` sem `instancia`, então o
+  remetente sai de `proximaInstancia("monitor")` (rodízio ponderado entre os números **ativos, não
+  pausados e com permissão `monitor`** na aba Números). O problema era de **visibilidade e de
+  controle**:
+  1. a aba Monitor mostrava "instância X" usando `instanciaParaServico()` — a instância de
+     **serviço** (operações de grupo), que **não é** a remetente;
+  2. o único controle de remetente do Monitor ficava escondido na aba Números
+     ("Remetente por fluxo → Monitor");
+  3. o botão "📱 Trocar celular" na aba Monitor **desloga a conta** (`/api/monitor/desconectar`) —
+     ação destrutiva, não um seletor de remetente.
+- **Correção (sem mudar a política de envio):**
+  - `src/manager/server.ts` — `GET /api/monitor/conta` passa a devolver `remetente`:
+    `{ modo: "automatico" | "fixo", fixada, elegiveis: [{ instancia, nome, peso }] }`
+    (elegíveis = ativos, não pausados, com permissão `monitor`).
+  - Aba Monitor: a linha "Conta WhatsApp" agora mostra **quem envia** — "Envio: automático —
+    rodízio entre N número(s) liberado(s) para Monitor: <nomes>", ou "Envio: fixo em <nome>", ou
+    aviso em vermelho quando **nenhum** número está liberado para o Monitor. A instância de serviço
+    continua visível, rotulada como "operações de serviço (adicionar contatos)".
+  - Botões: "📱 Números" (navega para a aba Números, onde ficam permissões/pausa/override) e o
+    botão destrutivo relabelado para "Deslogar e parear outro" (com `title` explicando).
+- **Evidências:**
+  - `npm run build` ✅ · `npm test` **300/300** ✅ · `src/manager/pagina.test.ts` 3/3 ✅ (JS inline válido).
+  - Manager subido com `ALCANCE_DATA_DIR` temporário e Evolution **inalcançável** (`EVO_URL=http://127.0.0.1:1`):
+    `/api/monitor/conta` devolveu `remetente.modo="automatico"` com **só o Celular 1** elegível
+    (Celular 2 sem permissão `monitor`, Celular 3 pausado) — filtro correto.
+  - Override fixado via `POST /api/instancias/override` → `modo="fixo"`, `fixada` preenchida;
+    override limpo → volta a `automatico`.
+  - Nenhuma alteração na política de envio, no rodízio nem nas permissões; nenhum envio real;
+    Evolution API intocada; sem deploy/rebuild.
+- **Pendência conhecida:** a aba Monitor não tem (e não ganhou) seletor manual de remetente — o
+  controle continua sendo a aba Números ("Remetente por fluxo → Monitor"), por decisão do operador
+  ("deixar como automático").

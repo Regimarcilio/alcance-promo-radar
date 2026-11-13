@@ -14,16 +14,23 @@ import { enviarParaGrupo, ehErroTransitorio } from "../wa/dispatch.js";
 import { registrarPublicacao } from "../store/publicacoes.js";
 import { carregarMonitor } from "./grupos.js";
 import { limparMidiaAntiga } from "./midia.js";
-import { extrairPrecos } from "./produto.js";
+import { extrairCupom, extrairPrecos } from "./produto.js";
 import { extrairTitulo } from "./titulo.js";
 import { registrarEvento } from "./state.js";
 import { dataDirAtual } from "../config/paths.js";
 import { gravarJsonAtomico, lerJson } from "../store/json.js";
-import { criarEnvelope } from "../messaging/envelope.js";
+import { criarEnvelope, type MarcadorReenvio } from "../messaging/envelope.js";
+import { chaveDe, jaProcessado, registrarProcessado } from "../messaging/idempotencia.js";
+import {
+  ehReenvioAgendado,
+  marcadorReenvio,
+  momentoReenvio,
+  reenvioPermitido,
+} from "../messaging/reenvio.js";
 import { lerDlq, registrarDlq, removerDlq } from "../messaging/dlq.js";
 import { deveRetentar, proximaTentativaEm } from "../messaging/politica.js";
 import { publicarEvento } from "../messaging/eventos.js";
-import { incrementar, observarLatencia } from "../messaging/contadores.js";
+import { incrementar, definirGauge, observarLatencia } from "../messaging/contadores.js";
 import { logger } from "../observability/logger.js";
 
 // caminho resolvido em tempo de chamada (teste/smoke trocam ALCANCE_DATA_DIR)
@@ -63,6 +70,14 @@ export interface ItemFila {
   ultimoErro?: string | null;
   /** quantas vezes o operador reprocessou este item a partir da DLQ */
   reprocessos?: number;
+  /**
+   * Marcador do **reenvio agendado** (issue #78): a oferta já tinha sido
+   * encaminhada e o item foi reagendado para `lançamento + N horas`.
+   * A presença do marcador faz o consumidor pular a checagem de
+   * idempotência (senão o reenvio se detectaria como duplicata e se
+   * reagendaria em loop).
+   */
+  reenvio?: MarcadorReenvio | null;
 }
 
 interface StoreFila {
@@ -98,6 +113,22 @@ function carregar(): StoreFila {
 function salvar(s: StoreFila): void {
   cache = s;
   gravarJsonAtomico(file(), s);
+}
+
+/**
+ * Chave de negócio da **oferta** — a mesma do Piloto: `mlbId|preco|cupom`
+ * (`src/store/dedup.ts#hashEnvio` e `src/messaging/idempotencia.ts#chaveDe`).
+ *
+ * Devolve "" quando não há id de produto: sem id não dá para dizer que duas
+ * ofertas são a mesma — e uma chave "genérica" (só preço) colidiria entre
+ * ofertas diferentes (falso duplicado).
+ */
+export function chaveOferta(item: ItemFila): string {
+  const id = String(item.idProduto ?? "").trim();
+  if (!id) return "";
+  const preco = extrairPrecos(item.mensagem).precoAtual ?? 0;
+  const cupom = extrairCupom(item.mensagem);
+  return chaveDe(TIPO_MONITOR, { mlbId: id, preco, cupom });
 }
 
 /** Intervalo entre liberações da fila de rajada (env, default 120s = 2 min). */
@@ -150,6 +181,9 @@ export function reenfileirar(item: ItemFila): ItemFila {
   if (existente) {
     existente.destinos = item.destinos;
     existente.tentativas = item.tentativas;
+    // o agendamento (backoff OU reenvio de +24h) também precisa ser atualizado
+    existente.proximaTentativaEm = item.proximaTentativaEm ?? null;
+    existente.reenvio = item.reenvio ?? null;
   } else {
     s.itens.push({ ...item });
   }
@@ -338,19 +372,123 @@ function registrarDlqMonitor(
 }
 
 /**
+ * Trata a **duplicata da oferta** (issue #78).
+ *
+ * Devolve `null` quando o item pode ser enviado (não é duplicata — ou é o
+ * próprio reenvio, que tem o marcador e por isso pula a checagem).
+ * Caso contrário devolve o que fazer:
+ * - `"reagendar"`: o item volta para a fila, agendado para
+ *   `lançamento original + N horas` (24h por padrão) — o reenvio **sempre**
+ *   passa pela fila (nunca é envio avulso);
+ * - `"descartar"`: o reenvio está desligado → a duplicata é descartada
+ *   (comportamento anterior).
+ */
+function tratarDuplicata(
+  item: ItemFila,
+): { acao: "reagendar" | "descartar"; item: ItemFila; chave: string } | null {
+  // o reenvio já é o reenvio: não se reagenda em loop
+  if (ehReenvioAgendado(item)) return null;
+  const chave = chaveOferta(item);
+  if (!chave || !jaProcessado(chave)) return null;
+
+  if (!reenvioPermitido(TIPO_MONITOR)) {
+    incrementar("alcance_msg_duplicadas_total", { tipo: TIPO_MONITOR });
+    console.log(`[mensageria] duplicata ignorada: ${chave}`);
+    return { acao: "descartar", item, chave };
+  }
+
+  const momento = momentoReenvio(item.criadoEm);
+  const reagendado: ItemFila = {
+    ...item,
+    proximaTentativaEm: momento.em,
+    reenvio: marcadorReenvio(item.criadoEm, chave),
+  };
+  incrementar("alcance_msg_duplicatas_reagendadas_total", { tipo: TIPO_MONITOR });
+  definirGauge("alcance_msg_reenvios_agendados_horas", { tipo: TIPO_MONITOR }, momento.horas);
+  try {
+    publicarEvento(
+      "mensagem.reagendada",
+      {
+        chave,
+        originalEm: item.criadoEm,
+        agendadoEm: new Date().toISOString(),
+        envioEm: momento.em,
+        correlationId: item.correlationId ?? null,
+      },
+      { correlationId: item.correlationId ?? undefined },
+    );
+  } catch {
+    /* evento é acessório */
+  }
+  console.log(`[mensageria] duplicata reagendada para ${momento.em}: ${chave}`);
+  return { acao: "reagendar", item: reagendado, chave };
+}
+
+/**
+ * Coloca o item reagendado na fila (preservando o mesmo id e o mesmo
+ * lançamento): se ele já está na fila, é atualizado; se não, entra nela.
+ */
+function reagendarItem(item: ItemFila): void {
+  const s = carregar();
+  const i = s.itens.findIndex((x) => x.id === item.id);
+  if (i >= 0) s.itens[i] = { ...s.itens[i], ...item };
+  else s.itens.push(item);
+  salvar(s);
+}
+
+/** Resultado do caminho direto (webhook) — issue #78 pode reagendar. */
+export interface ResultadoEntregaItem {
+  /** destinos com envio confirmado */
+  enviados: { jid: string; messageId: string }[];
+  /** item reagendado para o reenvio (+N horas) — null se não houve */
+  reagendado: ItemFila | null;
+  /** a duplicata foi descartada (reenvio desligado) */
+  descartado: boolean;
+}
+
+/**
  * Entrega o item e devolve os destinos enviados.
  * Caminho direto (webhook): em falha transitória **reenfileira** como
  * sempre — comportamento histórico preservado.
+ *
+ * Antes de entregar, a **duplicata da oferta** é tratada (issue #78): ou o
+ * item é reagendado para +N horas (pela fila) ou descartado (reenvio
+ * desligado). Nada é enviado em ambos os casos.
  */
-export async function entregarItem(
-  item: ItemFila
-): Promise<{ jid: string; messageId: string }[]> {
+export async function entregarItem(item: ItemFila): Promise<ResultadoEntregaItem> {
+  const duplicata = tratarDuplicata(item);
+  if (duplicata) {
+    if (duplicata.acao === "reagendar") {
+      reagendarItem(duplicata.item);
+      return { enviados: [], reagendado: duplicata.item, descartado: false };
+    }
+    return { enviados: [], reagendado: null, descartado: true };
+  }
   const r = await entregarItemDetalhado(item);
   if (r.transitorio && r.restantes.length) {
     const tentativas = (item.tentativas ?? 0) + 1;
     reenfileirar({ ...item, tentativas, destinos: r.restantes });
+  } else if (!r.restantes.length) {
+    // todos os destinos receberam: a oferta fica registrada (junto do ACK)
+    registrarOfertaEnviada(item);
+    if (ehReenvioAgendado(item)) {
+      incrementar("alcance_msg_reenvios_realizados_total", { tipo: TIPO_MONITOR });
+      definirGauge("alcance_msg_reenvios_agendados_horas", { tipo: TIPO_MONITOR }, 0);
+    }
   }
-  return r.enviados;
+  return { enviados: r.enviados, reagendado: null, descartado: false };
+}
+
+/**
+ * Registra a oferta como encaminhada (chave de negócio) — o registro acontece
+ * **junto com o ACK**, nunca antes. Em modo teste (`MONITOR_DRY=1`) nada é
+ * registrado: simular não pode bloquear a oferta real.
+ */
+function registrarOfertaEnviada(item: ItemFila): void {
+  if (process.env.MONITOR_DRY === "1") return;
+  const chave = chaveOferta(item);
+  if (!chave) return;
+  registrarProcessado(chave, TIPO_MONITOR);
 }
 
 /**
@@ -391,6 +529,33 @@ export async function liberarProximo(): Promise<ItemFila | null> {
   processando = (async () => {
     const inicio = Date.now();
     try {
+      // IDEMPOTÊNCIA DA OFERTA + REENVIO DE DUPLICATAS (issue #78)
+      //
+      // A oferta já foi encaminhada antes (mesma chave de negócio do Piloto)?
+      // - NÃO → segue o envio normal;
+      // - SIM e o reenvio está ligado → o item **não é ACK**: ele volta para
+      //   a fila, agendado para `lançamento original + N horas` (24h por
+      //   padrão) e passa de novo pelo ritmo da fila (intervalo anti-rajada,
+      //   janela comercial, retry/DLQ). Nunca é envio avulso;
+      // - SIM e o reenvio está desligado → descarta a duplicata.
+      //
+      // O reenvio é **único**: o marcador `reenvio` faz o consumidor pular a
+      // checagem de idempotência (senão ele se reagendaria em loop).
+      const duplicata = tratarDuplicata(item);
+      if (duplicata) {
+        if (duplicata.acao === "reagendar") {
+          // volta para a fila: só é liberada quando chegar a hora
+          reagendarItem(duplicata.item);
+        } else {
+          // reenvio desligado: descarta a duplicata (não reenvia a oferta)
+          const atual = carregar();
+          atual.itens = atual.itens.filter((i) => i.id !== item.id);
+          atual.emAndamento = null;
+          salvar(atual);
+        }
+        return;
+      }
+
       const r = await entregarItemDetalhado(item);
       // OBSERVABILIDADE (issue #52): latência + log com o correlationId
       const duracaoMs = Date.now() - inicio;
@@ -420,6 +585,14 @@ export async function liberarProximo(): Promise<ItemFila | null> {
         atual.emAndamento = null;
         atual.processadas = (atual.processadas ?? 0) + 1;
         salvar(atual);
+        // A oferta foi encaminhada: a chave de negócio é registrada (juntos
+        // com o ACK) para que a próxima ocorrência seja tratada como
+        // duplicata (e reagendada, issue #78).
+        registrarOfertaEnviada(item);
+        if (ehReenvioAgendado(item)) {
+          incrementar("alcance_msg_reenvios_realizados_total", { tipo: TIPO_MONITOR });
+          definirGauge("alcance_msg_reenvios_agendados_horas", { tipo: TIPO_MONITOR }, 0);
+        }
         return;
       }
 

@@ -45,6 +45,41 @@ export function zerarContadores(): void {
   contadores.clear();
 }
 
+// ---------- gauges ----------
+
+/**
+ * Gauges (valor instantâneo, não acumula): o valor é **substituído** a cada
+ * medição — é o que serve para "tempo de espera até o reenvio" (aging).
+ */
+export interface Gauge {
+  nome: string;
+  labels: Record<string, string>;
+  valor: number;
+}
+
+const gauges = new Map<string, { nome: string; labels: Record<string, string>; valor: number }>();
+
+/** Define (substitui) o valor de um gauge. */
+export function definirGauge(nome: string, labels?: Record<string, string>, valor = 0): void {
+  const k = chave(nome, labels);
+  gauges.set(k, { nome, labels: labels ?? {}, valor });
+}
+
+/** Valor de um gauge (0 se não existe). */
+export function valorGauge(nome: string, labels?: Record<string, string>): number {
+  return gauges.get(chave(nome, labels))?.valor ?? 0;
+}
+
+/** Todos os gauges (para a exportação Prometheus). */
+export function lerGauges(): Gauge[] {
+  return [...gauges.values()].map((g) => ({ ...g, labels: { ...g.labels } }));
+}
+
+/** Zera os gauges (usado em teste). */
+export function zerarGauges(): void {
+  gauges.clear();
+}
+
 /** Buckets do histograma de latência (ms). */
 export const BUCKETS_LATENCIA = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000];
 
