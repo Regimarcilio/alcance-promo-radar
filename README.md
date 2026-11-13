@@ -314,6 +314,7 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --bu
 
 ## Documentação
 
+- **[English version](README.en.md)** — this README in English.
 - [`docs/00-INDICE.md`](docs/00-INDICE.md) — porta de entrada: o que é vigente, histórico ou planejado.
 - [`docs/SRS-v0.4.md`](docs/SRS-v0.4.md) — requisitos vigentes com rastreabilidade RF → código → teste.
 - [`docs/SRS-v0.4-delta-mensageria.md`](docs/SRS-v0.4-delta-mensageria.md) — delta da camada de Mensageria (RF-057 a RF-061).

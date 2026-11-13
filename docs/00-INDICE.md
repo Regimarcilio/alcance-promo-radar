@@ -15,7 +15,8 @@
 
 | Documento | Versão / data | Status | Substitui / substituído por |
 |---|---|---|---|
-| [`README.md`](../README.md) | 2026-10-22 | vigente | Substitui o onboarding antigo (nome autoMensagemWhats, porta 8091, 22 testes). |
+| [`README.md`](../README.md) | 2026-11-12 | vigente | Main README (PT-BR). Substitui o onboarding antigo (nome autoMensagemWhats, porta 8091, 22 testes). |
+| [`README.en.md`](../README.en.md) | 2026-11-12 | vigente | English version of this README. |
 | [`CHANGELOG.md`](../CHANGELOG.md) | 0.8.0 · 2026-10-22 | vigente | Primeiro changelog formal; consolida o histórico recente do `dev-log.md`. |
 | [`docs/00-INDICE.md`](00-INDICE.md) | 2026-10-22 | vigente | — |
 | [`docs/01-visao-e-escopo.md`](01-visao-e-escopo.md) | v0.2 · 2026-10-12 | histórico | Visão do produto antigo (autoMensagemWhats/Hunter). Escopo atual: SRS v0.4 e README. |
