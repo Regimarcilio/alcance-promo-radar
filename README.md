@@ -29,6 +29,7 @@ painel web autenticado.
 - [Usando o painel](#usando-o-painel)
 - [Qualidade e testes](#qualidade-e-testes)
 - [Estrutura do projeto](#estrutura-do-projeto)
+- [Renovação do Cookie ML](#renova%C3%A7%C3%A3o-doch-cookie-ml)
 - [Segurança](#segurança)
 - [Observabilidade](#observabilidade)
 - [Documentação](#documentação)
@@ -324,6 +325,39 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --bu
 - [`docs/13-auth-spec.md`](docs/13-auth-spec.md) — autenticação e checklist de segurança.
 - [`docs/dev-log.md`](docs/dev-log.md) — diário de bordo com evidências por entrega.
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes (Keep a Changelog + SemVer).
+
+## Renovação do Cookie ML
+
+O cookie `_mldataSessionId` do Mercado Livre **expira a cada 15-30 minutos**. Quando expirado, o sistema retorna `CREATELINK_SEM_URL`.
+
+### Renovação Manual
+
+```bash
+COOKIE_ML='_mldataSessionId=XXX' node scripts/maintain-cookie.mjs
+```
+
+### Teste de Conversão
+
+```bash
+COOKIE_ML='_mldataSessionId=XXX' node scripts/test-conversion.mjs "https://produto.mercadolivre.com.br/MLB-XXXXX"
+```
+
+### Cron Job (Automático)
+
+```bash
+# Renova a cada 25 minutos
+*/25 * * * * cd /caminho/projeto && COOKIE_ML="_mldataSessionId=XXX" && node scripts/maintain-cookie.mjs
+```
+
+### Scripts Disponíveis
+
+| Script | Função |
+|--------|--------|
+| `scripts/maintain-cookie.mjs` | Atualiza cookie em todas as contas |
+| `scripts/test-conversion.mjs` | Testa conversão de link |
+| `scripts/auto-renew-cookie.mjs` | Interface de renovação automática |
+
+Veja [docs/RENOVACAO_COOKIE_ML.md](docs/RENOVACAO_COOKIE_ML.md) para detalhes.
 
 ## Pendências conhecidas
 
