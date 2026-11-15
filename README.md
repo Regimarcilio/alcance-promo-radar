@@ -6,6 +6,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-propriet%C3%A1ria-lightgrey)](#licença)
 
+**WhatsApp offer monitor and sender.** Alcance reads offers from affiliate groups, identifies the product (Mercado Livre, Amazon and Shopee), swaps the link to your affiliate link and forwards to your groups — with anti-raid queue, deduplication, number rotation and an authenticated web panel.
+
 **Monitor e disparador de ofertas para WhatsApp.** O Alcance lê ofertas de grupos de afiliados,
 identifica o produto (Mercado Livre, Amazon e Shopee), troca o link pelo seu link de afiliado e
 reencaminha para os seus grupos — com fila anti-rajada, deduplicação, rotação de números e um
@@ -38,6 +40,17 @@ painel web autenticado.
 
 ---
 
+## Overview
+
+The flow is simple and auditable:
+
+1. an affiliate group publishes an offer;
+2. the **Evolution API v2** webhook delivers the message to Alcance;
+3. the **parser** identifies product, price, coupon and link;
+4. the **transformer** swaps the link to your affiliate link;
+5. the **anti-raid queue** controls the pace;
+6. the **dispatch** chooses a healthy number and sends to the destination group.
+
 ## Visão geral
 
 O fluxo é simples e auditável:
@@ -52,6 +65,22 @@ O fluxo é simples e auditável:
 Além do monitor, o painel oferece **Piloto automático** (busca e publica ofertas por conta própria),
 **Disparo para clientes** (listas e campanhas com mídia), **Rastreio** de tudo que foi publicado e
 **gestão de números** com permissões e pausa.
+
+## Features
+
+| Area | What it does |
+|---|---|
+| **Monitor** | Webhook → parser → atomic dedup → link transformation → Emipe template → sending with anti-raid queue. |
+| **Pilot** | Searches offers by category/keyword and automatically publishes them on Mercado Livre and Amazon. |
+| **Send (Customers)** | Syncs group participants, maintains lists, manual registration and campaigns with image/video and link. |
+| **Multi-program** | Mercado Livre (`meli.la`), Amazon (`amzn.to`/ASIN) and Shopee (`shope.ee` via Open API). |
+| **Multi-number** | Up to 5 numbers, weighted rotation (weight 1-10), anti-repetition, permissions per flow and individual pause. |
+| **Accounts & links** | Affiliate tags, category → account/group map and default groups. |
+| **Coupons** | Mercado Livre coupons applied to message. |
+| **Tracking** | Publication history with exact link published, real total counter and CSV export. |
+| **Messaging** | Internal broker layer: versioned envelope, **real ACK**, retry with backoff, **DLQ**, idempotency and event topics. |
+| **Security** | Session login, 2FA by WhatsApp on first access, rate-limit, audit and restrictive headers. |
+| **Observability** | `/healthz`, `/readyz`, structured logs and Prometheus metrics at `/metrics`. |
 
 ## Funcionalidades
 
@@ -170,7 +199,29 @@ docker compose -f docker-compose.manager-novo.yml up -d
 > O container roda o `dist/` embutido na imagem. Alterações de código exigem
 > `docker compose build` + recriação do container — `docker restart` não aplica código novo.
 
+## Configuration
+
+The full template is in [`.env.example`](.env.example). Essential variables:
+
+| Variable | Purpose |
+|---|---|
+| `EVO_URL`, `EVO_KEY`, `EVO_INSTANCE` | Connection with Evolution API |
+| `WEBHOOK_KEY` | Authenticates the webhook (`X-Webhook-Key`, minimum 16 chars) |
+| `SESSION_SECRET` | Signs the panel session (minimum 32 chars) |
+| `AUTH_TTL_HORAS`, `AUTH_IDLE_MIN` | Absolute and idle session validity |
+| `MANAGER_BIND`, `MANAGER_PORT` | Panel address/port (default `127.0.0.1:8091`) |
+| `MANAGER_KEY` | Optional machine credential for `/api/*` |
+| `JANELA_INICIO`, `JANELA_FIM` | Sending window (default `08:00`–`23:00`) |
+| `CLIENTES_INTERVALO_S` | Campaign sending interval (default `60`) |
+| `RODIZIO_EVITA_REPETICAO` | Probability of not repeating the previous number (default `0.7`) |
+| `RASTREIO_LIMITE` | Tracking storage ceiling (default `50000`, floor `1000`) |
+| `AMAZON_TAG`, `AMAZON_CREATORS_ID`, `AMAZON_CREATORS_SECRET` | Amazon |
+| `SHOPEE_APP_ID`, `SHOPEE_APP_SECRET`, `SHOPEE_SUB_IDS` | Shopee affiliate short link |
+| `TAG_ML`, `COOKIE_ML`, `ML_ACCESS_TOKEN` | Mercado Livre enrichment and favorites |
+
 ## Configuração
+
+O template completo está em [`.env.example`](.env.example). Variáveis essenciais:
 
 O template completo está em [`.env.example`](.env.example). Variáveis essenciais:
 
@@ -252,6 +303,16 @@ O painel reúne os fluxos em abas: **Piloto**, **Monitor**, **Clientes**, **Cont
 - **Números**: adicione celulares por QR, defina permissões, peso e pausa.
 - **Rastreio**: veja o que foi publicado (Piloto + Monitor), com o link exato e exportação CSV.
 
+## Quality and Tests
+
+```bash
+npm run typecheck        # tsc --noEmit
+npm run build            # compile to dist/
+npm test                 # 273 tests (node:test)
+npm run test:coverage    # experimental coverage from node:test
+npm run smoke:manager    # starts manager with temporary state and validates the gate
+```
+
 ## Qualidade e testes
 
 ```bash
@@ -261,6 +322,20 @@ npm test                 # 273 testes (node:test)
 npm run test:coverage    # cobertura experimental do node:test
 npm run smoke:manager    # sobe o manager com estado temporário e valida o gate
 ```
+
+## New Features (v0.10.1.1)
+
+### Monitor Cookie ML Management
+- **Auto-renewal scripts**: `scripts/maintain-cookie.mjs`, `scripts/test-conversion.mjs`
+- **Cron-based renewal**: automate cookie updates every 25 minutes
+- **Quick testing**: verify link conversion with your affiliate cookie
+- Documentation: `docs/RENOVACAO_COOKIE_ML.md`
+
+### Monitor Synchronization Fix
+- Restaura registro de ofertas encaminhadas (`registrarOfertaEnviada`)
+- Corrige idempotência: evita duplicatas silenciosas
+- Restaura reenvio de duplicatas para +24h (issue #78)
+- Métricas de monitoramento atualizadas
 
 O CI (`.github/workflows/ci.yml`) roda **typecheck, build, testes e smoke do manager** em todo
 push/PR para `develop` e `main`.
