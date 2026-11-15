@@ -34,9 +34,22 @@ repositório para publicação pública.
 ## [Unreleased]
 
 ### Correções
+- **Monitor: regressão na sincronização após implementação da Mensageria** — o commit `c040253` 
+  simplificou a função `entregarItem()` removendo o registro de ofertas encaminhadas (`registrarOfertaEnviada`) 
+  e o tratamento de duplicatas reagendadas para +24h (issue #78). Restaurado o comportamento completo
+  de idempotência e sincronização de `src/monitor/fila.ts`.
 - **`/healthz` reportava uma versão literal fixo** (`"0.8.0"`), que envelheceu em silêncio a cada
   release. Agora a versão vem do `package.json` (fonte única), com cache e fallback
   (`src/config/versao.ts`).
+
+## [0.10.1.1] — 2026-11-15
+
+Release de correção crítica: restaura funcionalidade do Monitor após regressão de Mensageria.
+
+### Correções
+- **Monitor sincronização** — restaura registro de ofertas encaminhadas e tratamento de duplicatas.
+  O envio de ofertas de grupos de afiliados agora funciona corretamente, evitando duplicatas
+  e reagendando ofertas já enviadas para +24h (comportamento esperado do sistema).
 
 ## [0.10.0] — 2026-11-12
 

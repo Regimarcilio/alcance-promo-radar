@@ -5,6 +5,32 @@ Formato: `data | task_id | autor | escopo | decisões | arquivos | evidências |
 
 ---
 
+## 2026-11-15 | FIX-MONITOR-REGISTRY | planmaster | Correção regressão do Monitor após Mensageria
+
+**Contexto**: o commit `c040253` (Mensageria) introduziu regressão silenciosa no Monitor:
+- A função `entregarItem()` foi simplificada e **removeu o registro de ofertas encaminhadas** (`registrarOfertaEnviada`)
+- Isso quebrou a idempotência: ofertas não eram registradas como "enviadas", permitindo duplicatas silenciosas
+- O tratamento de reenvio de duplicatas (+24h, issue #78) também foi removido
+
+**Diagnóstico**: comparado `src/monitor/fila.ts` entre `3d7f708` (base) e `c040253` (Mensageria). Diferença:
+- Antes: `entregarItem()` chamava `registrarOfertaEnviada(item)` após ACK
+- Depois: `entregarItem()` simplificada, sem registro, sem tratamento de reenvio
+
+**Correção aplicada**:
+- Restaurado `src/monitor/fila.ts` da versão `3d7f708` (antes da Mensageria)
+- Lógica completa preservada: idempotência, reenvio +24h, contadores, eventos
+- Build passa ✅, módulo carrega ✅
+
+**Arquivos**:
+- `src/monitor/fila.ts` — restaurado da versão base
+
+**Evidências**:
+- `npm run build` ✅ (TypeScript compila sem erros)
+- Import dos módulos `entregarItem`, `chaveOferta` funcionam
+- Lógica de duplicatas (hash `mlbId|preco|cupom`) restaurada
+
+**Próximo**: renovar cookie ML e testar fluxo completo webhook → parser → fila → envio
+
 ## 2026-10-17 | E6-MONITOR-01 | planmaster | Implementar módulo MONITOR (RF-030–035)
 
 **Contexto**: fork `promo-radar-novo` herdando tudo do `autoMensagemWhats`; adiciona o modo
