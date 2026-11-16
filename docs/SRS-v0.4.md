@@ -699,7 +699,17 @@ por programa/categoria/grupo/dias/via; CSV com cabeçalho e uma linha por public
 - **RN-025 — Chave de dedup.** Com id de produto, o link é descartado da chave (o `createLink` gera
   link novo a cada chamada); sem id, usa o link transformado.
 - **RN-026 — Retenção de mídia.** Fotos em `data/midia/` são removidas após 3 dias pelo worker.
+  **Exceção (issue #82):** a mídia **em uso** é preservada — item pendente na fila de Mensageria,
+  mensagem parada na DLQ ou disparo incompleto (PENDENTE/ENVIANDO/PARCIAL/ERRO). Sem a exceção, a
+  faxina apagava o vídeo de uma campanha de 550 contatos no meio do disparo e as mensagens
+  restantes morriam com "caminho de mídia não permitido".
 - **RN-027 — Rastreio.** Toda publicação guarda o link exato publicado, limitado a 5000 registros.
+- **RN-028 — Mídia ausente não bloqueia o envio (issue #82).** Se o arquivo de mídia local não
+  existe mais (retention), o envio continua **só com o texto/link** — a mídia é acessória e a
+  oferta não pode ficar presa por causa dela. Já caminho **fora de `data/midia`** ou nome fora do
+  padrão `<uuid>.<ext>` bloqueiam o envio (violação de segurança). Modo estrito opcional por
+  `MENSAGERIA_MIDIA_AUSENTE=estrito` (aí a mídia ausente vira erro explícito e a mensagem vai para
+  a DLQ).
 
 ### 5.2 Colisões de RN corrigidas
 

@@ -12,6 +12,16 @@ import {
 import { basename, dirname, join } from "node:path";
 import { dataDirAtual } from "../config/paths.js";
 
+/**
+ * Diretório de mídia. Resolvido **em tempo de chamada** (não no import),
+ * igual ao `dataDirAtual()`: assim teste/smoke conseguem trocar
+ * `ALCANCE_DATA_DIR` sem recarregar o módulo.
+ */
+export function midiaDirAtual(): string {
+  return join(dataDirAtual(), "midia");
+}
+
+/** Diretório de mídia (compatibilidade: valor fixo no import). */
 export const midiaDir = join(dataDirAtual(), "midia");
 
 const EXT: Record<string, string> = {
@@ -31,8 +41,9 @@ export function salvarMidia(base64: string, mimetype = "image/jpeg"): string | n
     const limpo = base64.replace(/^data:[^;]+;base64,/, "");
     if (!limpo) return null;
     const ext = EXT[mimetype.toLowerCase()] ?? "jpg";
-    mkdirSync(midiaDir, { recursive: true, mode: 0o700 });
-    const caminho = join(midiaDir, `${randomUUID()}.${ext}`);
+    const dir = midiaDirAtual();
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const caminho = join(dir, `${randomUUID()}.${ext}`);
     writeFileSync(caminho, Buffer.from(limpo, "base64"), { mode: 0o600 });
     return caminho;
   } catch {
@@ -41,9 +52,79 @@ export function salvarMidia(base64: string, mimetype = "image/jpeg"): string | n
 }
 
 function dentroDaMidia(caminho: string): boolean {
-  const raiz = realpathSync(midiaDir);
-  const alvo = realpathSync(caminho);
-  return alvo === raiz || alvo.startsWith(raiz + "/");
+  try {
+    // a pasta de mídia pode não existir ainda (primeiro boot / ambiente novo):
+    // nesse caso nada está dentro dela.
+    const dir = midiaDirAtual();
+    if (!existsSync(dir)) return false;
+    const raiz = realpathSync(dir);
+    const alvo = realpathSync(caminho);
+    return alvo === raiz || alvo.startsWith(raiz + "/");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Por que um caminho de mídia local não pode ser usado.
+ *
+ * - `ok` — arquivo válido dentro de `data/midia`;
+ * - `inexistente` — o arquivo **não existe mais**: foi removido pela faxina de
+ *   retenção (RN-026) ou o disco foi limpo. Não é segurança: o caminho é
+ *   legítimo, o arquivo é que sumiu;
+ * - `nao-permitido` — o caminho está fora de `data/midia` (violação de
+ *   segurança: tentaria ler `/app/.env`);
+ * - `formato-invalido` — o nome do arquivo não é `<uuid>.<ext>` de mídia
+ *   (violação de segurança).
+ *
+ * A distinção importa: o erro "caminho de mídia não permitido" era devolvido
+ * para os DOIS casos, então uma mídia expirada pela retenção aparecia como
+ * tentativa de invasão e o operador não sabia o que fazer (issue #82).
+ */
+export type MotivoMidia = "ok" | "inexistente" | "nao-permitido" | "formato-invalido";
+
+export interface ClassificacaoMidia {
+  ok: boolean;
+  motivo: MotivoMidia;
+  /** mensagem legível para o operador (quando `ok` é falso) */
+  erro?: string;
+}
+
+/**
+ * Classifica um caminho de mídia local.
+ *
+ * Não lança: devolve o motivo. `nao-permitido` e `formato-invalido` são
+ * violações de segurança (bloqueiam o envio); `inexistente` é expiração
+ * (o chamador pode seguir só com o texto).
+ */
+export function classificarMidia(caminho: string): ClassificacaoMidia {
+  if (!caminho) return { ok: false, motivo: "ok" };
+  try {
+    if (!NOME_SEGURO.test(basename(caminho))) {
+      return {
+        ok: false,
+        motivo: "formato-invalido",
+        erro: "nome de arquivo de mídia inválido (esperado <uuid>.<jpg|png|webp|gif|mp4>)",
+      };
+    }
+    if (!existsSync(caminho)) {
+      return {
+        ok: false,
+        motivo: "inexistente",
+        erro: "arquivo de mídia não existe mais (removido pela limpeza de retenção)",
+      };
+    }
+    if (!dentroDaMidia(caminho)) {
+      return {
+        ok: false,
+        motivo: "nao-permitido",
+        erro: "caminho de mídia fora de data/midia",
+      };
+    }
+    return { ok: true, motivo: "ok" };
+  } catch {
+    return { ok: false, motivo: "nao-permitido", erro: "caminho de mídia inválido" };
+  }
 }
 
 /**
@@ -52,9 +133,8 @@ function dentroDaMidia(caminho: string): boolean {
  */
 export function ehArquivoMidia(caminho: string): boolean {
   try {
-    if (!caminho || !NOME_SEGURO.test(basename(caminho))) return false;
-    if (!existsSync(caminho)) return false;
-    return dentroDaMidia(caminho);
+    if (!caminho) return false;
+    return classificarMidia(caminho).ok;
   } catch {
     return false;
   }
@@ -71,14 +151,29 @@ export function lerMidia(caminho: string): { base64: string; mimetype: string } 
   }
 }
 
-/** Remove mídias mais antigas que `dias` (chamado pelo worker). */
-export function limparMidiaAntiga(dias = 3): number {
+/**
+ * Remove mídias mais antigas que `dias` (chamado pelo worker).
+ *
+ * `emUso` são caminhos que **NÃO** podem ser removidos mesmo vencido o prazo:
+ * mídia de campanha ainda em andamento, item na fila ou mensagem parada na
+ * DLQ. Sem essa proteção (issue #82), a faxina apagava o vídeo de uma
+ * campanha de 550 contatos no meio do disparo e as mensagens restantes
+ * morriam com "caminho de mídia não permitido".
+ */
+export function limparMidiaAntiga(dias = 3, emUso?: Iterable<string>): number {
   try {
-    if (!existsSync(midiaDir)) return 0;
+    const dir = midiaDirAtual();
+    if (!existsSync(dir)) return 0;
+    const protegidos = new Set<string>();
+    for (const p of emUso ?? []) {
+      if (!p) continue;
+      protegidos.add(basename(p));
+    }
     const limite = Date.now() - dias * 86400_000;
     let n = 0;
-    for (const f of readdirSync(midiaDir)) {
-      const p = join(midiaDir, f);
+    for (const f of readdirSync(dir)) {
+      if (protegidos.has(f)) continue; // ainda em uso: preserva
+      const p = join(dir, f);
       try {
         if (statSync(p).mtimeMs < limite) {
           rmSync(p);

@@ -34,6 +34,23 @@ repositório para publicação pública.
 ## [Unreleased]
 
 ### Correções
+- **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)
+  apagava o vídeo de uma **campanha em andamento**, e as mensagens restantes morriam com um erro de
+  **segurança** que era, na verdade, **expiração**. Três defeitos corrigidos:
+  - `classificarMidia()` agora separa `inexistente` (expirou) de `nao-permitido` / `formato-invalido`
+    (invasão) — o operador passa a ver a causa real;
+  - mídia **inexistente** não mata mais o envio: o dispatch segue **só com o texto** (a mídia é
+    acessório), coerente com a regra já documentada no código. Modo estrito por
+    `MENSAGERIA_MIDIA_AUSENTE=estrito`;
+  - a faxina de retenção **preserva a mídia em uso** (item na fila, mensagem na DLQ ou disparo
+    incompleto) — `midiaEmUso()`.
+  - O reprocessamento da DLQ detecta a mídia sumida, devolve o envelope só com o texto e recusa
+    caminho inválido.
+  - Contabilidade do disparo corrigida: `falhas` passa a contar quem está **morto na DLQ agora**
+    (o mesmo destinatário não é contado duas vezes), o reprocessar desconta a falha e o envio
+    bem-sucedido limpa o erro antigo da tela — assim a campanha fecha como **CONCLUIDO**.
+  - `midiaDir` passa a ser resolvido em **tempo de chamada** (igual a `dataDirAtual()`), corrigindo
+    o descompasso entre teste/smoke e produção.
 - **Monitor: regressão na sincronização após implementação da Mensageria** — o commit `c040253` 
   simplificou a função `entregarItem()` removendo o registro de ofertas encaminhadas (`registrarOfertaEnviada`) 
   e o tratamento de duplicatas reagendadas para +24h (issue #78). Restaurado o comportamento completo

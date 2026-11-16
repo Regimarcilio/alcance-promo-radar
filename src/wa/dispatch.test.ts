@@ -306,3 +306,143 @@ test("dispatch: fluxo permitido envia normalmente", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------- issue #82: mídia de campanha removida pela retenção ----------
+
+test("dispatch: mídia local SUMIU (retenção) → envia só o texto, sem erro", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { randomUUID } = await import("node:crypto");
+  const { mockFetch } = await import("../monitor/test-utils.js");
+  const { enviarParaGrupo } = await import("./dispatch.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-midia-"));
+  await import("node:fs").then((fs) =>
+    fs.writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+      itens: [{
+        instancia: "inst-disparo", nome: "Disparo", ativo: true, peso: 1,
+        enviadas: 0, ultimaEm: null, criadaEm: "",
+        permissoes: { piloto: false, monitor: false, disparo: true }, pausado: false,
+      }],
+    })),
+  );
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  delete process.env.MENSAGERIA_MIDIA_AUSENTE;
+
+  // caminho de mídia legítimo, mas o ARQUIVO não existe (faxina de retenção)
+  const midia = join(dir, "midia", `${randomUUID()}.mp4`);
+
+  let media = 0;
+  let texto = 0;
+  const m = mockFetch(async (url) => {
+    if (url.includes("/instance/connectionState/")) {
+      return new Response(JSON.stringify({ instance: { state: "open" } }), { headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/message/sendMedia/")) { media++; return new Response("{}", { status: 500 }); }
+    if (url.includes("/message/sendText/")) {
+      texto++;
+      return new Response(JSON.stringify({ key: { id: "txt-so-texto" } }), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`url inesperada: ${url}`);
+  });
+  try {
+    const r = await enviarParaGrupo({
+      grupo: "5511999999999@s.whatsapp.net",
+      imagem: midia,
+      legenda: "oferta com link",
+      dryRun: false,
+      fluxo: "disparo",
+      mediatype: "video",
+    });
+    assert.equal(r.messageId, "txt-so-texto", "a mensagem não pode morrer por causa da mídia");
+    assert.equal(media, 0, "não deve tentar sendMedia com arquivo inexistente");
+    assert.equal(texto, 1, "envia o texto uma vez");
+  } finally {
+    m.restaurar();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: modo estrito → mídia sumida vira erro explícito (vai para a DLQ)", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { randomUUID } = await import("node:crypto");
+  const { enviarParaGrupo } = await import("./dispatch.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-estrito-"));
+  await import("node:fs").then((fs) =>
+    fs.writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+      itens: [{
+        instancia: "inst-disparo", nome: "Disparo", ativo: true, peso: 1,
+        enviadas: 0, ultimaEm: null, criadaEm: "",
+        permissoes: { piloto: false, monitor: false, disparo: true }, pausado: false,
+      }],
+    })),
+  );
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+  process.env.MENSAGERIA_MIDIA_AUSENTE = "estrito";
+
+  const midia = join(dir, "midia", `${randomUUID()}.mp4`);
+  try {
+    await assert.rejects(
+      () =>
+        enviarParaGrupo({
+          grupo: "5511999999999@s.whatsapp.net",
+          imagem: midia,
+          legenda: "oferta",
+          dryRun: false,
+          fluxo: "disparo",
+          mediatype: "video",
+        }),
+      /não existe mais/,
+    );
+  } finally {
+    delete process.env.MENSAGERIA_MIDIA_AUSENTE;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch: caminho fora de data/midia SEGURA bloqueando (não vira texto)", async () => {
+  const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { randomUUID } = await import("node:crypto");
+  const { enviarParaGrupo } = await import("./dispatch.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "alcance-dispatch-seg-"));
+  writeFileSync(join(dir, "instancias.json"), JSON.stringify({
+    itens: [{
+      instancia: "inst-disparo", nome: "Disparo", ativo: true, peso: 1,
+      enviadas: 0, ultimaEm: null, criadaEm: "",
+      permissoes: { piloto: false, monitor: false, disparo: true }, pausado: false,
+    }],
+  }));
+  process.env.ALCANCE_DATA_DIR = dir;
+  process.env.EVO_URL = "http://evo.test";
+  process.env.EVO_KEY = "k";
+
+  // arquivo VÁLIDO (nome uuid) que existe mas está FORA de data/midia
+  const fora = join(dir, `${randomUUID()}.jpg`);
+  writeFileSync(fora, "segredo");
+  try {
+    await assert.rejects(
+      () =>
+        enviarParaGrupo({
+          grupo: "5511999999999@s.whatsapp.net",
+          imagem: fora,
+          legenda: "oferta",
+          dryRun: false,
+          fluxo: "disparo",
+        }),
+      /fora de data\/midia/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

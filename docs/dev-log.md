@@ -2871,3 +2871,78 @@ pela aprovação do operador.
 - **Pendência conhecida:** a aba Monitor não tem (e não ganhou) seletor manual de remetente — o
   controle continua sendo a aba Números ("Remetente por fluxo → Monitor"), por decisão do operador
   ("deixar como automático").
+
+---
+
+## 2026-11-16 | FIX-MSG-MIDIA-RETENCAO | planmaster | Mensageria: erros de envio "caminho de mídia não permitido"
+
+**Demanda (operador):** *"sistemas está funcionando 100%; mensageria recebendo erros de envio em
+mensagens, verificar"*.
+
+**Diagnóstico — 3 camadas:**
+
+1. **Sintoma:** `data/messaging/dlq-cliente.enviar.json` com **394 mensagens mortas**, todas com
+   `motivo: "erro não transitório"` e `ultimoErro: "caminho de mídia não permitido"`. Contadores da
+   fila `cliente.enviar`: `processadas 156`, `falhas 556`, `dlq 394` (taxa de erro 78%).
+   A fila `monitor.encaminhar` estava saudável (`falhas 0`, `dlq 0`) — por isso "o sistema funciona".
+2. **Causa raiz:** a campanha `6352fc7b` ("Lista Rainha das Promo", 550 contatos, criada em
+   12/11/2026) usava o vídeo `/app/data/midia/cacd96d4-….mp4`. A faxina de retenção
+   (`limparMidiaAntiga(3)`, RN-026, worker horário) **removeu o arquivo** em 15/11. A validação
+   `ehArquivoMidia()` falhava em `existsSync()` e devolvia o mesmo erro de **segurança**
+   ("caminho de mídia não permitido") para um problema de **expiração**.
+3. **Agravante (3 defeitos de código):**
+   - **D1** — `ehArquivoMidia` colapsava "arquivo não existe" (expiração) e "fora de data/midia"
+     (invasão) no mesmo erro: o operador não conseguia diagnosticar.
+   - **D2** — `validarMidiaArquivo()` lançava **antes** do fallback de texto, contradizendo o
+     design do próprio código (`dispatch.ts`: *"Foto é acessório: a oferta NÃO pode ficar presa.
+     Reenvia só o texto"*). Uma mídia expirada matava a mensagem inteira.
+   - **D3** — a retenção de 3 dias (desenhada para a foto volátil da **origem**) valia também para
+     o vídeo de **campanha**, que pode levar dias para terminar (550 contatos × 60 s ≈ 9 h, com
+     pausas/retries/reenvios → dias).
+   - **D4** — o reprocessamento em lote re-enfileirava itens que **jamais** poderiam ter sucesso
+     (mesma falha, mesmo motivo) → nova DLQ, novo nada.
+
+**Correções aplicadas:**
+
+| # | Arquivo | Correção |
+|---|---|---|
+| 1 | `src/monitor/midia.ts` | `classificarMidia()` separa `ok` / `inexistente` / `nao-permitido` / `formato-invalido`, com mensagem própria para cada caso. `ehArquivoMidia()` mantém o contrato booleano. |
+| 2 | `src/wa/dispatch.ts` | `decidirMidiaEnvio()`: mídia **inexistente** → segue **só com o texto** (mídia é acessório); violação de segurança → bloqueia. Modo estrito por `MENSAGERIA_MIDIA_AUSENTE=estrito`. |
+| 3 | `src/monitor/fila.ts` | `midiaEmUso()`: preserva da faxina a mídia referenciada por item na fila, mensagem na DLQ ou disparo incompleto. |
+| 4 | `src/messaging/dlq-operacoes.ts` | Reprocessar detecta a mídia sumida, devolve o envelope **só com o texto** e recusa caminho inválido. |
+| 5 | `src/clientes/disparos.ts` | Contabilidade: `falhas` = mortos **na DLQ agora**; `descontaFalhaDisparo()` (reprocessar desconta) e `definirFalhasDisparo()`; sucesso ** limpa o erro antigo da tela. |
+| 6 | `src/monitor/midia.ts` | `midiaDirAtual()` resolve o diretório em tempo de chamada (igual a `dataDirAtual()`) — o `const` no import quebrava o contrato e o smoke/teste. |
+| 7 | `src/manager/server.ts` | Reconcilia os contadores no boot; `GET /media` usa o diretório resolvido em tempo de chamada. |
+
+**Arquivos**:
+- `src/monitor/midia.ts`, `src/monitor/midia.test.ts` (novo), `src/monitor/midia-em-uso.test.ts` (novo)
+- `src/wa/dispatch.ts`, `src/wa/dispatch.test.ts`
+- `src/monitor/fila.ts`
+- `src/messaging/dlq-operacoes.ts`
+- `src/clientes/disparos.ts`, `src/clientes/disparos-contabilidade.test.ts` (novo)
+- `src/manager/server.ts`
+- `docs/SRS-v0.4.md` — RN-026 (exceção de retenção) e RN-028 (mídia ausente não bloqueia envio) novos
+
+**Evidências:**
+- `npm run typecheck` ✅ · `npm run build` ✅ · `npm test` **321/321** ✅ (era 273).
+- **Antes:** `dlq: 394`, `falhas: 556`, disparo `PARCIAL` com `erro: "caminho de mídia não permitido"`.
+- **Reprocessamento de 1 item (prova do fix, em produção):**
+  `[dlq] item 42cf7093-…: mídia removida pela retenção — reprocessado só com o texto` →
+  `[clientes] enviado para 558695414046 id=3EB06E62FCEA0D8CBCAC22` → `ok:true, tentativas:0`;
+  `processadas 156→157`, `dlq 394→393`.
+- **Reprocessamento em lote (393 itens):** `ok: true, total: 393` em 45 s.
+- **Depois:** `dlq: 0`, `pendentes: 390 → 370` (saindo no ritmo anti-rajada), `processadas: 180`,
+  `falhas: 0` (contador reconciliado), disparo `ENVIANDO`, `erro: None`.
+- **Proteção de retenção ativa no container:** `midiaEmUso()` → `['cacd96d4-49ad-4f2f-9c33-cb718e057d49.mp4']`
+  (a mídia da campanha em andamento está protegida da faxina).
+- **Classificação no runtime:** `classificarMidia('/app/data/midia/0000….mp4')` → `{"motivo":"inexistente"}`;
+  `classificarMidia('/etc/passwd')` → `{"motivo":"formato-invalido"}` (segurança preservada).
+- Deploy: `docker compose build manager && docker compose up -d manager` → `automensagem_manager Up (healthy)`.
+
+**Perda real:** o vídeo da campanha foi **perdido** (removido pela faxina antes da correção) — os 550
+contatos recebem o **texto com o link do grupo**, sem o vídeo. Para quem quiser o vídeo, é preciso
+**subir o arquivo de novo** na aba Clientes (a nova campanha já nasce protegida).
+
+**Próximo:** a campanha retoma sozinha no ritmo anti-rajada (1 a cada ~60 s, dentro da janela
+comercial 08:00–23:00); ~370 mensagens pendentes. Se o operador quiser o vídeo, subir o arquivo
+novamente e criar nova campanha.

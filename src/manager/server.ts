@@ -40,10 +40,10 @@ import {
   listarDisparos, resumoDisparos, criarDisparo, editarDisparo, excluirDisparo,
   duplicarDisparo, type MidiaDisparo, textoComLink, registrarResultadoDisparo,
 } from "../clientes/disparos.js";
-import { salvarMidia, midiaDir, ehArquivoMidia } from "../monitor/midia.js";
+import { salvarMidia, midiaDirAtual, ehArquivoMidia } from "../monitor/midia.js";
 import { itensDlq, resumoFilas } from "../messaging/filas.js";
 import {
-  descartarItemDlq, reprocessarItemDlq, reprocessarLoteDlq,
+  descartarItemDlq, reconciliarFalhasDisparos, reprocessarItemDlq, reprocessarLoteDlq,
 } from "../messaging/dlq-operacoes.js";
 import { comCorrelacao } from "../messaging/envelope.js";
 import { publicarEvento, estadoAssinantes, processarPendentes } from "../messaging/eventos.js";
@@ -253,7 +253,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       json(400, { erro: "caminho inválido" });
       return;
     }
-    const alvo = join(midiaDir, nome);
+    const alvo = join(midiaDirAtual(), nome);
     if (!ehArquivoMidia(alvo)) {
       json(404, { erro: "não encontrado" });
       return;
@@ -4383,6 +4383,19 @@ server.listen(PORT, HOST, () => {
   iniciarFilaWorker();
   iniciarClientesWorker();
   iniciarSyncGruposDiario();
+  // Reconcilia os contadores de falha dos disparos com a DLQ real: uma
+  // mensagem reprocessada que foi entregue não pode continuar contando
+  // como falha (senão a campanha nunca fecha como CONCLUIDO).
+  try {
+    const reconciliados = reconciliarFalhasDisparos();
+    if (reconciliados.length) {
+      console.log(
+        `[mensageria] contadores de falha reconciliados: ${reconciliados.length} disparo(s)`,
+      );
+    }
+  } catch (e: any) {
+    console.log(`[mensageria] reconciliação de contadores falhou: ${String(e?.message ?? e).slice(0, 120)}`);
+  }
   // Mensageria: reentrega o que ficou na fila dos assinantes (eventos
   // publicados enquanto o processo estava fora).
   void processarPendentes().then((n) => {
