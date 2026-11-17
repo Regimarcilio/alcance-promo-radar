@@ -1,4 +1,10 @@
-/** Testes do log de publicações (base do Rastreio). */
+/**
+ * Testes do log de publicações (base do Rastreio).
+ *
+ * Esta suíte roda com o banco DESLIGADO (`CATALOGO_BD=0`): ela guarda o
+ * contrato de DEGRADAÇÃO — se o SQLite sumir, o JSON tem que se comportar
+ * exatamente como antes. O caminho normal (banco) está em `publicacoes-db.test.ts`.
+ */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,10 +14,15 @@ import { join } from "node:path";
 async function carregar(env: Record<string, string | undefined> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "alcance-pub-"));
   process.env.ALCANCE_DATA_DIR = dir;
+  process.env.CATALOGO_BD = "0"; // suíte = fallback JSON
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+  // db.ts mantém a conexão em cache: fecha para o próximo teste não herdar
+  // o banco de outro data dir.
+  const { fecharBanco } = await import("./db.js");
+  fecharBanco();
   const mod = await import(`./publicacoes.js?v=${Math.random()}`);
   return { mod, dir };
 }
