@@ -33,6 +33,26 @@ repositório para publicação pública.
 
 ## [Unreleased]
 
+### Adicionado
+- **Catálogo de ofertas recebidas (SQLite)** — branch `expansion`, ADR-012. O que os grupos de
+  origem publicam passa a ser histórico consultável, **inclusive o que era descartado** (duplicada,
+  link inválido, programa sem suporte, fora de janela), que antes sumia e deixava só um SHA1 por
+  7 dias.
+  - `src/store/db.ts`: adapter único sobre `node:sqlite` (WAL, `busy_timeout`, schema versionado,
+    degradação segura — se o banco não abrir, o Monitor segue sem catálogo).
+  - `src/store/catalogo.ts`: gravação *best-effort* (nunca lança), filtros (programa, origem,
+    desfecho, faixa de preço, busca, período), paginação, resumo, CSV com anti-injeção de fórmula,
+    retenção (`CATALOGO_RETENCAO_DIAS`, padrão 365) e `obterOferta`.
+  - `processar()` do Monitor grava a oferta com o **desfecho real** (ENCAMINHADO, DUPLICADO,
+    REVISAO, ERRO...); origens não monitoradas e `dryRun` não entram.
+  - Nova view **Catálogo** no painel (`#/catalogo`) com KPIs, filtros, paginação, CSV e
+    **↪ reenviar** para a fila do Monitor (respeita o intervalo anti-rajada).
+  - `POST /api/catalogo/:id/reenviar` (reenvio manual ignora a trava de duplicata via
+    `ItemFila.reenvioManual`), `POST /api/catalogo/limpar`, `GET /api/catalogo` e `/healthz` com
+    o estado do banco.
+  - **Decisão explícita (ADR-012):** dedup do Monitor continua em memória (O(1), atômico) e o
+    broker da Mensageria continua em arquivo — o banco não entra no caminho crítico.
+
 ### Correções
 - **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)
   apagava o vídeo de uma **campanha em andamento**, e as mensagens restantes morriam com um erro de

@@ -18,6 +18,7 @@ import { comCorrelacao } from "../messaging/envelope.js";
 import { publicarEvento } from "../messaging/eventos.js";
 import { enviarParaGrupo } from "../wa/dispatch.js";
 import { formatar } from "../wa/formatter.js";
+import { registrarOferta, type Desfecho, type RegistroOferta } from "../store/catalogo.js";
 
 /** Payload cru do Evolution (v2 e GO usam nomes ligeiramente diferentes). */
 export interface WebhookPayload {
@@ -112,10 +113,48 @@ export interface ResultadoMonitor {
 /**
  * Processa uma mensagem recebida. Não lança: devolve o resultado e registra o evento.
  * `dryRun` propaga para o dispatch (teste sem enviar de verdade).
+ *
+ * Além do evento, grava a oferta no CATÁLOGO (ADR-012) — inclusive quando ela é
+ * descartada (duplicada, sem link, fora de janela). É o histórico do que os
+ * grupos publicaram, base do reenvio em lote. Só ofertas de origem monitorada
+ * entram, e simulação (dryRun) não polui o histórico. A gravação é acessória:
+ * nunca lança e nunca derruba o recebimento (ver `registrarOferta`).
  */
 export async function processar(
   msg: MensagemExtraida,
   opts: { dryRun?: boolean; conta?: string } = {}
+): Promise<ResultadoMonitor> {
+  const dryRun = process.env.MONITOR_DRY === "1" ? true : opts.dryRun ?? false;
+  const catalogavel = !dryRun && !msg.deMim && ehMonitorado(msg.origem);
+  const ctx: Partial<RegistroOferta> = {
+    origem: msg.origem,
+    recebidaEm: new Date().toISOString(),
+    texto: msg.texto,
+    temMidia: Boolean(msg.midia),
+  };
+  try {
+    const r = await processarInterno(msg, opts, ctx);
+    if (catalogavel) {
+      registrarOferta({ ...ctx, origem: msg.origem, desfecho: r.acao as Desfecho, motivo: r.motivo ?? null });
+    }
+    return r;
+  } catch (e) {
+    if (catalogavel) {
+      registrarOferta({
+        ...ctx,
+        origem: msg.origem,
+        desfecho: "ERRO",
+        motivo: e instanceof Error ? e.message : String(e),
+      });
+    }
+    throw e;
+  }
+}
+
+async function processarInterno(
+  msg: MensagemExtraida,
+  opts: { dryRun?: boolean; conta?: string },
+  ctx: Partial<RegistroOferta>
 ): Promise<ResultadoMonitor> {
   // MONITOR_DRY=1 força modo teste em TUDO (nenhum envio real sai) — rede de
   // segurança para mexer no sistema sem atingir o grupo de verdade.
@@ -175,6 +214,9 @@ export async function processar(
     return { acao: "REVISAO", motivo: doms.length ? `link não reconhecido (${doms.join(", ")})` : "link não reconhecido" };
   }
 
+  // Catálogo: programa reconhecido entra mesmo que a oferta morra adiante.
+  ctx.programa = oferta.principal.programa;
+
   // 3) Transformar para o link do usuário (RF-032 / RN-012)
   const tr = await transformar(oferta.principal, { conta: opts.conta });
 
@@ -183,6 +225,15 @@ export async function processar(
   const idEfetivo =
     oferta.principal.idProduto ??
     (tr.produto?.id ? tr.produto.id.replace(/^MLB-?/i, "MLB") : null);
+
+  // Catálogo: os dados já resolvidos aqui viram a linha do histórico — inclusive
+  // quando a oferta for descartada logo abaixo (duplicada / link inválido).
+  ctx.idProduto = idEfetivo;
+  ctx.link = tr.url;
+  const precos = extrairPrecos(msg.texto);
+  ctx.preco = precos.precoAtual;
+  ctx.precoDe = precos.precoDe;
+  ctx.titulo = tr.produto?.titulo ?? extrairTitulo(msg.texto);
 
   // 4) Dedup 7d (RF-035)
   if (jaMonitorado(oferta.principal.programa, idEfetivo, tr.url, msg.origem)) {
@@ -224,6 +275,7 @@ export async function processar(
 
   // 6) Monta a mensagem repassada (formato anterior + link do usuário)
   const corpo = montarRepasse(msg.texto, oferta, tr.url, tr.produto ?? null);
+  ctx.mensagem = corpo;
 
   // 6.1) Qual foto usar: por padrão a que a ORIGEM publicou (a mesma do post);
   //      se não vier, cai para a og:image do anúncio. MONITOR_FOTO=produto inverte.
@@ -233,6 +285,7 @@ export async function processar(
     ? arquivoOrigem ?? fotoProduto
     : fotoProduto || arquivoOrigem || "";
   const fonteFoto = !foto ? "sem foto" : foto === arquivoOrigem ? "foto da origem" : "foto do anúncio";
+  ctx.imagem = foto || null;
 
   // 7) Envio direto desligado? deixa na fila de revisão (UI: "OFF = vai p/ revisão")
   if (!carregarMonitor().autoEnviar) {

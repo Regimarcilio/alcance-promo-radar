@@ -70,6 +70,12 @@ export interface ItemFila {
   proximaTentativaEm?: string | null;
   /** correlação do fluxo (webhook → fila → envio → evento) */
   correlationId?: string | null;
+  /**
+   * Reenvio pedido pelo operador a partir do catálogo (ADR-012). Ignora a
+   * trava de duplicata: o operador está reenviando de propósito. Entra na
+   * fila normal, então respeita o intervalo anti-rajada.
+   */
+  reenvioManual?: boolean;
   /** último erro de envio (preenchido quando o item vai para a DLQ) */
   ultimoErro?: string | null;
   /** quantas vezes o operador reprocessou este item a partir da DLQ */
@@ -392,6 +398,8 @@ function tratarDuplicata(
 ): { acao: "reagendar" | "descartar"; item: ItemFila; chave: string } | null {
   // o reenvio já é o reenvio: não se reagenda em loop
   if (ehReenvioAgendado(item)) return null;
+  // Reenvio manual (catálogo): o operador decidiu reenviar — não é duplicata.
+  if (item.reenvioManual) return null;
   const chave = chaveOferta(item);
   if (!chave || !jaProcessado(chave)) return null;
 

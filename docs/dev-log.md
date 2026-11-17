@@ -5,6 +5,57 @@ Formato: `data | task_id | autor | escopo | decisões | arquivos | evidências |
 
 ---
 
+## 2026-11-17 | EXP-CATALOGO-01 | planmaster | ADR-012 Fase 1 — catálogo SQLite das ofertas recebidas
+
+**Branch**: `expansion` (criada a partir de `develop`). Nada vai para `main` antes de teste verde
++ aprovação explícita. "Expanção" não é palavra em inglês nem em português: o termo é
+**expansion** (pt: *expansão*); a branch usa `expansion` — sem acento/cedilha.
+
+**Contexto**: `data/publicacoes.json` (2,26 MB / 6.874 registros) reescreve o arquivo inteiro a
+cada oferta — 177 ms por gravação, ~1,3 s no teto de 50 mil. Pior: só guarda o que foi
+**publicado**; o que chegou e foi **descartado** (duplicada, link inválido, programa sem suporte)
+desaparece, sobrando um SHA1 por `DEDUP_DIAS=7`. Sem histórico não existe "filtrar o passado e
+reenviar em lote".
+
+**Decisão (ADR-012)**: SQLite embutido (`node:sqlite`, já no runtime do container) — **não**
+Postgres (o da Evolution é isolado por desenho) e **não** um serviço novo. Node 22 aceito
+(experimental, só `ExperimentalWarning`); todo o acesso isolado em `src/store/db.ts` para trocar de
+Node/banco mexendo em um arquivo.
+
+**Trava de contorno**: dedup do Monitor **continua em memória** (hash map O(1) com reserva atômica
+síncrona — no banco ficaria mais lento e exigiria lock) e o broker da Mensageria **continua em
+arquivo**. O banco entra para o que **cresce** (histórico), não para o que já é rápido.
+
+**Arquivos**:
+- novo `src/store/db.ts` (adapter, WAL, schema `versao`, degradação segura, `fecharBanco`);
+- novo `src/store/catalogo.ts` (gravação best-effort, filtros, paginação, resumo, CSV, retenção);
+- `src/monitor/webhook.ts` — `processar()` virou wrapper de `processarInterno()`: grava a oferta
+  com o **desfecho real**, inclusive nos caminhos de descarte; ignora origem não monitorada e `dryRun`;
+- `src/monitor/fila.ts` — `ItemFila.reenvioManual` ignora a trava de duplicata no reenvio pedido
+  pelo operador (continua entrando na fila normal, com anti-rajada);
+- `src/manager/server.ts` — `GET /api/catalogo` (+`csv=1`), `POST /api/catalogo/:id/reenviar`,
+  `POST /api/catalogo/limpar`, boot abre o banco e poda a retenção, `/healthz` expõe o banco,
+  shutdown fecha o SQLite; nova view **Catálogo** (`#/catalogo`) com KPIs, filtros, paginação,
+  CSV e **↪ reenviar**;
+- testes: `src/store/catalogo.test.ts` (10) + 1 caso no `webhook.test.ts` (dryRun não polui o
+  catálogo; oferta real entra com o desfecho).
+
+**Evidências**:
+- `npm test` → **332/332** (321 + 11 novos), exit 0;
+- `src/manager/pagina.test.ts` → 3/3 (pegou `\n` simples e `\'` mal escapado no template; corrigidos);
+- `npm run smoke:manager` → OK (porta 18099);
+- runtime (data dir temporário, `/healthz`): `banco { habilitado: true, aberto: true, versao: 1 }`,
+  log de boot `catálogo: SQLite v1 em .../alcance.db`;
+- `/api/catalogo`: `total=2` com `resumo {"ENCAMINHADO":1,"DUPLICADO":1}`; filtro
+  `desfecho=DUPLICADO` devolve o motivo; CSV com `;` e BOM;
+- reenvio sem envio direto → **409** com motivo claro; `POST /api/catalogo/limpar` → `apagadas: 2`.
+
+**Próximo**: Fase 2 (migrar o rastreio para `publicacoes`, dual-write + migração idempotente),
+Fase 3 (reenvio em lote por seleção), Fase 4 (backup `VACUUM INTO` + migração no smoke). Deploy da
+`expansion` só depois de aprovação; `main` intocada.
+
+---
+
 ## 2026-11-15 | FIX-MONITOR-REGISTRY | planmaster | Correção regressão do Monitor após Mensageria
 
 **Contexto**: o commit `c040253` (Mensageria) introduziu regressão silenciosa no Monitor:

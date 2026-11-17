@@ -8,6 +8,8 @@ import { versaoDoApp } from "../config/versao.js";
 import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
 import { listarPublicacoes, resumoRastreio, publicacoesCsv } from "../store/publicacoes.js";
+import { listarOfertas, resumoCatalogo, catalogoCsv, limparCatalogo, podarCatalogo, retencaoCatalogoDias, obterOferta } from "../store/catalogo.js";
+import { statusBanco, banco, fecharBanco } from "../store/db.js";
 import { FiltrosSchema } from "../hunter/schema.js";
 import { hunt } from "../hunter/service.js";
 import { rankear } from "../scorer.js";
@@ -24,11 +26,11 @@ import { registrarEnvio } from "../store/dedup.js";
 import { enviarParaGrupo, validarImagem } from "../wa/dispatch.js";
 import {
   carregarMonitor, adicionarRegra, removerDestino, removerRegra, definirAutoEnviar, definirFoto,
-  alternarOrigem, alternarDestino,
+  alternarOrigem, alternarDestino, destinosPara,
 } from "../monitor/grupos.js";
 import { processar as processarMonitor, extrairMensagem } from "../monitor/webhook.js";
 import { eventos as eventosMonitor, resumo as resumoMonitor, zerarContadores, limparDedup } from "../monitor/state.js";
-import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker, pararFilaWorker, aguardarProcessamento } from "../monitor/fila.js";
+import { tamanhoFila, intervaloFila, limparFila, iniciarFilaWorker, pararFilaWorker, aguardarProcessamento, enfileirar } from "../monitor/fila.js";
 import {
   listarContatos, listarListas, criarLista, removerLista, adicionarContato, renomearContato,
   removerContato, sincronizarClientes, estadoSync, enfileirarCampanha,
@@ -214,7 +216,10 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
 
   // ---------- health (público, sem detalhes sensíveis) ----------
   if (metodo === "GET" && caminho === "/healthz") {
-    json(200, { ok: true, uptime: Math.floor(process.uptime()), versao: versaoDoApp() });
+    // Abre (ou confirma) o banco para o status refletir a realidade, não o
+    // estado preguiçoso. É barato: depois da primeira abertura fica em cache.
+    banco();
+    json(200, { ok: true, uptime: Math.floor(process.uptime()), versao: versaoDoApp(), banco: statusBanco() });
     return;
   }
   if (metodo === "GET" && caminho === "/readyz") {
@@ -544,7 +549,88 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     });
     return;
   }
-  if (req.method === "GET" && url.pathname === "/api/rastreio") {
+  if (req.method === "GET" && caminho === "/api/catalogo") {
+    // CATÁLOGO (ADR-012): histórico de TODA oferta recebida dos grupos de origem,
+    // inclusive a descartada (duplicada / sem link / fora de janela). É a base do
+    // reenvio em lote — o que o rastreio (só o publicado) não permite.
+    const num = (k: string): number | undefined => {
+      const v = url.searchParams.get(k);
+      if (v === null || v === "") return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const f = {
+      programa: url.searchParams.get("programa") || undefined,
+      origem: url.searchParams.get("origem") || undefined,
+      desfecho: url.searchParams.get("desfecho") || undefined,
+      precoMin: num("precoMin"),
+      precoMax: num("precoMax"),
+      busca: url.searchParams.get("busca") || undefined,
+      dias: num("dias"),
+      pagina: num("pagina") ?? 1,
+      porPagina: num("porPagina") ?? 100,
+    };
+    if (url.searchParams.get("csv") === "1") {
+      const csv = catalogoCsv(f);
+      res.writeHead(200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="catalogo-${new Date().toISOString().slice(0, 10)}.csv"`,
+      });
+      res.end("﻿" + csv); // BOM: Excel pt-BR abre acentos certo
+      return;
+    }
+    const pagina = listarOfertas(f); // consulta abre o banco antes do status
+    json(200, { banco: statusBanco(), resumo: resumoCatalogo(f), ...pagina });
+    return;
+  }
+  if (req.method === "POST" && caminho === "/api/catalogo/limpar") {
+    // Operação explícita e destrutiva do operador (mesmo padrão do zerar contadores).
+    const apagadas = limparCatalogo();
+    json(200, { ok: true, apagadas });
+    return;
+  }
+  {
+    // REENVIO MANUAL a partir do catálogo (ADR-012, Fase 3): pega a mensagem já
+    // montada e devolve para a MESMA fila do Monitor. Respeita o intervalo
+    // anti-rajada (não é rajada) e ignora a trava de duplicata — o operador
+    // pediu o reenvio de propósito.
+    const m = caminho.match(/^\/api\/catalogo\/([^/]+)\/reenviar$/);
+    if (req.method === "POST" && m) {
+      const oferta = obterOferta(decodeURIComponent(m[1]));
+      if (!oferta) {
+        json(404, { erro: "oferta não encontrada no catálogo" });
+        return;
+      }
+      if (!oferta.mensagem) {
+        json(409, { erro: "esta oferta foi descartada antes da formatação — não há mensagem para reenviar" });
+        return;
+      }
+      if (!carregarMonitor().autoEnviar) {
+        json(409, { erro: "envio direto do Monitor está desligado — ligue para liberar o reenvio" });
+        return;
+      }
+      const destinos = destinosPara(oferta.origem).map((d) => d.jid);
+      if (!destinos.length) {
+        json(409, { erro: "a origem desta oferta não tem grupo de destino configurado" });
+        return;
+      }
+      const item = enfileirar({
+        origem: oferta.origem,
+        programa: oferta.programa ?? "desconhecido",
+        idProduto: oferta.idProduto,
+        link: oferta.link ?? "",
+        mensagem: oferta.mensagem,
+        titulo: oferta.titulo,
+        imagem: oferta.imagem ?? "",
+        destinos,
+        reenvioManual: true,
+        correlationId: randomUUID(),
+      });
+      json(200, { ok: true, item: item.id, destinos, fila: tamanhoFila() });
+      return;
+    }
+  }
+  if (req.method === "GET" && caminho === "/api/rastreio") {
     // Publicações registradas (Piloto + Monitor) com filtros e CSV.
     const dias = Number(url.searchParams.get("dias") ?? 0);
     const f = {
@@ -2287,6 +2373,11 @@ body{padding:0;max-width:none;margin:0}
 <span class="side-txt"><b>Rastreio</b><small>o que foi publicado</small></span>
 <span class="side-badge" id="badge-rastreio">—</span>
 </a>
+<a class="side-card" data-view="catalogo" href="#/catalogo">
+<span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/></svg></span>
+<span class="side-txt"><b>Catálogo</b><small>o que foi recebido</small></span>
+<span class="side-badge" id="badge-catalogo">—</span>
+</a>
 <a class="side-card" data-view="clientes" href="#/clientes">
 <span class="side-ico i-clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3"/><path d="M3.4 19.2c.7-3 2.8-4.9 5.6-4.9s4.9 1.9 5.6 4.9"/><circle cx="17.2" cy="9.3" r="2.3"/><path d="M15.9 14.5c2.2.4 3.8 2.1 4.4 4.7"/></svg></span>
 <span class="side-txt"><b>Clientes</b><small>disparo individual</small></span>
@@ -2509,6 +2600,37 @@ body{padding:0;max-width:none;margin:0}
 <div id="rtlista" style="margin-top:10px;font-size:13px"></div>
 </div>
 </section>
+<section class="view" id="view-catalogo" data-view="catalogo">
+<div class="kpis">
+<div class="kpi"><b id="kpi-cat-total">—</b><span>recebidas</span></div>
+<div class="kpi ok"><b id="kpi-cat-enc">—</b><span>encaminhadas</span></div>
+<div class="kpi warn"><b id="kpi-cat-dup">—</b><span>duplicadas</span></div>
+<div class="kpi"><b id="kpi-cat-rev">—</b><span>em revisão</span></div>
+</div>
+<div class="panel">
+<div class="panel-head"><span><b id="tit-catalogo">📦 Catálogo</b> — tudo que chegou dos grupos, inclusive o que não foi encaminhado</span><a class="lk-mini" href="#" onclick="renomearCard('catalogo');return false">✏️ renomear</a></div>
+<div class="hint">Diferente do <b>Rastreio</b> (só o que foi publicado), aqui entra <b>toda</b> oferta recebida — duplicada, sem link ou fora de janela também. Use para achar algo do passado e <b>reenviar</b> aos grupos de destino.</div>
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
+<select id="catprograma" onchange="carregarCatalogo(1)"><option value="">Todos os programas</option>
+<option value="ml">Mercado Livre</option><option value="amazon">Amazon</option>
+<option value="shopee">Shopee</option><option value="kabum">KaBuM</option><option value="desconhecido">Não reconhecido</option></select>
+<select id="catdesfecho" onchange="carregarCatalogo(1)"><option value="">Todos os desfechos</option>
+<option value="ENCAMINHADO">Encaminhadas</option><option value="ENFILEIRADO">Na fila</option>
+<option value="DUPLICADO">Duplicadas</option><option value="REVISAO">Em revisão</option>
+<option value="REAGENDADO">Reagendadas</option><option value="IGNORADO">Ignoradas</option><option value="ERRO">Com erro</option></select>
+<select id="catdias" onchange="carregarCatalogo(1)"><option value="">Todo o histórico</option>
+<option value="1">Últimas 24h</option><option value="7">Últimos 7 dias</option>
+<option value="30">Últimos 30 dias</option></select>
+<input id="catprecomin" type="number" step="0.01" placeholder="preço mín" style="width:100px" onchange="carregarCatalogo(1)">
+<input id="catprecomax" type="number" step="0.01" placeholder="preço máx" style="width:100px" onchange="carregarCatalogo(1)">
+<input id="catbusca" placeholder="buscar título / link / id do produto" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')carregarCatalogo(1)">
+<button class="mbtn" onclick="carregarCatalogo(1)">🔄</button>
+<button class="mbtn ok" onclick="exportarCatalogo()">⬇️ Exportar CSV</button>
+<span class="mini" id="catinfo"></span></div>
+<div id="catlista" style="margin-top:10px;font-size:13px"></div>
+<div id="catpg" style="display:flex;gap:8px;align-items:center;margin-top:8px"></div>
+</div>
+</section>
 <section class="view" id="view-clientes" data-view="clientes">
 <div class="kpis">
 <div class="kpi"><b id="kpi-contatos">—</b><span>contatos</span></div>
@@ -2718,6 +2840,7 @@ const VIEW_META={
   numeros:{k:'infraestrutura',t:'Números',s:'Celulares de envio rotativo — sorteio ponderado entre ativos e conectados.'},
   clientes:{k:'crescimento',t:'Clientes',s:'Contatos dos grupos + disparo individual com fila anti-bloqueio.'},
   rastreio:{k:'operação',t:'Rastreio',s:'Tudo que o Alcance publicou (Piloto + Monitor) com o link de afiliado — para cruzar com o painel de comissão.'},
+  catalogo:{k:'operação',t:'Catálogo de ofertas',s:'Tudo que os grupos de origem publicaram, inclusive o que foi descartado — para achar no passado e reenviar aos destinos.'},
   mensageria:{k:'operação',t:'Mensageria',s:'Filas, falhas e DLQ — o que falhou de vez se repara aqui, com um clique.'}
 };
 function viewAtual(){
@@ -2740,6 +2863,7 @@ function navegar(){
   document.title='Alcance — '+m.t;
   window.scrollTo(0,0);
   if(v==='rastreio')carregarRastreio();
+  if(v==='catalogo')carregarCatalogo(1);
   if(v==='clientes')carregarSeletorNumero();
   if(v==='mensageria'&&typeof carregarMensageria==='function')carregarMensageria();
   if(v==='piloto'&&$('paprograma')&&$('paprograma').value==='amazon')trocarProgramaPiloto();
@@ -3460,6 +3584,77 @@ function exportarRastreio(){
   if($('rtdias').value)q.push('dias='+$('rtdias').value);
   q.push('csv=1');
   window.location='/api/rastreio?'+q.join('&');
+}
+// ===== Catálogo de ofertas recebidas (ADR-012) =====
+const CAT_ESTADO={pagina:1,porPagina:100};
+function catFiltros(pagina){
+  const q=[];
+  if($('catprograma').value)q.push('programa='+encodeURIComponent($('catprograma').value));
+  if($('catdesfecho').value)q.push('desfecho='+encodeURIComponent($('catdesfecho').value));
+  if($('catdias').value)q.push('dias='+$('catdias').value);
+  if($('catprecomin').value)q.push('precoMin='+encodeURIComponent($('catprecomin').value));
+  if($('catprecomax').value)q.push('precoMax='+encodeURIComponent($('catprecomax').value));
+  if($('catbusca').value.trim())q.push('busca='+encodeURIComponent($('catbusca').value.trim()));
+  q.push('pagina='+pagina);
+  q.push('porPagina='+CAT_ESTADO.porPagina);
+  return q;
+}
+async function carregarCatalogo(pagina){
+  if(pagina)CAT_ESTADO.pagina=pagina;
+  try{
+    const d=await (await fetch('/api/catalogo?'+catFiltros(CAT_ESTADO.pagina).join('&'))).json();
+    const kp=function(id,v){const el=$(id);if(el)el.textContent=String(v);};
+    const r=d.resumo||{};
+    const pd=r.porDesfecho||{};
+    kp('kpi-cat-total',r.total||0);
+    kp('kpi-cat-enc',pd.ENCAMINHADO||0);
+    kp('kpi-cat-dup',pd.DUPLICADO||0);
+    kp('kpi-cat-rev',pd.REVISAO||0);
+    kp('badge-catalogo',r.total||0);
+    const b=d.banco||{};
+    if(b.habilitado&&!b.aberto){
+      $('catinfo').textContent='banco indisponível: '+(b.erro||'sem detalhe');
+      $('catlista').innerHTML='<div class="mini">O catálogo está desligado — o Monitor continua funcionando normalmente.</div>';
+      $('catpg').innerHTML='';
+      return;
+    }
+    const itens=d.itens||[];
+    $('catinfo').textContent=(d.total||0)+' oferta(s) · página '+(d.pagina||1);
+    if(!itens.length){
+      $('catlista').innerHTML='<div class="mini">Nenhuma oferta recebida neste filtro.</div>';
+      $('catpg').innerHTML='';
+      return;
+    }
+    const cor={ENCAMINHADO:'var(--ok-tx)',DUPLICADO:'var(--warn-tx)',REVISAO:'var(--warn-tx)',ERRO:'var(--danger-tx)'};
+    $('catlista').innerHTML='<div style="display:flex;flex-direction:column;gap:4px">'+itens.map(function(o){
+      const preco=(o.preco!=null)?('R$ '+Number(o.preco).toFixed(2).replace('.',',')):'';
+      return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'
+        +'<span class="mini" style="white-space:nowrap">'+esc(new Date(o.recebidaEm).toLocaleString('pt-BR'))+'</span>'
+        +'<span class="mini" style="min-width:56px">'+esc(o.programa||'—')+'</span>'
+        +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(o.motivo||'')+'">'+esc(o.titulo||o.texto||o.idProduto||'(sem título)')+'</span>'
+        +(preco?('<span class="mini" style="white-space:nowrap">'+esc(preco)+'</span>'):'')
+        +'<span class="mini" style="min-width:86px;color:'+(cor[o.desfecho]||'var(--muted)')+'">'+esc(o.desfecho)+'</span>'
+        +(o.link?('<a class="lk-mini" href="'+esc(linkSeguro(o.link))+'" target="_blank" rel="noopener">abrir</a>'):'')
+        +(o.mensagem?('<button class="mbtn" style="padding:2px 8px" onclick="reenviarOferta(\\''+esc(o.id)+'\\')">↪ reenviar</button>'):'')
+        +'</div>';
+    }).join('')+'</div>';
+    const totalPag=Math.max(1,Math.ceil((d.total||0)/(d.porPagina||CAT_ESTADO.porPagina)));
+    $('catpg').innerHTML='<button class="mbtn" '+(CAT_ESTADO.pagina<=1?'disabled':'')+' onclick="carregarCatalogo('+(CAT_ESTADO.pagina-1)+')">‹ anterior</button>'
+      +'<span class="mini">'+(d.pagina||1)+' / '+totalPag+'</span>'
+      +'<button class="mbtn" '+(CAT_ESTADO.pagina>=totalPag?'disabled':'')+' onclick="carregarCatalogo('+(CAT_ESTADO.pagina+1)+')">próxima ›</button>';
+  }catch(e){$('catinfo').textContent='erro: '+e.message;}
+}
+function exportarCatalogo(){
+  const q=catFiltros(1).filter(function(p){return p.indexOf('pagina=')!==0&&p.indexOf('porPagina=')!==0;});
+  q.push('csv=1');
+  window.location='/api/catalogo?'+q.join('&');
+}
+async function reenviarOferta(id){
+  if(!confirm('Reenviar esta oferta aos grupos de destino?\\n\\nEla entra na fila do Monitor e sai no ritmo anti-rajada.'))return;
+  const r=await (await fetch('/api/catalogo/'+encodeURIComponent(id)+'/reenviar',{method:'POST'})).json();
+  if(r.erro){alert(r.erro);return;}
+  alert('Na fila: '+r.fila+' item(ns) · '+(r.destinos||[]).length+' destino(s).');
+  carregarCatalogo();
 }
 // ===== Piloto: troca de programa (ML <-> Amazon) =====
 async function trocarProgramaPiloto(){
@@ -4375,6 +4570,18 @@ if (typeof navegar === 'function') navegar();
 server.listen(PORT, HOST, () => {
   logger.info({ host: HOST, porta: PORT }, "manager iniciado");
   console.log(`gerenciador em http://${HOST}:${PORT} (LAN exige TLS/reverse proxy)`);
+  // Catálogo de ofertas (ADR-012): abre o banco e aplica a retenção no boot.
+  // Roda ANTES do early-return de smoke (é só estado de leitura/limpeza no data
+  // dir temporário). Best-effort: se o banco não abrir, o Monitor segue sem ele.
+  if (banco()) {
+    const podadas = podarCatalogo(retencaoCatalogoDias());
+    const s = statusBanco();
+    console.log(
+      `catálogo: SQLite v${s.versao ?? "?"} em ${s.caminho}${podadas ? ` (${podadas} oferta(s) podada(s))` : ""}`
+    );
+  } else if (statusBanco().habilitado) {
+    console.log(`catálogo: banco indisponível (${statusBanco().erro ?? "sem detalhe"}) — segue sem catálogo`);
+  }
   if (process.env.ALCANCE_SMOKE === "1") {
     // Smoke test: não inicia workers (evita tocar em fila/estado real).
     console.log("smoke mode: workers de fila desativados");
@@ -4418,6 +4625,8 @@ async function encerrar(sinal: string): Promise<void> {
   try { pararClientesWorker(); } catch { /* ignore */ }
   try { pararSyncGruposDiario(); } catch { /* ignore */ }
   await aguardarProcessamento(30_000);
+  // Fecha o SQLite de forma limpa (WAL checkpoint) antes de sair.
+  try { fecharBanco(); } catch { /* ignore */ }
   server.closeIdleConnections?.();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   logger.info({ sinal }, "shutdown concluído");
