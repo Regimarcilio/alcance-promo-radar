@@ -9,6 +9,7 @@ import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
 import { listarPublicacoes, resumoRastreio, publicacoesCsv, prepararRastreio } from "../store/publicacoes.js";
 import { listarOfertas, resumoCatalogo, catalogoCsv, limparCatalogo, podarCatalogo, retencaoCatalogoDias, obterOferta } from "../store/catalogo.js";
+import { reenviarOferta, reenviarLote, normalizarIds, MAX_REENVIO_LOTE } from "../monitor/reenvio.js";
 import { statusBanco, banco, fecharBanco } from "../store/db.js";
 import { FiltrosSchema } from "../hunter/schema.js";
 import { hunt } from "../hunter/service.js";
@@ -590,43 +591,38 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     return;
   }
   {
-    // REENVIO MANUAL a partir do catálogo (ADR-012, Fase 3): pega a mensagem já
-    // montada e devolve para a MESMA fila do Monitor. Respeita o intervalo
-    // anti-rajada (não é rajada) e ignora a trava de duplicata — o operador
-    // pediu o reenvio de propósito.
-    const m = caminho.match(/^\/api\/catalogo\/([^/]+)\/reenviar$/);
-    if (req.method === "POST" && m) {
-      const oferta = obterOferta(decodeURIComponent(m[1]));
-      if (!oferta) {
-        json(404, { erro: "oferta não encontrada no catálogo" });
+    // REENVIO MANUAL a partir do catálogo (ADR-012, Fase 3): a regra fica em
+    // `src/monitor/reenvio.ts` (testável); aqui só entra a camada HTTP.
+    const m1 = caminho.match(/^\/api\/catalogo\/([^/]+)\/reenviar$/);
+    if (req.method === "POST" && m1) {
+      const r = reenviarOferta(decodeURIComponent(m1[1]));
+      if (!r.ok) {
+        json(r.status, { erro: r.erro });
         return;
       }
-      if (!oferta.mensagem) {
-        json(409, { erro: "esta oferta foi descartada antes da formatação — não há mensagem para reenviar" });
+      json(200, { ok: true, item: r.item.id, destinos: r.destinos, fila: r.fila });
+      return;
+    }
+    // LOTE: um item inválido não derruba os outros — devolve quem entrou e o
+    // motivo de cada recusa.
+    if (req.method === "POST" && caminho === "/api/catalogo/reenviar-lote") {
+      let corpo: unknown;
+      try {
+        corpo = JSON.parse(await lerCorpo(req));
+      } catch {
+        json(400, { erro: "corpo inválido (esperado {ids:[...]})" });
         return;
       }
-      if (!carregarMonitor().autoEnviar) {
-        json(409, { erro: "envio direto do Monitor está desligado — ligue para liberar o reenvio" });
+      const ids = normalizarIds((corpo as { ids?: unknown })?.ids);
+      if (!ids.length) {
+        json(400, { erro: "selecione ao menos uma oferta" });
         return;
       }
-      const destinos = destinosPara(oferta.origem).map((d) => d.jid);
-      if (!destinos.length) {
-        json(409, { erro: "a origem desta oferta não tem grupo de destino configurado" });
+      if (ids.length > MAX_REENVIO_LOTE) {
+        json(400, { erro: `máximo de ${MAX_REENVIO_LOTE} ofertas por lote — divida a seleção` });
         return;
       }
-      const item = enfileirar({
-        origem: oferta.origem,
-        programa: oferta.programa ?? "desconhecido",
-        idProduto: oferta.idProduto,
-        link: oferta.link ?? "",
-        mensagem: oferta.mensagem,
-        titulo: oferta.titulo,
-        imagem: oferta.imagem ?? "",
-        destinos,
-        reenvioManual: true,
-        correlationId: randomUUID(),
-      });
-      json(200, { ok: true, item: item.id, destinos, fila: tamanhoFila() });
+      json(200, { ok: true, ...reenviarLote(ids) });
       return;
     }
   }
@@ -2627,6 +2623,11 @@ body{padding:0;max-width:none;margin:0}
 <button class="mbtn" onclick="carregarCatalogo(1)">🔄</button>
 <button class="mbtn ok" onclick="exportarCatalogo()">⬇️ Exportar CSV</button>
 <span class="mini" id="catinfo"></span></div>
+<div id="catlote" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
+<span class="mini"><b id="catsel-n">0</b> selecionada(s)</span>
+<button class="mbtn ok" onclick="reenviarLote()">↪ Reenviar selecionadas</button>
+<button class="mbtn" onclick="limparSelecaoCatalogo()">limpar seleção</button>
+<span class="mini" id="catlote-info"></span></div>
 <div id="catlista" style="margin-top:10px;font-size:13px"></div>
 <div id="catpg" style="display:flex;gap:8px;align-items:center;margin-top:8px"></div>
 </div>
@@ -3586,7 +3587,7 @@ function exportarRastreio(){
   window.location='/api/rastreio?'+q.join('&');
 }
 // ===== Catálogo de ofertas recebidas (ADR-012) =====
-const CAT_ESTADO={pagina:1,porPagina:100};
+const CAT_ESTADO={pagina:1,porPagina:100,selecionados:new Set(),titulos:{},idsPagina:[]};
 function catFiltros(pagina){
   const q=[];
   if($('catprograma').value)q.push('programa='+encodeURIComponent($('catprograma').value));
@@ -3619,6 +3620,7 @@ async function carregarCatalogo(pagina){
       return;
     }
     const itens=d.itens||[];
+    CAT_ESTADO.idsPagina=[];CAT_ESTADO.titulos={};
     $('catinfo').textContent=(d.total||0)+' oferta(s) · página '+(d.pagina||1);
     if(!itens.length){
       $('catlista').innerHTML='<div class="mini">Nenhuma oferta recebida neste filtro.</div>';
@@ -3626,9 +3628,16 @@ async function carregarCatalogo(pagina){
       return;
     }
     const cor={ENCAMINHADO:'var(--ok-tx)',DUPLICADO:'var(--warn-tx)',REVISAO:'var(--warn-tx)',ERRO:'var(--danger-tx)'};
-    $('catlista').innerHTML='<div style="display:flex;flex-direction:column;gap:4px">'+itens.map(function(o){
+    $('catlista').innerHTML='<div style="display:flex;flex-direction:column;gap:4px">'
+      +'<div class="mini" style="display:flex;gap:8px;align-items:center;padding:2px 0;border-bottom:1px solid var(--border)">'
+      +'<input type="checkbox" id="catselpag" onchange="selecionarPaginaCatalogo(this.checked)" title="Selecionar todas as ofertas desta página que têm mensagem">'
+      +'<span>selecionar página</span></div>'
+      +itens.map(function(o){
       const preco=(o.preco!=null)?('R$ '+Number(o.preco).toFixed(2).replace('.',',')):'';
+      CAT_ESTADO.titulos[o.id]=String(o.titulo||o.idProduto||o.id);
+      if(o.mensagem)CAT_ESTADO.idsPagina.push(o.id);
       return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'
+        +'<input type="checkbox" data-cat="'+esc(o.id)+'" onchange="marcarCatalogo(this)"'+(o.mensagem?'':' disabled title="sem mensagem para reenviar"')+(CAT_ESTADO.selecionados.has(o.id)?' checked':'')+'>'
         +'<span class="mini" style="white-space:nowrap">'+esc(new Date(o.recebidaEm).toLocaleString('pt-BR'))+'</span>'
         +'<span class="mini" style="min-width:56px">'+esc(o.programa||'—')+'</span>'
         +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(o.motivo||'')+'">'+esc(o.titulo||o.texto||o.idProduto||'(sem título)')+'</span>'
@@ -3638,6 +3647,7 @@ async function carregarCatalogo(pagina){
         +(o.mensagem?('<button class="mbtn" style="padding:2px 8px" onclick="reenviarOferta(\\''+esc(o.id)+'\\')">↪ reenviar</button>'):'')
         +'</div>';
     }).join('')+'</div>';
+    atualizarLoteCatalogo();
     const totalPag=Math.max(1,Math.ceil((d.total||0)/(d.porPagina||CAT_ESTADO.porPagina)));
     $('catpg').innerHTML='<button class="mbtn" '+(CAT_ESTADO.pagina<=1?'disabled':'')+' onclick="carregarCatalogo('+(CAT_ESTADO.pagina-1)+')">‹ anterior</button>'
       +'<span class="mini">'+(d.pagina||1)+' / '+totalPag+'</span>'
@@ -3654,6 +3664,54 @@ async function reenviarOferta(id){
   const r=await (await fetch('/api/catalogo/'+encodeURIComponent(id)+'/reenviar',{method:'POST'})).json();
   if(r.erro){alert(r.erro);return;}
   alert('Na fila: '+r.fila+' item(ns) · '+(r.destinos||[]).length+' destino(s).');
+  carregarCatalogo();
+}
+function marcarCatalogo(el){
+  const id=el.getAttribute('data-cat');
+  if(!id)return;
+  if(el.checked)CAT_ESTADO.selecionados.add(id);else CAT_ESTADO.selecionados.delete(id);
+  atualizarLoteCatalogo();
+}
+function selecionarPaginaCatalogo(ligado){
+  (CAT_ESTADO.idsPagina||[]).forEach(function(id){
+    if(ligado)CAT_ESTADO.selecionados.add(id);else CAT_ESTADO.selecionados.delete(id);
+  });
+  if($('catlista'))[].slice.call($('catlista').querySelectorAll('input[data-cat]')).forEach(function(cb){
+    cb.checked=CAT_ESTADO.selecionados.has(cb.getAttribute('data-cat'));
+  });
+  atualizarLoteCatalogo();
+}
+function limparSelecaoCatalogo(){
+  CAT_ESTADO.selecionados.clear();
+  if($('catlista'))[].slice.call($('catlista').querySelectorAll('input[data-cat]')).forEach(function(cb){cb.checked=false;});
+  const pg=$('catselpag');if(pg)pg.checked=false;
+  atualizarLoteCatalogo();
+}
+function atualizarLoteCatalogo(){
+  const n=CAT_ESTADO.selecionados.size;
+  const barra=$('catlote');if(!barra)return;
+  barra.style.display=n?'flex':'none';
+  const cont=$('catsel-n');if(cont)cont.textContent=String(n);
+  const info=$('catlote-info');
+  if(info&&n){
+    const nomes=Array.from(CAT_ESTADO.selecionados).slice(0,3).map(function(id){return CAT_ESTADO.titulos[id]||id;});
+    info.textContent=n>3?('ex.: '+nomes.join(' · ')+' …'):nomes.join(' · ');
+  }else if(info)info.textContent='';
+}
+async function reenviarLote(){
+  const ids=Array.from(CAT_ESTADO.selecionados);
+  if(!ids.length)return;
+  const amostra=ids.slice(0,5).map(function(id){return '• '+(CAT_ESTADO.titulos[id]||id);}).join('\\n');
+  if(!confirm('Reenviar '+ids.length+' oferta(s) aos grupos de destino?\\n\\n'+amostra+(ids.length>5?('\\n… e mais '+(ids.length-5)):'')+'\\n\\nEntram na fila do Monitor e saem no ritmo anti-rajada (1 por vez).'))return;
+  const r=await (await fetch('/api/catalogo/reenviar-lote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids:ids})})).json();
+  if(r.erro){alert(r.erro);return;}
+  let msg='Na fila: '+r.enfileiradas+' de '+ids.length+' · fila total '+r.fila+' item(ns).';
+  if(r.ignoradas&&r.ignoradas.length){
+    msg+='\\n\\nIgnoradas ('+r.ignoradas.length+'):\\n'+r.ignoradas.slice(0,8).map(function(x){return '• '+x.motivo;}).join('\\n');
+    if(r.ignoradas.length>8)msg+='\\n… e mais '+(r.ignoradas.length-8);
+  }
+  alert(msg);
+  CAT_ESTADO.selecionados.clear();
   carregarCatalogo();
 }
 // ===== Piloto: troca de programa (ML <-> Amazon) =====

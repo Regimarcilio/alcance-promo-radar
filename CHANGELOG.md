@@ -65,6 +65,17 @@ repositório para publicação pública.
     as 50 mil para mostrar 300).
   - Contador histórico auto-corrige: nunca fica abaixo do número de linhas do banco.
   - Log de boot: `rastreio: N publicação(ões) no banco (total histórico M)`.
+- **Reenvio em lote do catálogo (Fase 3, ADR-012)** — seleção múltipla na view Catálogo
+  (checkbox por linha + "selecionar página"), barra com o total selecionado, prévia dos títulos no
+  confirm e relatório de recusas.
+  - `POST /api/catalogo/reenviar-lote` com `{ids:[...]}` (máx. 100 por chamada, ids normalizados:
+    sem vazios e sem repetição). Um item inválido **não derruba o lote**: a resposta traz
+    `enfileiradas` + `ignoradas[{id,motivo}]`.
+  - Regra extraída para `src/monitor/reenvio.ts` (`validarReenvio`, `reenviarOferta`,
+    `reenviarLote`, `normalizarIds`) — assim o lote e o individual usam a MESMA validação e a
+    regra tem teste unitário.
+  - Reenvio continua entrando na fila normal do Monitor (anti-rajada) e ignora a trava de
+    duplicata por decisão explícita do operador (`reenvioManual`).
 
 ### Correções
 - **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)

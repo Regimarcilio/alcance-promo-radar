@@ -5,6 +5,55 @@ Formato: `data | task_id | autor | escopo | decisões | arquivos | evidências |
 
 ---
 
+## 2026-11-17 | EXP-LOTE-03 | planmaster | ADR-012 Fase 3 — reenvio em lote do catálogo
+
+**Branch**: `expansion`. Depende de `EXP-CATALOGO-01` e `EXP-RASTREIO-02`.
+
+**Demanda**: selecionar várias ofertas do catálogo e reenviar de uma vez (o single já existia
+desde a Fase 1), com prévia do que vai sair e relatório do que ficou de fora.
+
+**Decisão de arquitetura**: a regra saiu do `server.ts` para `src/monitor/reenvio.ts`. Motivo
+concreto: o `server.ts` não é importável em teste (sobe HTTP no import), então a garantia "o lote
+nunca aceita o que o individual recusa" ficaria coberta só por runtime. Agora tem 8 testes
+unitários e o endpoint virou uma casca fina de HTTP.
+
+**Regras do lote**:
+- teto de **100 por chamada** (acima disso o operador divide a seleção);
+- ids normalizados (string, aparados, sem vazio, sem repetição);
+- **um item inválido não derruba o lote** — a resposta é `{enfileiradas, ignoradas[{id,motivo}], fila}`;
+- validação idêntica ao individual: existe? tem mensagem? envio direto ligado? origem tem destino?
+- segue entrando na fila normal (anti-rajada) e com `reenvioManual` (ignora a trava de duplicata).
+
+**UI**: checkbox por linha (desabilitado quando não há mensagem), "selecionar página", barra
+`N selecionada(s)` com prévia dos 3 primeiros títulos, botão **↪ Reenviar selecionadas** e
+**limpar seleção**. O `confirm` lista até 5 títulos; o alert final mostra quantas entraram, a fila
+total e até 8 motivos de recusa.
+
+**Arquivos**: novo `src/monitor/reenvio.ts`, novo `src/monitor/reenvio.test.ts` (8 casos),
+`src/manager/server.ts` (endpoint `POST /api/catalogo/reenviar-lote`, helpers antigos removidos,
+markup/JS da seleção), `CHANGELOG.md`.
+
+**Bugs/ajustes pegos no caminho**:
+1. `normalizarIds` devolvia `" b "` com espaço — passou a aparar antes do dedup (teste cobre);
+2. teste do lote assumia "a 3ª chamada não enfileira" — a asserção estava errada, não o código;
+3. `fila.ts` tem cache em memória e resolve o caminho na primeira leitura: trocar `ALCANCE_DATA_DIR`
+   entre testes não isola nada (a fila "vazava" de um caso para o outro). A suíte usa um data dir
+   único + `limparFila()`/`limparCatalogo()` em cada caso.
+
+**Evidências**:
+- `npm test` → **346/346** (338 + 8), exit 0; `npm run smoke:manager` OK;
+- runtime (`/tmp/opencode/valida-lote.sh`, monitor.json com origem+destino e `autoEnviar:true`):
+  lote de 3 válidas + 1 sem mensagem + 1 inexistente → `enfileiradas=3 ignoradas=2`, com os
+  motivos corretos; fila com exatamente 3 itens, todos `reenvioManual`;
+- validações: `ids:[]` e `ids:"x"` → 400 "selecione ao menos uma oferta"; 101 ids → 400 com o
+  teto; corpo que não é JSON → 400 "corpo inválido";
+- repetir o mesmo lote → enfileira de novo (2ª cópia), provando o bypass da trava de duplicata;
+- sem erro no log.
+
+**Próximo**: Fase 4 — backup consistente do banco (`VACUUM INTO`) com retenção e validação no smoke.
+
+---
+
 ## 2026-11-17 | EXP-RASTREIO-02 | planmaster | ADR-012 Fase 2 — rastreio em SQLite
 
 **Branch**: `expansion`. Depende da entrada `EXP-CATALOGO-01` (mesma branch, schema v2).
