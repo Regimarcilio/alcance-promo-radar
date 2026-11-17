@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { versaoDoApp } from "../config/versao.js";
 import catsJson from "../categorias.json" with { type: "json" };
 import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
-import { listarPublicacoes, resumoRastreio, publicacoesCsv } from "../store/publicacoes.js";
+import { listarPublicacoes, resumoRastreio, publicacoesCsv, prepararRastreio } from "../store/publicacoes.js";
 import { listarOfertas, resumoCatalogo, catalogoCsv, limparCatalogo, podarCatalogo, retencaoCatalogoDias, obterOferta } from "../store/catalogo.js";
 import { statusBanco, banco, fecharBanco } from "../store/db.js";
 import { FiltrosSchema } from "../hunter/schema.js";
@@ -649,7 +649,7 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
       res.end("﻿" + csv); // BOM: Excel pt-BR abre acentos certo
       return;
     }
-    json(200, { ...resumoRastreio(f), publicacoes: listarPublicacoes(f).slice(0, 300) });
+    json(200, { ...resumoRastreio(f), publicacoes: listarPublicacoes({ ...f, limite: 300 }) });
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/piloto") {
@@ -4579,6 +4579,13 @@ server.listen(PORT, HOST, () => {
     console.log(
       `catálogo: SQLite v${s.versao ?? "?"} em ${s.caminho}${podadas ? ` (${podadas} oferta(s) podada(s))` : ""}`
     );
+    // Rastreio (Fase 2): migra o publicacoes.json na primeira execução.
+    try {
+      const r = prepararRastreio();
+      console.log(`rastreio: ${r.armazenados} publicação(ões) no banco (total histórico ${r.total})`);
+    } catch (e) {
+      console.log(`rastreio: banco indisponível (${e instanceof Error ? e.message : String(e)})`);
+    }
   } else if (statusBanco().habilitado) {
     console.log(`catálogo: banco indisponível (${statusBanco().erro ?? "sem detalhe"}) — segue sem catálogo`);
   }

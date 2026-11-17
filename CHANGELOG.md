@@ -52,6 +52,19 @@ repositório para publicação pública.
     o estado do banco.
   - **Decisão explícita (ADR-012):** dedup do Monitor continua em memória (O(1), atômico) e o
     broker da Mensageria continua em arquivo — o banco não entra no caminho crítico.
+- **Rastreio em SQLite (Fase 2, ADR-012)** — o `publicacoes.json` deixou de ser reescrito a cada
+  publicação (177 ms / 1,85 MB por post; ~1,3 s no teto de 50 mil). Medição no banco: INSERT de
+  **0,05 ms**.
+  - Tabela `publicacoes` (schema v2) com `chave` única = hash da linha; migração do JSON
+    **idempotente** (`INSERT OR IGNORE`), executada uma vez no boot e registrada em
+    `schema_meta.rastreio_migrado`.
+  - O JSON **não é mais reescrito**: fica congelado como *snapshot* da migração. Se o banco ficar
+    indisponível, a gravação e a leitura degradam para ele (`CATALOGO_BD=0` desliga tudo) — nada
+    se perde e o painel continua abrindo.
+  - `listarPublicacoes()` ganhou `limite` (o `/api/rastreio` era `listar().slice(0,300)`: carregava
+    as 50 mil para mostrar 300).
+  - Contador histórico auto-corrige: nunca fica abaixo do número de linhas do banco.
+  - Log de boot: `rastreio: N publicação(ões) no banco (total histórico M)`.
 
 ### Correções
 - **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)

@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { dataDirAtual } from "../config/paths.js";
 
 /** Versão do schema. Subir aqui quando mudar o DDL (migração explícita). */
-export const VERSAO_SCHEMA = 1;
+export const VERSAO_SCHEMA = 2;
 
 /** Depois de uma falha, não tenta reabrir por este tempo (evita erro por msg). */
 const RETENTATIVA_MS = 60_000;
@@ -71,21 +71,47 @@ CREATE INDEX IF NOT EXISTS idx_ofertas_origem    ON ofertas(origem);
 CREATE INDEX IF NOT EXISTS idx_ofertas_desfecho  ON ofertas(desfecho);
 CREATE INDEX IF NOT EXISTS idx_ofertas_preco     ON ofertas(preco);
 CREATE INDEX IF NOT EXISTS idx_ofertas_produto   ON ofertas(id_produto);
+
+-- RASTREIO (Fase 2): o que o Alcance publicou (Piloto + Monitor). A coluna
+-- 'chave' é o hash da linha, para a migração do JSON ser idempotente.
+CREATE TABLE IF NOT EXISTS publicacoes (
+  seq       INTEGER PRIMARY KEY AUTOINCREMENT,
+  chave     TEXT NOT NULL UNIQUE,
+  em        TEXT NOT NULL,
+  programa  TEXT NOT NULL,
+  categoria TEXT,
+  grupo     TEXT NOT NULL,
+  id        TEXT,
+  titulo    TEXT,
+  preco     REAL,
+  link      TEXT,
+  tag       TEXT,
+  via       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pub_em       ON publicacoes(em DESC);
+CREATE INDEX IF NOT EXISTS idx_pub_programa ON publicacoes(programa);
+CREATE INDEX IF NOT EXISTS idx_pub_categoria ON publicacoes(categoria);
+CREATE INDEX IF NOT EXISTS idx_pub_grupo    ON publicacoes(grupo);
+CREATE INDEX IF NOT EXISTS idx_pub_via      ON publicacoes(via);
 `;
 
 function aplicarSchema(db: DatabaseSync): void {
+  // DDL é aditivo e idempotente (IF NOT EXISTS): rodar sempre cobre upgrades.
   db.exec(DDL);
   const row = db
     .prepare("SELECT valor FROM schema_meta WHERE chave = 'versao'")
     .get() as { valor: string } | undefined;
-  const atual = row ? Number(row.valor) : 0;
+  const atual = row ? Number(row.valor) || 0 : 0;
   if (!row) {
     db.prepare("INSERT INTO schema_meta (chave, valor) VALUES ('versao', ?)").run(String(VERSAO_SCHEMA));
     versaoAplicada = VERSAO_SCHEMA;
     return;
   }
-  // No futuro: if (atual < 2) { ALTER TABLE ...; UPDATE schema_meta ... }
-  versaoAplicada = atual;
+  // Só sobe a versão (nunca rebaixa um banco aberto por uma build mais nova).
+  if (atual < VERSAO_SCHEMA) {
+    db.prepare("UPDATE schema_meta SET valor = ? WHERE chave = 'versao'").run(String(VERSAO_SCHEMA));
+  }
+  versaoAplicada = Math.max(atual, VERSAO_SCHEMA);
 }
 
 /**

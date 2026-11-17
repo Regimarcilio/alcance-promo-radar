@@ -5,6 +5,61 @@ Formato: `data | task_id | autor | escopo | decisões | arquivos | evidências |
 
 ---
 
+## 2026-11-17 | EXP-RASTREIO-02 | planmaster | ADR-012 Fase 2 — rastreio em SQLite
+
+**Branch**: `expansion`. Depende da entrada `EXP-CATALOGO-01` (mesma branch, schema v2).
+
+**Problema medido**: cada publicação reescrevia o `publicacoes.json` inteiro — 177 ms e 1,85 MB
+com 6.874 registros, ~1,3 s no teto de `RASTREIO_LIMITE=50000`. O rastreio inteiro caber num
+INSERT é o ganho da fase.
+
+**Decisão**: tabela `publicacoes` no mesmo `alcance.db` (schema v2), com `chave` única =
+`sha1(em|programa|grupo|id|via|link)`. A migração do JSON roda **uma vez** no boot
+(`INSERT OR IGNORE` dentro de uma transação) e é marcada em `schema_meta.rastreio_migrado` —
+re-executar não duplica. O JSON **deixa de ser escrito** e fica congelado como *snapshot*:
+reescrevê-lo a cada post anularia o ganho.
+
+**Degradação (contrato preservado)**: sem banco (`CATALOGO_BD=0` ou falha de abertura), gravação e
+leitura caem para o JSON exatamente como antes. O rastreio continua acessório: nunca lança.
+
+**Arquivos**:
+- `src/store/db.ts` — `VERSAO_SCHEMA=2`, tabela `publicacoes` + 5 índices; `aplicarSchema` passou a
+  rodar o DDL sempre (aditivo/idempotente) e só **sobe** a versão, nunca rebaixa;
+- `src/store/publicacoes.ts` — reescrito DB-first: `migrarLegado()`, `bancoRastreio()`,
+  `armazenados()`, poda por `seq`, filtros em SQL (`onde()`), `resumoRastreio` com `GROUP BY`,
+  `FiltroRastreio.limite`, `prepararRastreio()` para o boot;
+- `src/manager/server.ts` — `/api/rastreio` usa `limite: 300` (antes carregava tudo e cortava),
+  boot chama `prepararRastreio()` e loga o total migrado;
+- `src/store/publicacoes.test.ts` — passa a rodar com `CATALOGO_BD=0` + `fecharBanco()`: virou a
+  suíte do **fallback** (mesmos casos de antes, mesmo contrato);
+- novo `src/store/publicacoes-db.test.ts` — 6 casos do caminho normal (migração preservando
+  campos, idempotência forçada apagando a flag, JSON congelado, listar/filtrar/resumir, poda no
+  banco, `limite` de leitura).
+
+**Bugs encontrados e corrigidos durante a validação** (os dois só apareceram por teste/runtime,
+não por leitura):
+1. **Contador +1 na primeira gravação** — `totalHistorico()` era chamado depois do INSERT e semeava
+   com a linha recém-inserida. Passou a ser calculado **antes** do INSERT.
+2. **`total` < `armazenados` em processo longo** — o `totalCache` não via a escrita de outro
+   processo (validado no runtime: painel mostrava `total=3` com 4 registros). Agora o total
+   auto-corrige para `max(meta, armazenados)` e regrava o meta.
+3. Build quebrado por **backtick dentro do template literal do DDL** (`chave` → `'chave'`).
+
+**Evidências**:
+- `npm test` → **338/338** (332 + 6 novos), exit 0; `npm run smoke:manager` OK;
+- runtime (`/tmp/opencode/valida-rastreio.sh`): JSON legado de 3 linhas → boot
+  `rastreio: 3 publicação(ões) no banco (total histórico 3)`; `/api/rastreio` → `total=3
+  armazenados=3`, `porPrograma={"amazon":1,"ml":1,"shopee":1}`, `comTag=1`; filtro `via=piloto`
+  → 1 item; CSV com BOM e `;`;
+- gravação em processo separado → `armazenados=4`, **JSON continua com 3 linhas** (congelado),
+  `/api/rastreio` → `total=4 armazenados=4`;
+- **2º boot** → `total=4 armazenados=4` (migração não duplicou), sem erro no log.
+
+**Próximo**: Fase 3 completa (seleção múltipla + reenvio em lote com prévia) e Fase 4
+(`VACUUM INTO` para backup + validação no smoke).
+
+---
+
 ## 2026-11-17 | EXP-CATALOGO-01 | planmaster | ADR-012 Fase 1 — catálogo SQLite das ofertas recebidas
 
 **Branch**: `expansion` (criada a partir de `develop`). Nada vai para `main` antes de teste verde
