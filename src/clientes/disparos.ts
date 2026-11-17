@@ -223,11 +223,63 @@ export function registrarResultadoDisparo(
   const arr = carregar();
   const d = arr.find((x) => x.id === id);
   if (!d || d.status === "CANCELADO") return d ?? null;
-  if (ok) d.enviados++;
-  else {
+  if (ok) {
+    d.enviados++;
+    // o erro anterior não pode mais aparecer na tela: o envio passou
+    // (ex.: a campanha falhou por mídia expirada e voltou a funcionar)
+    d.erro = null;
+  } else {
     d.falhas++;
     if (erro) d.erro = String(erro).slice(0, 200);
   }
+  const feitos = d.enviados + d.falhas;
+  if (feitos >= d.total) {
+    d.status = d.falhas === 0 ? "CONCLUIDO" : d.enviados === 0 ? "ERRO" : "PARCIAL";
+  } else {
+    d.status = "ENVIANDO";
+  }
+  d.atualizadoEm = new Date().toISOString();
+  salvar(arr);
+  return d;
+}
+
+/**
+ * Define o número de falhas do disparo (mensagens **mortas na DLQ**).
+ *
+ * Invariante do contador: `falhas` = destinatários que estão mortos na DLQ
+ * **agora**; `enviados` = destinatários que receberam. Com os dois, o status
+ * fecha certo (CONCLUIDO quando tudo saiu, PARCIAL quando sobrou morto).
+ */
+export function definirFalhasDisparo(id: string, falhas: number): Disparo | null {
+  const arr = carregar();
+  const d = arr.find((x) => x.id === id);
+  if (!d || d.status === "CANCELADO") return d ?? null;
+  d.falhas = Math.max(0, Math.floor(Number(falhas) || 0));
+  if (d.falhas === 0 && d.enviados > 0) d.erro = null;
+  const feitos = d.enviados + d.falhas;
+  if (feitos >= d.total) {
+    d.status = d.falhas === 0 ? "CONCLUIDO" : d.enviados === 0 ? "ERRO" : "PARCIAL";
+  } else if (feitos > 0) {
+    d.status = "ENVIANDO";
+  }
+  d.atualizadoEm = new Date().toISOString();
+  salvar(arr);
+  return d;
+}
+
+/**
+ * Desconta uma falha do disparo — o item que estava na DLQ foi reprocessado.
+ *
+ * Sem isso, `enviados + falhas` passa do `total` (o mesmo destinatário é
+ * contado como falha quando morre e como sucesso quando é reenviado) e a
+ * campanha **nunca** chega ao status CONCLUIDO, mesmo com todos os contatos
+ * recebendo a mensagem.
+ */
+export function descontaFalhaDisparo(id: string): Disparo | null {
+  const arr = carregar();
+  const d = arr.find((x) => x.id === id);
+  if (!d || d.status === "CANCELADO") return d ?? null;
+  if (d.falhas > 0) d.falhas--;
   const feitos = d.enviados + d.falhas;
   if (feitos >= d.total) {
     d.status = d.falhas === 0 ? "CONCLUIDO" : d.enviados === 0 ? "ERRO" : "PARCIAL";

@@ -9,7 +9,8 @@
  * para a fila em vez de se perder.
  */
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { basename, join } from "node:path";
 import { enviarParaGrupo, ehErroTransitorio } from "../wa/dispatch.js";
 import { registrarPublicacao } from "../store/publicacoes.js";
 import { carregarMonitor } from "./grupos.js";
@@ -27,7 +28,10 @@ import {
   momentoReenvio,
   reenvioPermitido,
 } from "../messaging/reenvio.js";
-import { lerDlq, registrarDlq, removerDlq } from "../messaging/dlq.js";
+import { lerDlq, registrarDlq, removerDlq, tiposComDlq } from "../messaging/dlq.js";
+import { getBroker } from "../messaging/broker.js";
+import { dirMensageria } from "../messaging/caminhos.js";
+import { listarDisparos } from "../clientes/disparos.js";
 import { deveRetentar, proximaTentativaEm } from "../messaging/politica.js";
 import { publicarEvento } from "../messaging/eventos.js";
 import { incrementar, definirGauge, observarLatencia } from "../messaging/contadores.js";
@@ -66,6 +70,12 @@ export interface ItemFila {
   proximaTentativaEm?: string | null;
   /** correlação do fluxo (webhook → fila → envio → evento) */
   correlationId?: string | null;
+  /**
+   * Reenvio pedido pelo operador a partir do catálogo (ADR-012). Ignora a
+   * trava de duplicata: o operador está reenviando de propósito. Entra na
+   * fila normal, então respeita o intervalo anti-rajada.
+   */
+  reenvioManual?: boolean;
   /** último erro de envio (preenchido quando o item vai para a DLQ) */
   ultimoErro?: string | null;
   /** quantas vezes o operador reprocessou este item a partir da DLQ */
@@ -388,6 +398,8 @@ function tratarDuplicata(
 ): { acao: "reagendar" | "descartar"; item: ItemFila; chave: string } | null {
   // o reenvio já é o reenvio: não se reagenda em loop
   if (ehReenvioAgendado(item)) return null;
+  // Reenvio manual (catálogo): o operador decidiu reenviar — não é duplicata.
+  if (item.reenvioManual) return null;
   const chave = chaveOferta(item);
   if (!chave || !jaProcessado(chave)) return null;
 
@@ -705,6 +717,74 @@ export async function aguardarProcessamento(timeoutMs = 30_000): Promise<void> {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Mídia que ainda está **em uso** e, por isso, não pode ser apagada pela
+ * faxina de retenção (RN-026).
+ *
+ * A retenção de 3 dias foi desenhada para a foto da **origem** (volume alto,
+ * vida curta). Mas `data/midia/` também guarda o vídeo que o operador sobe
+ * na aba Clientes — e uma campanha de 550 contatos pode levar dias para
+ * terminar. Sem esta proteção (issue #82), a faxina apagava o vídeo no
+ * meio do disparo e as mensagens restantes morriam para sempre.
+ *
+ * Fontes: item na fila de Mensageria, mensagem parada na DLQ e disparo ainda
+ * incompleto (PENDENTE/ENVIANDO/PARCIAL/ERRO).
+ */
+export function midiaEmUso(): Set<string> {
+  const emUso = new Set<string>();
+  const add = (caminho: unknown): void => {
+    if (!caminho) return;
+    const nome = basename(String(caminho)).trim();
+    if (nome) emUso.add(nome);
+  };
+  try {
+    // 1) itens pendentes de todas as filas do broker
+    const broker = getBroker();
+    const pend = broker.pendentes?.bind(broker);
+    if (pend) {
+      for (const tipo of tiposDeFila()) {
+        for (const env of pend(tipo) ?? []) {
+          const p = env.payload as any;
+          add(p?.imagem);
+          add(p?.midia?.arquivo);
+        }
+      }
+    }
+  } catch { /* segue: a proteção é o melhor esforço */ }
+  try {
+    // 2) mensagens mortas na DLQ (podem ser reprocessadas)
+    for (const tipo of tiposComDlq()) {
+      for (const item of lerDlq(tipo)) {
+        const p = item.envelope?.payload as any;
+        add(p?.imagem);
+        add(p?.midia?.arquivo);
+      }
+    }
+  } catch { /* idem */ }
+  try {
+    // 3) disparos ainda em andamento
+    for (const d of listarDisparos()) {
+      if (d.status === "CONCLUIDO" || d.status === "CANCELADO") continue;
+      add(d.midia?.arquivo);
+    }
+  } catch { /* idem */ }
+  return emUso;
+}
+
+/** Tipos de fila presentes em `data/messaging/` (ignora DLQ, stats e tópicos). */
+function tiposDeFila(): string[] {
+  try {
+    if (!existsSync(dirMensageria())) return [];
+    return readdirSync(dirMensageria())
+      .filter((f) => f.endsWith(".json"))
+      .filter((f) => !f.startsWith("dlq-") && !f.startsWith("stats-") && !f.startsWith("topico-"))
+      .filter((f) => f !== "processados.json")
+      .map((f) => f.slice(0, -".json".length));
+  } catch {
+    return [];
+  }
+}
+
 /** Worker: verifica a cada 5s e libera 1 item por intervalo. */
 export function iniciarFilaWorker(tickMs = 5000): void {
   if (timer) return;
@@ -712,8 +792,8 @@ export function iniciarFilaWorker(tickMs = 5000): void {
   let ticks = 0;
   timer = setInterval(() => {
     void liberarProximo();
-    // faxina das fotos da origem 1x por hora
-    if (++ticks % 720 === 0) limparMidiaAntiga(3);
+    // faxina das fotos da origem 1x por hora — preserva a mídia em uso
+    if (++ticks % 720 === 0) limparMidiaAntiga(3, midiaEmUso());
   }, tickMs);
   if (typeof (timer as any).unref === "function") (timer as any).unref();
 }

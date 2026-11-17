@@ -313,6 +313,20 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --bu
 # Grafana at http://127.0.0.1:3000 (credentials in .env)
 ```
 
+## New Features (v0.10.1.1)
+
+### Monitor Cookie ML Management
+- **Auto-renewal scripts**: `scripts/maintain-cookie.mjs`, `scripts/test-conversion.mjs`
+- **Cron-based renewal**: automate cookie updates every 25 minutes
+- **Quick testing**: verify link conversion with your affiliate cookie
+- Documentation: `docs/RENOVACAO_COOKIE_ML.md`
+
+### Monitor Synchronization Fix
+- Restores recording of forwarded offers (`registrarOfertaEnviada`)
+- Fixes idempotency: prevents silent duplicates
+- Restores re-sending of duplicates for +24h (issue #78)
+- Updated monitoring metrics
+
 ## Documentation
 
 - [`docs/00-INDICE.md`](docs/00-INDICE.md) — entry point: what's current, historical or planned.
@@ -331,6 +345,7 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --bu
 - **AI Gateway** is still a deterministic stub (zero cost); paid models not connected.
 - **Temporary messages** (ephemeral) of 7 days in destination are not resent as temporaries.
 - Dependency `zod` with pre-existing security warning; fix requires major version 4.x.
+- **Cookie ML** expires every 15-30 min: see `docs/RENOVACAO_COOKIE_ML.md` for maintenance.
 
 ## License
 

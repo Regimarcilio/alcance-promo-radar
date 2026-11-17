@@ -21,6 +21,30 @@ import { itensDlq } from "./filas.js";
 import { removerDlq, type ItemDLQ } from "./dlq.js";
 import { registrarAuditoriaAcao } from "./consumidores.js";
 import { TIPO_MONITOR, reprocessarDlq } from "../monitor/fila.js";
+import { classificarMidia } from "../monitor/midia.js";
+import { definirFalhasDisparo, descontaFalhaDisparo, listarDisparos } from "../clientes/disparos.js";
+
+/**
+ * Estado da mídia local de um item da DLQ.
+ *
+ * - `ok` — mídia presente (ou não há mídia): reprocessa como está;
+ * - `sumiu` — o arquivo foi removido pela faxina de retenção: o item é
+ *   reenviado **só com o texto** (a mídia é acessória e o link da oferta
+ *   tem valor). Sem isso, o reprocessamento só produzia nova DLQ (issue #82);
+ * - `invalida` — caminho fora de `data/midia`/nome inválido: violação de
+ *   segurança, o reprocessamento é **recusado**.
+ */
+type EstadoMidiaDlq = "ok" | "sumiu" | "invalida";
+
+function estadoMidiaDlq(item: ItemDLQ): EstadoMidiaDlq {
+  const p = item.envelope?.payload as any;
+  const img = String(p?.imagem ?? "");
+  if (!img) return "ok";
+  if (/^https?:\/\//i.test(img) || img.startsWith("data:")) return "ok";
+  const c = classificarMidia(img);
+  if (c.ok) return "ok";
+  return c.motivo === "inexistente" ? "sumiu" : "invalida";
+}
 
 /** Resultado padrão de uma ação sobre a DLQ. */
 export interface ResultadoAcaoDlq {
@@ -89,10 +113,33 @@ export async function reprocessarItemDlq(
     if (!ok) return { ok: false, erro: "não foi possível reprocessar o item", total: 0 };
   } else {
     const broker = getBroker();
+    const midia = estadoMidiaDlq(item);
+    if (midia === "invalida") {
+      return {
+        ok: false,
+        erro: "mídia com caminho inválido (fora de data/midia) — reprocessamento recusado",
+        total: 0,
+      };
+    }
     await broker.reprocessar(item.id);
     // confirma que o envelope voltou para a fila (a DLQ não pode "engolir" o item)
-    const naFila = (broker.pendentes?.(item.tipo) ?? []).some((e) => e.id === item.id);
+    let naFila = (broker.pendentes?.(item.tipo) ?? []).some((e) => e.id === item.id);
     if (!naFila) return { ok: false, erro: "não foi possível reprocessar o item", total: 0 };
+    // A mídia sumiu (faxina de retenção): reenvia SÓ com o texto. Sem isto o
+    // reprocessamento voltaria a morrer na DLQ pelo mesmo motivo (issue #82).
+    if (midia === "sumiu" && broker.atualizar) {
+      const alvo = (broker.pendentes?.(item.tipo) ?? []).find((e) => e.id === item.id);
+      if (alvo) {
+        const payload = { ...(alvo.payload as any) };
+        payload.imagem = "";
+        payload.midia = null;
+        await broker.atualizar(item.id, { ...alvo, payload });
+        naFila = true;
+        console.warn(
+          `[dlq] item ${item.id}: mídia removida pela retenção — reprocessado só com o texto`
+        );
+      }
+    }
   }
 
   registrarAuditoriaAcao({
@@ -105,6 +152,14 @@ export async function reprocessarItemDlq(
     tentativas: item.tentativas,
     reprocessos: Number(item.envelope?.reprocessos ?? 0) + 1,
   });
+  // O item volta para a fila: a falha que ele tinha no disparo não é mais
+  // uma perda (o mesmo contato pode ser reenviado com sucesso). Sem esta
+  // desconta, `enviados + falhas` passa do total e a campanha nunca fecha.
+  if (item.origem) {
+    try {
+      descontaFalhaDisparo(item.origem);
+    } catch { /* contador é acessório: nunca impede o reprocessamento */ }
+  }
   return { ok: true, total: 1, itens: [{ id: item.id, tipo: item.tipo }] };
 }
 
@@ -145,5 +200,36 @@ export async function reprocessarLoteDlq(filtro: FiltroLoteDlq = {}): Promise<Re
     afetados.push({ id: item.id, tipo: item.tipo });
     porTipo[item.tipo] = (porTipo[item.tipo] ?? 0) + 1;
   }
+  // Reconcilia os contadores dos disparos com a DLQ real (o lote inteiro
+  // pode ter tirado mais de uma falha do mesmo disparo).
+  reconciliarFalhasDisparos();
   return { ok: true, total: afetados.length, itens: afetados, porTipo };
+}
+
+/**
+ * Reconcilia o contador de falhas dos disparos com a **DLQ real**:
+ * `falhas` = mensagens do disparo que estão mortas agora.
+ *
+ * Corrige o caso em que o mesmo destinatário morreu, foi reprocessado e
+ * morreu de novo (a falha era contada duas vezes, e o disparo nunca fechava
+ * como CONCLUIDO).
+ */
+export function reconciliarFalhasDisparos(): { disparoId: string; falhas: number }[] {
+  const mortos = new Map<string, number>();
+  for (const item of itensDlq()) {
+    const origem = item.origem ?? (item.envelope?.payload as any)?.disparoId ?? null;
+    if (!origem) continue;
+    mortos.set(String(origem), (mortos.get(String(origem)) ?? 0) + 1);
+  }
+  const afetados: { disparoId: string; falhas: number }[] = [];
+  for (const d of listarDisparos()) {
+    if (d.status === "CANCELADO") continue;
+    const falhas = mortos.get(d.id) ?? 0;
+    if (d.falhas === falhas) continue;
+    try {
+      definirFalhasDisparo(d.id, falhas);
+      afetados.push({ disparoId: d.id, falhas });
+    } catch { /* contador é acessório */ }
+  }
+  return afetados;
 }

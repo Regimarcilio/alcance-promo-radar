@@ -7,7 +7,7 @@ import {
   type FluxoEnvio,
 } from "./rotacao.js";
 import { marcarEnvioAtivo } from "../monitor/envio-lock.js";
-import { ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
+import { classificarMidia, ehArquivoMidia, lerMidia, urlImagemSegura } from "../monitor/midia.js";
 
 /** Dispatch abstraído (ADR-001). Roteia v2 ↔ GO via EVO_ENGINE. */
 export type { EnvioResult };
@@ -87,6 +87,9 @@ async function comRetry<T>(
  * - arquivo local: SOMENTE dentro de data/midia com nome UUID;
  * - URL: http(s), sem credenciais e sem host privado/loopback (anti-SSRF);
  * - data URI: apenas image/*.
+ *
+ * Esta é a validação de **upload** (o arquivo tem que existir agora). No
+ * envio, a checagem é `decidirMidiaEnvio` — lá o arquivo pode ter sumido.
  */
 export function validarImagem(imagem: string): void {
   if (!imagem) return;
@@ -98,18 +101,52 @@ export function validarImagem(imagem: string): void {
     if (!/^data:image\//i.test(imagem)) throw new Error("data URI de imagem inválido");
     return;
   }
-  if (!ehArquivoMidia(imagem)) throw new Error("caminho de imagem não permitido");
+  const c = classificarMidia(imagem);
+  if (c.ok) return;
+  throw new Error(c.erro ?? "caminho de imagem inválido");
 }
 
 /**
- * Mesma checagem de origem, mas ciente do tipo: vídeo/documento também passam.
- * Arquivo local continua restrito a data/midia com nome UUID.
+ * Como tratar a mídia local no **momento do envio**.
+ *
+ * - `usar` — arquivo válido: envia com mídia;
+ * - `somente-texto` — o arquivo **sumiu** (faxina de retenção): a mídia é
+ *   acessória, então envia só o texto/link. Antes isso matava a mensagem
+ *   inteira com "caminho de mídia não permitido" (issue #82);
+ * - `rejeitar` — violação de segurança (caminho fora de `data/midia` ou nome
+ *   inválido) ou modo estrito: bloqueia o envio.
  */
-function validarMidiaArquivo(arquivo: string, tipo: "image" | "video" | "document"): void {
-  if (!arquivo) return;
+export type AcaoMidiaEnvio = "usar" | "somente-texto" | "rejeitar" | "sem-midia";
+
+export interface DecisaoMidiaEnvio {
+  acao: AcaoMidiaEnvio;
+  erro?: string;
+}
+
+/**
+ * Modo de tratamento da mídia local ausente:
+ * - `texto` (padrão): a mídia sumiu → envia **só o texto**. A oferta não pode
+ *   ficar presa por causa de um acessório;
+ * - `estrito`: a mídia sumiu → erro explícito (a mensagem vai para a DLQ).
+ */
+function modoMidiaAusente(): "texto" | "estrito" {
+  return String(process.env.MENSAGERIA_MIDIA_AUSENTE ?? "texto").trim().toLowerCase() === "estrito"
+    ? "estrito"
+    : "texto";
+}
+
+/**
+ * Decide o que fazer com a mídia no envio, separando **expiração** de
+ * **segurança**. `data:` e `http(s)` seguem os caminhos antigos.
+ */
+export function decidirMidiaEnvio(
+  arquivo: string,
+  tipo: "image" | "video" | "document",
+): DecisaoMidiaEnvio {
+  if (!arquivo) return { acao: "sem-midia" };
   if (/^https?:\/\//i.test(arquivo)) {
-    if (!urlImagemSegura(arquivo)) throw new Error("mídia remota recusada (URL insegura)");
-    return;
+    if (!urlImagemSegura(arquivo)) return { acao: "rejeitar", erro: "mídia remota recusada (URL insegura)" };
+    return { acao: "usar" };
   }
   if (arquivo.startsWith("data:")) {
     const ok =
@@ -118,10 +155,28 @@ function validarMidiaArquivo(arquivo: string, tipo: "image" | "video" | "documen
         : tipo === "document"
           ? /^data:application\//i.test(arquivo)
           : /^data:image\//i.test(arquivo);
-    if (!ok) throw new Error("data URI de mídia inválido");
-    return;
+    return ok ? { acao: "usar" } : { acao: "rejeitar", erro: "data URI de mídia inválido" };
   }
-  if (!ehArquivoMidia(arquivo)) throw new Error("caminho de mídia não permitido");
+  const c = classificarMidia(arquivo);
+  if (c.ok) return { acao: "usar" };
+  if (c.motivo === "inexistente") {
+    if (modoMidiaAusente() === "estrito") {
+      return { acao: "rejeitar", erro: c.erro ?? "arquivo de mídia não existe mais" };
+    }
+    return { acao: "somente-texto", erro: c.erro };
+  }
+  // violação de segurança: sempre bloqueia
+  return { acao: "rejeitar", erro: c.erro ?? "caminho de mídia não permitido" };
+}
+
+/**
+ * Mesma checagem de origem, mas ciente do tipo: vídeo/documento também passam.
+ * Arquivo local continua restrito a data/midia com nome UUID.
+ */
+function validarMidiaArquivo(arquivo: string, tipo: "image" | "video" | "document"): void {
+  if (!arquivo) return;
+  const d = decidirMidiaEnvio(arquivo, tipo);
+  if (d.acao === "rejeitar") throw new Error(d.erro ?? "caminho de mídia não permitido");
 }
 
 /**
@@ -203,11 +258,20 @@ export async function enviarParaGrupo(args: {
     throw new Error("Evolution não configurada (EVO_URL/EVO_KEY) — envio abortado");
   }
   const tipo = args.mediatype ?? "image";
-  validarMidiaArquivo(imagem, tipo);
+  // Mídia local: separa EXPIRAÇÃO (arquivo sumiu) de VIOLAÇÃO DE SEGURANÇA
+  // (caminho fora de data/midia). Expiração não pode matar a mensagem: a
+  // mídia é acessória e o texto/link da oferta tem valor (issue #82).
+  const decisao = decidirMidiaEnvio(imagem, tipo);
+  if (decisao.acao === "rejeitar") throw new Error(decisao.erro ?? "caminho de mídia não permitido");
+  const midiaAusente = decisao.acao === "somente-texto";
+  if (midiaAusente) {
+    console.warn(
+      `[dispatch] mídia local ausente (${decisao.erro}) — envio só com o texto: grupo=${args.grupo}`
+    );
+  }
   const temMidia =
-    /^https?:\/\//.test(imagem) ||
-    imagem.startsWith("data:") ||
-    ehArquivoMidia(imagem);
+    !midiaAusente &&
+    (/^https?:\/\//.test(imagem) || imagem.startsWith("data:") || ehArquivoMidia(imagem));
   if (temMidia) {
     try {
       return await enviarMidia({ ...args, imagem, mediatype: tipo });

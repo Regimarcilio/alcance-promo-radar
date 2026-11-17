@@ -33,10 +33,90 @@ repositório para publicação pública.
 
 ## [Unreleased]
 
+### Adicionado
+- **Catálogo de ofertas recebidas (SQLite)** — branch `expansion`, ADR-012. O que os grupos de
+  origem publicam passa a ser histórico consultável, **inclusive o que era descartado** (duplicada,
+  link inválido, programa sem suporte, fora de janela), que antes sumia e deixava só um SHA1 por
+  7 dias.
+  - `src/store/db.ts`: adapter único sobre `node:sqlite` (WAL, `busy_timeout`, schema versionado,
+    degradação segura — se o banco não abrir, o Monitor segue sem catálogo).
+  - `src/store/catalogo.ts`: gravação *best-effort* (nunca lança), filtros (programa, origem,
+    desfecho, faixa de preço, busca, período), paginação, resumo, CSV com anti-injeção de fórmula,
+    retenção (`CATALOGO_RETENCAO_DIAS`, padrão 365) e `obterOferta`.
+  - `processar()` do Monitor grava a oferta com o **desfecho real** (ENCAMINHADO, DUPLICADO,
+    REVISAO, ERRO...); origens não monitoradas e `dryRun` não entram.
+  - Nova view **Catálogo** no painel (`#/catalogo`) com KPIs, filtros, paginação, CSV e
+    **↪ reenviar** para a fila do Monitor (respeita o intervalo anti-rajada).
+  - `POST /api/catalogo/:id/reenviar` (reenvio manual ignora a trava de duplicata via
+    `ItemFila.reenvioManual`), `POST /api/catalogo/limpar`, `GET /api/catalogo` e `/healthz` com
+    o estado do banco.
+  - **Decisão explícita (ADR-012):** dedup do Monitor continua em memória (O(1), atômico) e o
+    broker da Mensageria continua em arquivo — o banco não entra no caminho crítico.
+- **Rastreio em SQLite (Fase 2, ADR-012)** — o `publicacoes.json` deixou de ser reescrito a cada
+  publicação (177 ms / 1,85 MB por post; ~1,3 s no teto de 50 mil). Medição no banco: INSERT de
+  **0,05 ms**.
+  - Tabela `publicacoes` (schema v2) com `chave` única = hash da linha; migração do JSON
+    **idempotente** (`INSERT OR IGNORE`), executada uma vez no boot e registrada em
+    `schema_meta.rastreio_migrado`.
+  - O JSON **não é mais reescrito**: fica congelado como *snapshot* da migração. Se o banco ficar
+    indisponível, a gravação e a leitura degradam para ele (`CATALOGO_BD=0` desliga tudo) — nada
+    se perde e o painel continua abrindo.
+  - `listarPublicacoes()` ganhou `limite` (o `/api/rastreio` era `listar().slice(0,300)`: carregava
+    as 50 mil para mostrar 300).
+  - Contador histórico auto-corrige: nunca fica abaixo do número de linhas do banco.
+  - Log de boot: `rastreio: N publicação(ões) no banco (total histórico M)`.
+- **Reenvio em lote do catálogo (Fase 3, ADR-012)** — seleção múltipla na view Catálogo
+  (checkbox por linha + "selecionar página"), barra com o total selecionado, prévia dos títulos no
+  confirm e relatório de recusas.
+  - `POST /api/catalogo/reenviar-lote` com `{ids:[...]}` (máx. 100 por chamada, ids normalizados:
+    sem vazios e sem repetição). Um item inválido **não derruba o lote**: a resposta traz
+    `enfileiradas` + `ignoradas[{id,motivo}]`.
+  - Regra extraída para `src/monitor/reenvio.ts` (`validarReenvio`, `reenviarOferta`,
+    `reenviarLote`, `normalizarIds`) — assim o lote e o individual usam a MESMA validação e a
+    regra tem teste unitário.
+  - Reenvio continua entrando na fila normal do Monitor (anti-rajada) e ignora a trava de
+    duplicata por decisão explícita do operador (`reenvioManual`).
+- **Backup consistente do banco (Fase 4, ADR-012)** — `VACUUM INTO` diário para cópia segura,
+  retenção configurável (`BACKUP_BD_MANTER`, default 7) e endpoint de gestão:
+  - `GET /api/backups` → política, lista de backups com tamanho/data;
+  - `POST /api/backups` → cria backup on-demand (usado pelo painel);
+  - backup automático no boot (se não houver nos últimos 24h) e timer horário;
+  - backup criado automaticamente no smoke para validar consistência.
+
 ### Correções
+- **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)
+  apagava o vídeo de uma **campanha em andamento**, e as mensagens restantes morriam com um erro de
+  **segurança** que era, na verdade, **expiração**. Três defeitos corrigidos:
+  - `classificarMidia()` agora separa `inexistente` (expirou) de `nao-permitido` / `formato-invalido`
+    (invasão) — o operador passa a ver a causa real;
+  - mídia **inexistente** não mata mais o envio: o dispatch segue **só com o texto** (a mídia é
+    acessório), coerente com a regra já documentada no código. Modo estrito por
+    `MENSAGERIA_MIDIA_AUSENTE=estrito`;
+  - a faxina de retenção **preserva a mídia em uso** (item na fila, mensagem na DLQ ou disparo
+    incompleto) — `midiaEmUso()`.
+  - O reprocessamento da DLQ detecta a mídia sumida, devolve o envelope só com o texto e recusa
+    caminho inválido.
+  - Contabilidade do disparo corrigida: `falhas` passa a contar quem está **morto na DLQ agora**
+    (o mesmo destinatário não é contado duas vezes), o reprocessar desconta a falha e o envio
+    bem-sucedido limpa o erro antigo da tela — assim a campanha fecha como **CONCLUIDO**.
+  - `midiaDir` passa a ser resolvido em **tempo de chamada** (igual a `dataDirAtual()`), corrigindo
+    o descompasso entre teste/smoke e produção.
+- **Monitor: regressão na sincronização após implementação da Mensageria** — o commit `c040253` 
+  simplificou a função `entregarItem()` removendo o registro de ofertas encaminhadas (`registrarOfertaEnviada`) 
+  e o tratamento de duplicatas reagendadas para +24h (issue #78). Restaurado o comportamento completo
+  de idempotência e sincronização de `src/monitor/fila.ts`.
 - **`/healthz` reportava uma versão literal fixo** (`"0.8.0"`), que envelheceu em silêncio a cada
   release. Agora a versão vem do `package.json` (fonte única), com cache e fallback
   (`src/config/versao.ts`).
+
+## [0.10.1.1] — 2026-11-15
+
+Release de correção crítica: restaura funcionalidade do Monitor após regressão de Mensageria.
+
+### Correções
+- **Monitor sincronização** — restaura registro de ofertas encaminhadas e tratamento de duplicatas.
+  O envio de ofertas de grupos de afiliados agora funciona corretamente, evitando duplicatas
+  e reagendando ofertas já enviadas para +24h (comportamento esperado do sistema).
 
 ## [0.10.0] — 2026-11-12
 

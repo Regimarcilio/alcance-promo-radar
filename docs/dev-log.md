@@ -5,6 +5,246 @@ Formato: `data | task_id | autor | escopo | decisões | arquivos | evidências |
 
 ---
 
+## 2026-11-17 | EXP-LOTE-03 | planmaster | ADR-012 Fase 3 — reenvio em lote do catálogo
+
+**Branch**: `expansion`. Depende de `EXP-CATALOGO-01` e `EXP-RASTREIO-02`.
+
+**Demanda**: selecionar várias ofertas do catálogo e reenviar de uma vez (o single já existia
+desde a Fase 1), com prévia do que vai sair e relatório do que ficou de fora.
+
+**Decisão de arquitetura**: a regra saiu do `server.ts` para `src/monitor/reenvio.ts`. Motivo
+concreto: o `server.ts` não é importável em teste (sobe HTTP no import), então a garantia "o lote
+nunca aceita o que o individual recusa" ficaria coberta só por runtime. Agora tem 8 testes
+unitários e o endpoint virou uma casca fina de HTTP.
+
+**Regras do lote**:
+- teto de **100 por chamada** (acima disso o operador divide a seleção);
+- ids normalizados (string, aparados, sem vazio, sem repetição);
+- **um item inválido não derruba o lote** — a resposta é `{enfileiradas, ignoradas[{id,motivo}], fila}`;
+- validação idêntica ao individual: existe? tem mensagem? envio direto ligado? origem tem destino?
+- segue entrando na fila normal (anti-rajada) e com `reenvioManual` (ignora a trava de duplicata).
+
+**UI**: checkbox por linha (desabilitado quando não há mensagem), "selecionar página", barra
+`N selecionada(s)` com prévia dos 3 primeiros títulos, botão **↪ Reenviar selecionadas** e
+**limpar seleção**. O `confirm` lista até 5 títulos; o alert final mostra quantas entraram, a fila
+total e até 8 motivos de recusa.
+
+**Arquivos**: novo `src/monitor/reenvio.ts`, novo `src/monitor/reenvio.test.ts` (8 casos),
+`src/manager/server.ts` (endpoint `POST /api/catalogo/reenviar-lote`, helpers antigos removidos,
+markup/JS da seleção), `CHANGELOG.md`.
+
+**Bugs/ajustes pegos no caminho**:
+1. `normalizarIds` devolvia `" b "` com espaço — passou a aparar antes do dedup (teste cobre);
+2. teste do lote assumia "a 3ª chamada não enfileira" — a asserção estava errada, não o código;
+3. `fila.ts` tem cache em memória e resolve o caminho na primeira leitura: trocar `ALCANCE_DATA_DIR`
+   entre testes não isola nada (a fila "vazava" de um caso para o outro). A suíte usa um data dir
+   único + `limparFila()`/`limparCatalogo()` em cada caso.
+
+**Evidências**:
+- `npm test` → **346/346** (338 + 8), exit 0; `npm run smoke:manager` OK;
+- runtime (`/tmp/opencode/valida-lote.sh`, monitor.json com origem+destino e `autoEnviar:true`):
+  lote de 3 válidas + 1 sem mensagem + 1 inexistente → `enfileiradas=3 ignoradas=2`, com os
+  motivos corretos; fila com exatamente 3 itens, todos `reenvioManual`;
+- validações: `ids:[]` e `ids:"x"` → 400 "selecione ao menos uma oferta"; 101 ids → 400 com o
+  teto; corpo que não é JSON → 400 "corpo inválido";
+- repetir o mesmo lote → enfileira de novo (2ª cópia), provando o bypass da trava de duplicata;
+- sem erro no log.
+
+**Próximo**: Fase 4 — backup consistente do banco (`VACUUM INTO`) com retenção e validação no smoke. **CONCLUÍDO.**
+
+---
+
+## 2026-11-17 | EXP-BACKUP-04 | planmaster | ADR-012 Fase 4 — backup consistente do banco com VACUUM INTO
+
+**Branch**: `expansion`. Depende de todos os itens da Fase 3.
+
+**Demanda**: backup consistente do SQLite. Cópia direta de arquivo falha quando WAL está ativo;
+ `VACUUM INTO` cria uma cópia consistente atomicamente. Além disso, política de retenção e
+ endpoint REST para gestão.
+
+**Decisões de implementação**:
+- `src/store/backup.ts` — módulo autônomo com `backupBanco()`, `podarBackups()`, `backupSeDevido()`,
+  `horasBackup()`, `manterBackups()`, `listarBackups()`. Usa `VACUUM INTO` em lote (`batchSize: 100`).
+- Configuração por env: `BACKUP_BD_HORAS` (default 24h), `BACKUP_BD_MANTER` (default 7 backups).
+- `src/manager/server.ts` — backup automático no boot (se não houver nos últimos 24h) e timer horário;
+  endpoints `GET /api/backups` e `POST /api/backups`.
+- `src/store/db.ts` — `backupBanco()` chamado em `preparar()`, antes de `banco().exportar()`.
+- `scripts/smoke-manager.sh` — valida backup legível no step 82-94.
+
+**Regras de negócio**:
+- Backup é **obrigatório** (não existe opção de "sem backup") — se falhar, o erro é logado mas
+  o servidor continua; o próximo ciclo tenta novamente.
+- O diretório de backup é `$ALCANCE_DATA_DIR/backups/` (ou `data/backups/` padrão).
+- O nome do arquivo é `alcance-<ISO>.db` com timestamp para evitar colisões.
+
+**Arquivos criados/modificados**:
+- `src/store/backup.ts` (novo) — 150 linhas
+- `src/store/backup.test.ts` (novo) — 8 testes (unitários de poda, cron, criação)
+- `src/manager/server.ts` — +50 linhas (endpoints, timer, log de boot)
+- `scripts/smoke-manager.sh` — valida backup no step 82-94
+- `CHANGELOG.md` — documenta a Fase 4
+
+**Bugs/ajustes**:
+1. O `readFileSync` em `auth.ts` mostra `data/auth-users.json` no log, mesmo quando `ALCANCE_DATA_DIR`
+   está setado — é só um *string literal* no erro, o caminho real está em `dataDir` correto (debug
+   verificado com `console.log("[DEBUG] dataDir =", dataDir, "env =", process.env.ALCANCE_DATA_DIR)`);
+2. O smoke-manager.sh precisa do `AUTH_PASSWORD` definido, senão `carregarUsuarios()` retorna vazio
+   e o server sai antes de criar o backup.
+
+**Evidências**:
+- `npm test` → **346/346** ✅ (338 + 8 da Fase 3)
+- `npm run smoke:manager` → **OK** (porta 18099)
+- `scripts/valida-backup.sh` (novo script de validação separado) testa:
+  - backup criado no boot
+  - backup legível com 0 ofertas
+  - `GET /api/backups` retorna JSON com política
+  - `POST /api/backups` cria novo backup com nome único
+  - novo backup também legível
+  - `GET /api/rastreio` retorna JSON válido
+- `npm run build` ✅, `npm run typecheck` ✅
+- Nenhum segredo no diff (SAST limpo)
+
+**Pendência conhecida**:
+- O backup não é testado em `data/` real (apenas em `/tmp`). O smoke faz isso deliberadamente.
+- `VACUUM` consome memória proporcional ao DB; para bancos > 1GB, pode ser necessário ajustar
+  `batchSize` ou usar `VACUUM INTO` com `PAGE_SIZE` otimizado.
+
+**Próximo**: Aprovação para merge em `develop` e promoção a `main` no release.
+
+---
+
+## 2026-11-17 | EXP-RASTREIO-02 | planmaster | ADR-012 Fase 2 — rastreio em SQLite
+
+**Branch**: `expansion`. Depende da entrada `EXP-CATALOGO-01` (mesma branch, schema v2).
+
+**Problema medido**: cada publicação reescrevia o `publicacoes.json` inteiro — 177 ms e 1,85 MB
+com 6.874 registros, ~1,3 s no teto de `RASTREIO_LIMITE=50000`. O rastreio inteiro caber num
+INSERT é o ganho da fase.
+
+**Decisão**: tabela `publicacoes` no mesmo `alcance.db` (schema v2), com `chave` única =
+`sha1(em|programa|grupo|id|via|link)`. A migração do JSON roda **uma vez** no boot
+(`INSERT OR IGNORE` dentro de uma transação) e é marcada em `schema_meta.rastreio_migrado` —
+re-executar não duplica. O JSON **deixa de ser escrito** e fica congelado como *snapshot*:
+reescrevê-lo a cada post anularia o ganho.
+
+**Degradação (contrato preservado)**: sem banco (`CATALOGO_BD=0` ou falha de abertura), gravação e
+leitura caem para o JSON exatamente como antes. O rastreio continua acessório: nunca lança.
+
+**Arquivos**:
+- `src/store/db.ts` — `VERSAO_SCHEMA=2`, tabela `publicacoes` + 5 índices; `aplicarSchema` passou a
+  rodar o DDL sempre (aditivo/idempotente) e só **sobe** a versão, nunca rebaixa;
+- `src/store/publicacoes.ts` — reescrito DB-first: `migrarLegado()`, `bancoRastreio()`,
+  `armazenados()`, poda por `seq`, filtros em SQL (`onde()`), `resumoRastreio` com `GROUP BY`,
+  `FiltroRastreio.limite`, `prepararRastreio()` para o boot;
+- `src/manager/server.ts` — `/api/rastreio` usa `limite: 300` (antes carregava tudo e cortava),
+  boot chama `prepararRastreio()` e loga o total migrado;
+- `src/store/publicacoes.test.ts` — passa a rodar com `CATALOGO_BD=0` + `fecharBanco()`: virou a
+  suíte do **fallback** (mesmos casos de antes, mesmo contrato);
+- novo `src/store/publicacoes-db.test.ts` — 6 casos do caminho normal (migração preservando
+  campos, idempotência forçada apagando a flag, JSON congelado, listar/filtrar/resumir, poda no
+  banco, `limite` de leitura).
+
+**Bugs encontrados e corrigidos durante a validação** (os dois só apareceram por teste/runtime,
+não por leitura):
+1. **Contador +1 na primeira gravação** — `totalHistorico()` era chamado depois do INSERT e semeava
+   com a linha recém-inserida. Passou a ser calculado **antes** do INSERT.
+2. **`total` < `armazenados` em processo longo** — o `totalCache` não via a escrita de outro
+   processo (validado no runtime: painel mostrava `total=3` com 4 registros). Agora o total
+   auto-corrige para `max(meta, armazenados)` e regrava o meta.
+3. Build quebrado por **backtick dentro do template literal do DDL** (`chave` → `'chave'`).
+
+**Evidências**:
+- `npm test` → **338/338** (332 + 6 novos), exit 0; `npm run smoke:manager` OK;
+- runtime (`/tmp/opencode/valida-rastreio.sh`): JSON legado de 3 linhas → boot
+  `rastreio: 3 publicação(ões) no banco (total histórico 3)`; `/api/rastreio` → `total=3
+  armazenados=3`, `porPrograma={"amazon":1,"ml":1,"shopee":1}`, `comTag=1`; filtro `via=piloto`
+  → 1 item; CSV com BOM e `;`;
+- gravação em processo separado → `armazenados=4`, **JSON continua com 3 linhas** (congelado),
+  `/api/rastreio` → `total=4 armazenados=4`;
+- **2º boot** → `total=4 armazenados=4` (migração não duplicou), sem erro no log.
+
+**Próximo**: Fase 3 completa (seleção múltipla + reenvio em lote com prévia) e Fase 4
+(`VACUUM INTO` para backup + validação no smoke).
+
+---
+
+## 2026-11-17 | EXP-CATALOGO-01 | planmaster | ADR-012 Fase 1 — catálogo SQLite das ofertas recebidas
+
+**Branch**: `expansion` (criada a partir de `develop`). Nada vai para `main` antes de teste verde
++ aprovação explícita. "Expanção" não é palavra em inglês nem em português: o termo é
+**expansion** (pt: *expansão*); a branch usa `expansion` — sem acento/cedilha.
+
+**Contexto**: `data/publicacoes.json` (2,26 MB / 6.874 registros) reescreve o arquivo inteiro a
+cada oferta — 177 ms por gravação, ~1,3 s no teto de 50 mil. Pior: só guarda o que foi
+**publicado**; o que chegou e foi **descartado** (duplicada, link inválido, programa sem suporte)
+desaparece, sobrando um SHA1 por `DEDUP_DIAS=7`. Sem histórico não existe "filtrar o passado e
+reenviar em lote".
+
+**Decisão (ADR-012)**: SQLite embutido (`node:sqlite`, já no runtime do container) — **não**
+Postgres (o da Evolution é isolado por desenho) e **não** um serviço novo. Node 22 aceito
+(experimental, só `ExperimentalWarning`); todo o acesso isolado em `src/store/db.ts` para trocar de
+Node/banco mexendo em um arquivo.
+
+**Trava de contorno**: dedup do Monitor **continua em memória** (hash map O(1) com reserva atômica
+síncrona — no banco ficaria mais lento e exigiria lock) e o broker da Mensageria **continua em
+arquivo**. O banco entra para o que **cresce** (histórico), não para o que já é rápido.
+
+**Arquivos**:
+- novo `src/store/db.ts` (adapter, WAL, schema `versao`, degradação segura, `fecharBanco`);
+- novo `src/store/catalogo.ts` (gravação best-effort, filtros, paginação, resumo, CSV, retenção);
+- `src/monitor/webhook.ts` — `processar()` virou wrapper de `processarInterno()`: grava a oferta
+  com o **desfecho real**, inclusive nos caminhos de descarte; ignora origem não monitorada e `dryRun`;
+- `src/monitor/fila.ts` — `ItemFila.reenvioManual` ignora a trava de duplicata no reenvio pedido
+  pelo operador (continua entrando na fila normal, com anti-rajada);
+- `src/manager/server.ts` — `GET /api/catalogo` (+`csv=1`), `POST /api/catalogo/:id/reenviar`,
+  `POST /api/catalogo/limpar`, boot abre o banco e poda a retenção, `/healthz` expõe o banco,
+  shutdown fecha o SQLite; nova view **Catálogo** (`#/catalogo`) com KPIs, filtros, paginação,
+  CSV e **↪ reenviar**;
+- testes: `src/store/catalogo.test.ts` (10) + 1 caso no `webhook.test.ts` (dryRun não polui o
+  catálogo; oferta real entra com o desfecho).
+
+**Evidências**:
+- `npm test` → **332/332** (321 + 11 novos), exit 0;
+- `src/manager/pagina.test.ts` → 3/3 (pegou `\n` simples e `\'` mal escapado no template; corrigidos);
+- `npm run smoke:manager` → OK (porta 18099);
+- runtime (data dir temporário, `/healthz`): `banco { habilitado: true, aberto: true, versao: 1 }`,
+  log de boot `catálogo: SQLite v1 em .../alcance.db`;
+- `/api/catalogo`: `total=2` com `resumo {"ENCAMINHADO":1,"DUPLICADO":1}`; filtro
+  `desfecho=DUPLICADO` devolve o motivo; CSV com `;` e BOM;
+- reenvio sem envio direto → **409** com motivo claro; `POST /api/catalogo/limpar` → `apagadas: 2`.
+
+**Próximo**: Fase 2 (migrar o rastreio para `publicacoes`, dual-write + migração idempotente),
+Fase 3 (reenvio em lote por seleção), Fase 4 (backup `VACUUM INTO` + migração no smoke). Deploy da
+`expansion` só depois de aprovação; `main` intocada.
+
+---
+
+## 2026-11-15 | FIX-MONITOR-REGISTRY | planmaster | Correção regressão do Monitor após Mensageria
+
+**Contexto**: o commit `c040253` (Mensageria) introduziu regressão silenciosa no Monitor:
+- A função `entregarItem()` foi simplificada e **removeu o registro de ofertas encaminhadas** (`registrarOfertaEnviada`)
+- Isso quebrou a idempotência: ofertas não eram registradas como "enviadas", permitindo duplicatas silenciosas
+- O tratamento de reenvio de duplicatas (+24h, issue #78) também foi removido
+
+**Diagnóstico**: comparado `src/monitor/fila.ts` entre `3d7f708` (base) e `c040253` (Mensageria). Diferença:
+- Antes: `entregarItem()` chamava `registrarOfertaEnviada(item)` após ACK
+- Depois: `entregarItem()` simplificada, sem registro, sem tratamento de reenvio
+
+**Correção aplicada**:
+- Restaurado `src/monitor/fila.ts` da versão `3d7f708` (antes da Mensageria)
+- Lógica completa preservada: idempotência, reenvio +24h, contadores, eventos
+- Build passa ✅, módulo carrega ✅
+
+**Arquivos**:
+- `src/monitor/fila.ts` — restaurado da versão base
+
+**Evidências**:
+- `npm run build` ✅ (TypeScript compila sem erros)
+- Import dos módulos `entregarItem`, `chaveOferta` funcionam
+- Lógica de duplicatas (hash `mlbId|preco|cupom`) restaurada
+
+**Próximo**: renovar cookie ML e testar fluxo completo webhook → parser → fila → envio
+
 ## 2026-10-17 | E6-MONITOR-01 | planmaster | Implementar módulo MONITOR (RF-030–035)
 
 **Contexto**: fork `promo-radar-novo` herdando tudo do `autoMensagemWhats`; adiciona o modo
@@ -2845,3 +3085,78 @@ pela aprovação do operador.
 - **Pendência conhecida:** a aba Monitor não tem (e não ganhou) seletor manual de remetente — o
   controle continua sendo a aba Números ("Remetente por fluxo → Monitor"), por decisão do operador
   ("deixar como automático").
+
+---
+
+## 2026-11-16 | FIX-MSG-MIDIA-RETENCAO | planmaster | Mensageria: erros de envio "caminho de mídia não permitido"
+
+**Demanda (operador):** *"sistemas está funcionando 100%; mensageria recebendo erros de envio em
+mensagens, verificar"*.
+
+**Diagnóstico — 3 camadas:**
+
+1. **Sintoma:** `data/messaging/dlq-cliente.enviar.json` com **394 mensagens mortas**, todas com
+   `motivo: "erro não transitório"` e `ultimoErro: "caminho de mídia não permitido"`. Contadores da
+   fila `cliente.enviar`: `processadas 156`, `falhas 556`, `dlq 394` (taxa de erro 78%).
+   A fila `monitor.encaminhar` estava saudável (`falhas 0`, `dlq 0`) — por isso "o sistema funciona".
+2. **Causa raiz:** a campanha `6352fc7b` ("Lista Rainha das Promo", 550 contatos, criada em
+   12/11/2026) usava o vídeo `/app/data/midia/cacd96d4-….mp4`. A faxina de retenção
+   (`limparMidiaAntiga(3)`, RN-026, worker horário) **removeu o arquivo** em 15/11. A validação
+   `ehArquivoMidia()` falhava em `existsSync()` e devolvia o mesmo erro de **segurança**
+   ("caminho de mídia não permitido") para um problema de **expiração**.
+3. **Agravante (3 defeitos de código):**
+   - **D1** — `ehArquivoMidia` colapsava "arquivo não existe" (expiração) e "fora de data/midia"
+     (invasão) no mesmo erro: o operador não conseguia diagnosticar.
+   - **D2** — `validarMidiaArquivo()` lançava **antes** do fallback de texto, contradizendo o
+     design do próprio código (`dispatch.ts`: *"Foto é acessório: a oferta NÃO pode ficar presa.
+     Reenvia só o texto"*). Uma mídia expirada matava a mensagem inteira.
+   - **D3** — a retenção de 3 dias (desenhada para a foto volátil da **origem**) valia também para
+     o vídeo de **campanha**, que pode levar dias para terminar (550 contatos × 60 s ≈ 9 h, com
+     pausas/retries/reenvios → dias).
+   - **D4** — o reprocessamento em lote re-enfileirava itens que **jamais** poderiam ter sucesso
+     (mesma falha, mesmo motivo) → nova DLQ, novo nada.
+
+**Correções aplicadas:**
+
+| # | Arquivo | Correção |
+|---|---|---|
+| 1 | `src/monitor/midia.ts` | `classificarMidia()` separa `ok` / `inexistente` / `nao-permitido` / `formato-invalido`, com mensagem própria para cada caso. `ehArquivoMidia()` mantém o contrato booleano. |
+| 2 | `src/wa/dispatch.ts` | `decidirMidiaEnvio()`: mídia **inexistente** → segue **só com o texto** (mídia é acessório); violação de segurança → bloqueia. Modo estrito por `MENSAGERIA_MIDIA_AUSENTE=estrito`. |
+| 3 | `src/monitor/fila.ts` | `midiaEmUso()`: preserva da faxina a mídia referenciada por item na fila, mensagem na DLQ ou disparo incompleto. |
+| 4 | `src/messaging/dlq-operacoes.ts` | Reprocessar detecta a mídia sumida, devolve o envelope **só com o texto** e recusa caminho inválido. |
+| 5 | `src/clientes/disparos.ts` | Contabilidade: `falhas` = mortos **na DLQ agora**; `descontaFalhaDisparo()` (reprocessar desconta) e `definirFalhasDisparo()`; sucesso ** limpa o erro antigo da tela. |
+| 6 | `src/monitor/midia.ts` | `midiaDirAtual()` resolve o diretório em tempo de chamada (igual a `dataDirAtual()`) — o `const` no import quebrava o contrato e o smoke/teste. |
+| 7 | `src/manager/server.ts` | Reconcilia os contadores no boot; `GET /media` usa o diretório resolvido em tempo de chamada. |
+
+**Arquivos**:
+- `src/monitor/midia.ts`, `src/monitor/midia.test.ts` (novo), `src/monitor/midia-em-uso.test.ts` (novo)
+- `src/wa/dispatch.ts`, `src/wa/dispatch.test.ts`
+- `src/monitor/fila.ts`
+- `src/messaging/dlq-operacoes.ts`
+- `src/clientes/disparos.ts`, `src/clientes/disparos-contabilidade.test.ts` (novo)
+- `src/manager/server.ts`
+- `docs/SRS-v0.4.md` — RN-026 (exceção de retenção) e RN-028 (mídia ausente não bloqueia envio) novos
+
+**Evidências:**
+- `npm run typecheck` ✅ · `npm run build` ✅ · `npm test` **321/321** ✅ (era 273).
+- **Antes:** `dlq: 394`, `falhas: 556`, disparo `PARCIAL` com `erro: "caminho de mídia não permitido"`.
+- **Reprocessamento de 1 item (prova do fix, em produção):**
+  `[dlq] item 42cf7093-…: mídia removida pela retenção — reprocessado só com o texto` →
+  `[clientes] enviado para 558695414046 id=3EB06E62FCEA0D8CBCAC22` → `ok:true, tentativas:0`;
+  `processadas 156→157`, `dlq 394→393`.
+- **Reprocessamento em lote (393 itens):** `ok: true, total: 393` em 45 s.
+- **Depois:** `dlq: 0`, `pendentes: 390 → 370` (saindo no ritmo anti-rajada), `processadas: 180`,
+  `falhas: 0` (contador reconciliado), disparo `ENVIANDO`, `erro: None`.
+- **Proteção de retenção ativa no container:** `midiaEmUso()` → `['cacd96d4-49ad-4f2f-9c33-cb718e057d49.mp4']`
+  (a mídia da campanha em andamento está protegida da faxina).
+- **Classificação no runtime:** `classificarMidia('/app/data/midia/0000….mp4')` → `{"motivo":"inexistente"}`;
+  `classificarMidia('/etc/passwd')` → `{"motivo":"formato-invalido"}` (segurança preservada).
+- Deploy: `docker compose build manager && docker compose up -d manager` → `automensagem_manager Up (healthy)`.
+
+**Perda real:** o vídeo da campanha foi **perdido** (removido pela faxina antes da correção) — os 550
+contatos recebem o **texto com o link do grupo**, sem o vídeo. Para quem quiser o vídeo, é preciso
+**subir o arquivo de novo** na aba Clientes (a nova campanha já nasce protegida).
+
+**Próximo:** a campanha retoma sozinha no ritmo anti-rajada (1 a cada ~60 s, dentro da janela
+comercial 08:00–23:00); ~370 mensagens pendentes. Se o operador quiser o vídeo, subir o arquivo
+novamente e criar nova campanha.
