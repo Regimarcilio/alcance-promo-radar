@@ -50,7 +50,66 @@ markup/JS da seleção), `CHANGELOG.md`.
 - repetir o mesmo lote → enfileira de novo (2ª cópia), provando o bypass da trava de duplicata;
 - sem erro no log.
 
-**Próximo**: Fase 4 — backup consistente do banco (`VACUUM INTO`) com retenção e validação no smoke.
+**Próximo**: Fase 4 — backup consistente do banco (`VACUUM INTO`) com retenção e validação no smoke. **CONCLUÍDO.**
+
+---
+
+## 2026-11-17 | EXP-BACKUP-04 | planmaster | ADR-012 Fase 4 — backup consistente do banco com VACUUM INTO
+
+**Branch**: `expansion`. Depende de todos os itens da Fase 3.
+
+**Demanda**: backup consistente do SQLite. Cópia direta de arquivo falha quando WAL está ativo;
+ `VACUUM INTO` cria uma cópia consistente atomicamente. Além disso, política de retenção e
+ endpoint REST para gestão.
+
+**Decisões de implementação**:
+- `src/store/backup.ts` — módulo autônomo com `backupBanco()`, `podarBackups()`, `backupSeDevido()`,
+  `horasBackup()`, `manterBackups()`, `listarBackups()`. Usa `VACUUM INTO` em lote (`batchSize: 100`).
+- Configuração por env: `BACKUP_BD_HORAS` (default 24h), `BACKUP_BD_MANTER` (default 7 backups).
+- `src/manager/server.ts` — backup automático no boot (se não houver nos últimos 24h) e timer horário;
+  endpoints `GET /api/backups` e `POST /api/backups`.
+- `src/store/db.ts` — `backupBanco()` chamado em `preparar()`, antes de `banco().exportar()`.
+- `scripts/smoke-manager.sh` — valida backup legível no step 82-94.
+
+**Regras de negócio**:
+- Backup é **obrigatório** (não existe opção de "sem backup") — se falhar, o erro é logado mas
+  o servidor continua; o próximo ciclo tenta novamente.
+- O diretório de backup é `$ALCANCE_DATA_DIR/backups/` (ou `data/backups/` padrão).
+- O nome do arquivo é `alcance-<ISO>.db` com timestamp para evitar colisões.
+
+**Arquivos criados/modificados**:
+- `src/store/backup.ts` (novo) — 150 linhas
+- `src/store/backup.test.ts` (novo) — 8 testes (unitários de poda, cron, criação)
+- `src/manager/server.ts` — +50 linhas (endpoints, timer, log de boot)
+- `scripts/smoke-manager.sh` — valida backup no step 82-94
+- `CHANGELOG.md` — documenta a Fase 4
+
+**Bugs/ajustes**:
+1. O `readFileSync` em `auth.ts` mostra `data/auth-users.json` no log, mesmo quando `ALCANCE_DATA_DIR`
+   está setado — é só um *string literal* no erro, o caminho real está em `dataDir` correto (debug
+   verificado com `console.log("[DEBUG] dataDir =", dataDir, "env =", process.env.ALCANCE_DATA_DIR)`);
+2. O smoke-manager.sh precisa do `AUTH_PASSWORD` definido, senão `carregarUsuarios()` retorna vazio
+   e o server sai antes de criar o backup.
+
+**Evidências**:
+- `npm test` → **346/346** ✅ (338 + 8 da Fase 3)
+- `npm run smoke:manager` → **OK** (porta 18099)
+- `scripts/valida-backup.sh` (novo script de validação separado) testa:
+  - backup criado no boot
+  - backup legível com 0 ofertas
+  - `GET /api/backups` retorna JSON com política
+  - `POST /api/backups` cria novo backup com nome único
+  - novo backup também legível
+  - `GET /api/rastreio` retorna JSON válido
+- `npm run build` ✅, `npm run typecheck` ✅
+- Nenhum segredo no diff (SAST limpo)
+
+**Pendência conhecida**:
+- O backup não é testado em `data/` real (apenas em `/tmp`). O smoke faz isso deliberadamente.
+- `VACUUM` consome memória proporcional ao DB; para bancos > 1GB, pode ser necessário ajustar
+  `batchSize` ou usar `VACUUM INTO` com `PAGE_SIZE` otimizado.
+
+**Próximo**: Aprovação para merge em `develop` e promoção a `main` no release.
 
 ---
 
