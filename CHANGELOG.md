@@ -76,6 +76,12 @@ repositório para publicação pública.
     regra tem teste unitário.
   - Reenvio continua entrando na fila normal do Monitor (anti-rajada) e ignora a trava de
     duplicata por decisão explícita do operador (`reenvioManual`).
+- **Backup consistente do banco (Fase 4, ADR-012)** — `VACUUM INTO` diário para cópia segura,
+  retenção configurável (`BACKUP_BD_MANTER`, default 7) e endpoint de gestão:
+  - `GET /api/backups` → política, lista de backups com tamanho/data;
+  - `POST /api/backups` → cria backup on-demand (usado pelo painel);
+  - backup automático no boot (se não houver nos últimos 24h) e timer horário;
+  - backup criado automaticamente no smoke para validar consistência.
 
 ### Correções
 - **Mensageria: erros de envio "caminho de mídia não permitido"** (#82) — a retenção de mídia (3 dias)

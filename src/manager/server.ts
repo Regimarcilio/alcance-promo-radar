@@ -10,6 +10,7 @@ import { CATEGORIAS_AMAZON } from "../amazon/amazon.js";
 import { listarPublicacoes, resumoRastreio, publicacoesCsv, prepararRastreio } from "../store/publicacoes.js";
 import { listarOfertas, resumoCatalogo, catalogoCsv, limparCatalogo, podarCatalogo, retencaoCatalogoDias, obterOferta } from "../store/catalogo.js";
 import { reenviarOferta, reenviarLote, normalizarIds, MAX_REENVIO_LOTE } from "../monitor/reenvio.js";
+import { backupSeDevido, listarBackups, horasBackup, manterBackups, backupBanco } from "../store/backup.js";
 import { statusBanco, banco, fecharBanco } from "../store/db.js";
 import { FiltrosSchema } from "../hunter/schema.js";
 import { hunt } from "../hunter/service.js";
@@ -87,6 +88,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // ALCANCE_DATA_DIR permite smoke/teste em diretório temporário sem tocar no estado real.
 const dataDir = process.env.ALCANCE_DATA_DIR || join(root, "data");
 const cacheFile = join(dataDir, "ultima-busca.json");
+
 
 /** MIME aceito no upload de mídia do disparo (imagem ou vídeo). */
 const MIME_UPLOAD: Record<string, string> = {
@@ -582,6 +584,24 @@ async function atender(req: any, res: any, reqId: string, inicio: number): Promi
     }
     const pagina = listarOfertas(f); // consulta abre o banco antes do status
     json(200, { banco: statusBanco(), resumo: resumoCatalogo(f), ...pagina });
+    return;
+  }
+  if (req.method === "GET" && caminho === "/api/backups") {
+    json(200, {
+      politica: { horas: horasBackup(), manter: manterBackups() },
+      backups: listarBackups().map((b) => ({ nome: b.nome, bytes: b.bytes, em: b.em })),
+    });
+    return;
+  }
+  if (req.method === "POST" && caminho === "/api/backups") {
+    // Ação explícita do operador: faz agora, poda e devolve o que foi criado.
+    const r = backupBanco();
+    if (!r.ok) {
+      json(503, { erro: r.erro ?? "backup falhou" });
+      return;
+    }
+    const { podarBackups } = await import("../store/backup.js");
+    json(200, { ok: true, backup: r.backup, podados: podarBackups() });
     return;
   }
   if (req.method === "POST" && caminho === "/api/catalogo/limpar") {
@@ -4644,6 +4664,23 @@ server.listen(PORT, HOST, () => {
     } catch (e) {
       console.log(`rastreio: banco indisponível (${e instanceof Error ? e.message : String(e)})`);
     }
+    // Backup (Fase 4): VACUUM INTO, um por dia. Sem backup há um dia inteiro
+    // de trabalho sem cópia — e `cp` do .db com WAL não é backup.
+    try {
+      const b = backupSeDevido();
+      if (b.feito) {
+        console.log(
+          `backup: ${b.backup?.nome} (${Math.round((b.backup?.bytes ?? 0) / 1024)} KB)` +
+            (b.podados ? ` · ${b.podados} antigo(s) removido(s)` : "")
+        );
+      } else if (b.erro) {
+        console.log(`backup: falhou (${b.erro}) — segue sem cópia nova`);
+      } else if (horasBackup() <= 0) {
+        console.log("backup: desligado (BACKUP_BD_HORAS=0)");
+      }
+    } catch (e) {
+      console.log(`backup: erro (${e instanceof Error ? e.message : String(e)})`);
+    }
   } else if (statusBanco().habilitado) {
     console.log(`catálogo: banco indisponível (${statusBanco().erro ?? "sem detalhe"}) — segue sem catálogo`);
   }
@@ -4651,6 +4688,19 @@ server.listen(PORT, HOST, () => {
     // Smoke test: não inicia workers (evita tocar em fila/estado real).
     console.log("smoke mode: workers de fila desativados");
     return;
+  }
+  // Enquanto o processo vive, confere de hora em hora se o backup do dia saiu.
+  // `unref()` para o timer não segurar o processo em teste/desligamento.
+  if (horasBackup() > 0) {
+    setInterval(() => {
+      try {
+        const b = backupSeDevido();
+        if (b.feito) logger.info({ backup: b.backup?.nome }, "backup do banco criado");
+        else if (b.erro) logger.warn({ erro: b.erro }, "backup do banco falhou");
+      } catch (e) {
+        logger.warn({ err: e instanceof Error ? e.message : String(e) }, "backup do banco falhou");
+      }
+    }, 3_600_000).unref();
   }
   iniciarFilaWorker();
   iniciarClientesWorker();

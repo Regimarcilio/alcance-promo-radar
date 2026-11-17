@@ -77,4 +77,25 @@ check 401 /image/logo.png
 check 401 /data/bw-custom.png
 check 404 /rota-inexistente
 
+# Backup do banco (ADR-012 fase 4): o boot cria o primeiro backup e ele tem que
+# abrir. Um backup que não abre é pior que backup nenhum (dá falsa segurança).
+BK="$(ls "$TMP"/backups/alcance-*.db 2>/dev/null | head -1)"
+if [ -z "$BK" ]; then
+  echo "FAIL backup: nenhum arquivo em $TMP/backups" >&2
+  cat "$TMP/server.log" >&2
+  exit 1
+fi
+node --no-warnings -e '
+const {DatabaseSync}=require("node:sqlite");
+const db=new DatabaseSync(process.argv[1]);
+const n=db.prepare("SELECT COUNT(*) AS n FROM ofertas").get().n;
+db.close();
+console.log("ok backup legível -> "+n+" oferta(s)");
+' "$BK"
+grep -q "backup: alcance-" "$TMP/server.log" || {
+  echo "FAIL backup: boot não logou a criação" >&2
+  cat "$TMP/server.log" >&2
+  exit 1
+}
+
 echo "smoke manager OK (porta $PORT)"
